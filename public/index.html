@@ -1,89 +1,4043 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zortech ATS v3</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- PDF.js for text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Mammoth for DOCX extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.10.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.10.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.10.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        updateDoc,
+        deleteDoc,
+        doc,
+        onSnapshot,
+        query,
+        orderBy,
+        serverTimestamp,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+      import {
+        getStorage,
+        ref,
+        uploadBytesResumable,
+        getDownloadURL,
+        deleteObject,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+      import {
+        getAuth,
+        signInWithEmailAndPassword,
+        signOut,
+        onAuthStateChanged,
+        sendPasswordResetEmail,
+      } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
+      // ── CONFIG ────────────────────────────────────────────────
+      const firebaseConfig = {
+        apiKey: "AIzaSyD2KAS5loDzYDZnePBuPoMyxqwLpaWrOF0",
+        authDomain: "zortech-solutions-51a8d.firebaseapp.com",
+        projectId: "zortech-solutions-51a8d",
+        storageBucket: "zortech-solutions-51a8d.firebasestorage.app",
+        messagingSenderId: "797010724174",
+        appId: "1:797010724174:web:724700e165d98c9abd4a1f",
+      };
+      const RESEND_KEY = "re_VKDarZqY_LM77pZPjWZLSFDoY6sDAnSWs";
+      const SENDER_EMAIL = "hr@zortechs.in";
+      const SENDER_NAME = "Zortech Solutions HR";
+
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const storage = getStorage(app);
+      const auth = getAuth(app);
+
+      // PDF.js worker
+      if (window.pdfjsLib)
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+      // ── STATE ─────────────────────────────────────────────────
+      let candidates = [];
+      let jobs = [];
+      let currentView = "dashboard";
+      let editCandId = null;
+      let editJobId = null;
+      let bulkSelected = new Set();
+      let resumeFile = null; // pending resume upload
+      let jdFile = null; // pending JD upload
+
+      // ── AUTH STATE ────────────────────────────────────────────
+      let currentUser = null;
+      let unsubCandidates = null;
+      let unsubJobs = null;
+
+      onAuthStateChanged(auth, (user) => {
+        currentUser = user;
+        if (user) {
+          showApp(user);
+          // Start Firestore listeners
+          unsubCandidates = onSnapshot(
+            query(collection(db, "candidates"), orderBy("createdAt", "desc")),
+            (snap) => {
+              candidates = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+              renderAll();
+              updateSyncBadge(true);
+            },
+          );
+          unsubJobs = onSnapshot(
+            query(collection(db, "jobs"), orderBy("createdAt", "desc")),
+            (snap) => {
+              jobs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+              renderAll();
+              populateJobDropdowns();
+            },
+          );
+        } else {
+          // Unsubscribe listeners on logout
+          if (unsubCandidates) unsubCandidates();
+          if (unsubJobs) unsubJobs();
+          candidates = [];
+          jobs = [];
+          showLogin();
+        }
+      });
+
+      // ── AUTH ACTIONS ──────────────────────────────────────────
+      window.doLogin = async function () {
+        const email = v("login-email");
+        const pass = v("login-pass");
+        if (!email || !pass) {
+          showLoginError("Please enter email and password.");
+          return;
+        }
+        const btn = gel("login-btn");
+        btn.disabled = true;
+        btn.textContent = "Signing in…";
+        try {
+          await signInWithEmailAndPassword(auth, email, pass);
+        } catch (e) {
+          const msgs = {
+            "auth/user-not-found": "No account found with this email.",
+            "auth/wrong-password": "Incorrect password. Please try again.",
+            "auth/invalid-email": "Please enter a valid email address.",
+            "auth/too-many-requests":
+              "Too many attempts. Please try again later.",
+            "auth/invalid-credential": "Invalid email or password.",
+          };
+          showLoginError(msgs[e.code] || "Login failed: " + e.message);
+          btn.disabled = false;
+          btn.textContent = "Sign In";
+        }
+      };
+
+      window.doLogout = async function () {
+        await signOut(auth);
+        showToast("Signed out successfully");
+      };
+
+      window.doForgotPassword = async function () {
+        const email = v("login-email");
+        if (!email) {
+          showLoginError("Enter your email address first.");
+          return;
+        }
+        try {
+          await sendPasswordResetEmail(auth, email);
+          showLoginError(
+            "Password reset email sent! Check your inbox.",
+            "success",
+          );
+        } catch (e) {
+          showLoginError("Could not send reset email: " + e.message);
+        }
+      };
+
+      function showLoginError(msg, type = "error") {
+        const el = gel("login-error");
+        if (!el) return;
+        el.textContent = msg;
+        el.style.background = type === "success" ? "#1A3A2D" : "#3D1A1A";
+        el.style.color = type === "success" ? "var(--green)" : "var(--red)";
+        el.style.display = "block";
+      }
+
+      function showLogin() {
+        gel("login-screen").style.display = "grid";
+        gel("app-shell").style.display = "none";
+      }
+
+      function showApp(user) {
+        gel("login-screen").style.display = "none";
+        gel("app-shell").style.display = "flex";
+        // Update user display
+        const nameEl = gel("user-display-name");
+        const roleEl = gel("user-display-role");
+        if (nameEl)
+          nameEl.textContent = user.displayName || user.email.split("@")[0];
+        if (roleEl) roleEl.textContent = user.email;
+        renderAll();
+      }
+
+      // Enter key on login
+      window.loginKeydown = function (e) {
+        if (e.key === "Enter") doLogin();
+      };
+
+      // ── FILE TEXT EXTRACTION ──────────────────────────────────
+      // ── TEXT CLEANING ─────────────────────────────────────
+      function cleanPDFText(text) {
+        return text
+          .replace(/[\u25A0-\u25FF\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+          .replace(/[\u2022\u2023\u2043\u204C\u204D\u2219\u25E6\uF0B7]/g, " | ")
+          .replace(/[ \t]{2,}/g, " ")
+          .split("\n").map(l => l.trim()).filter(l => l.length > 0).join("\n");
+      }
+
+      // Fix PDF kerning: "PATT A NAYAK" → "PATTANAYAK"
+      // A lone letter flanked by longer uppercase tokens is a glyph split
+      function fixKerning(words) {
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (let i = 1; i < words.length - 1; i++) {
+            if (
+              words[i].length === 1 &&
+              /^[A-Za-z]$/.test(words[i]) &&
+              /^[A-Za-z]{2,}$/.test(words[i - 1]) &&
+              /^[A-Za-z]{2,}$/.test(words[i + 1])
+            ) {
+              words[i - 1] = words[i - 1] + words[i] + words[i + 1];
+              words.splice(i, 2);
+              changed = true;
+              break;
+            }
+          }
+        }
+        return words;
+      }
+
+      function toTitleCase(str) {
+        if (!str) return "";
+        return str.trim().split(/\s+/).map(w =>
+          w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+        ).join(" ");
+      }
+
+      // ── FILE TEXT EXTRACTION ──────────────────────────────────
+      async function extractTextFromFile(file) {
+        const ext = file.name.split(".").pop().toLowerCase();
+        try {
+          if (ext === "pdf") {
+            const buf = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+            let text = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const content = await page.getTextContent();
+              let lastY = null;
+              let lineText = "";
+              for (const item of content.items) {
+                const y = item.transform ? Math.round(item.transform[5]) : null;
+                if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
+                  text += lineText.trim() + "\n";
+                  lineText = "";
+                }
+                lineText += item.str + " ";
+                lastY = y;
+              }
+              if (lineText.trim()) text += lineText.trim() + "\n";
+            }
+            return cleanPDFText(text);
+          } else if (["doc", "docx"].includes(ext)) {
+            const buf = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: buf });
+            // Normalise docx text the same way we clean PDF text:
+            // mammoth uses \n between paragraphs but may produce runs of blank lines
+            // and unicode artifacts — clean them before parsing
+            return result.value
+              .replace(/[\u25A0-\u25FF\uFFFD]/g, " ")      // strip block symbols
+              .replace(/[\u2022\u2023\u2043\uF0B7]/g, " ") // strip bullet chars
+              .replace(/\r\n|\r/g, "\n")                    // normalise line endings
+              .replace(/[ \t]{2,}/g, " ")                     // collapse inline spaces
+              .split("\n")
+              .map(l => l.trim())
+              .filter(l => l.length > 0)
+              .join("\n");
+          } else if (ext === "txt") {
+            return await file.text();
+          }
+        } catch (e) {
+          console.warn("Text extraction failed:", e);
+        }
+        return "";
+      }
+
+      // ── SKILLS CLEANER ────────────────────────────────────────
+      function cleanSkillsString(raw) {
+        // Section headings to never include as skills
+        const badSections = /^(relevant\s+courseworks?|courseworks?|projects?|work\s+experience|experience|education|summary|objective|certifications?|awards?|achievements?|references?|activities?|languages?|hobbies?|interests?|publications?|extra\s*curricular|responsibilities|internships?|training)$/i;
+
+        return raw
+          // Strip all symbol artifacts
+          .replace(/[\u25A0-\u25FF\uFFFD|]/g, " ")
+          // Strip sub-category labels like "Languages:", "Frameworks:", "Tools:"
+          .replace(/\b[A-Za-z][A-Za-z \/&]{1,25}:\s*/g, "")
+          // Normalize separators: newlines, bullets, slashes → commas
+          .replace(/[\/\n]/g, ",")
+          .replace(/[•·–—\-]/g, ",")
+          // Split, clean each token
+          .split(",")
+          .map(s => s.trim().replace(/\s{2,}/g, " "))
+          // Remove empty, too long, section headings, or tokens with digits/symbols only
+          .filter(s => {
+            if (!s || s.length < 2 || s.length > 50) return false;
+            if (badSections.test(s)) return false;
+            if (/^\d+$/.test(s)) return false;
+            // Remove tokens that are clearly sentence fragments (>4 words)
+            if (s.split(/\s+/).length >= 4) return false;
+            return true;
+          })
+          // Deduplicate case-insensitively
+          .filter((s, i, arr) => arr.findIndex(x => x.toLowerCase() === s.toLowerCase()) === i)
+          .join(", ");
+      }
+
+      // ── AI RESUME PARSER ──────────────────────────────────────
+      async function parseResumeWithAI(text) {
+        if (!text || text.trim().length < 20) return {};
+        try {
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 1000,
+              messages: [{
+                role: "user",
+                content: `Extract these fields from the resume and return ONLY a valid JSON object, no markdown, no backticks:
+{"firstName":"first name only","lastName":"last name only","email":"email address","phone":"phone number","skills":"comma-separated technical skill names ONLY — no section headings, no labels like Languages: or Frameworks:, no coursework descriptions, just skill names like React, Node.js, Python","experience":"years of experience as a number only"}
+Rules: names in Title Case. Skills must be short skill names only (e.g. React not Frameworks: React). No section titles like RELEVANT COURSEWORKS in skills. Return ONLY JSON.
+Resume:
+${text.substring(0, 4000)}`
+              }]
+            })
+          });
+          const data = await response.json();
+          const raw = data?.content?.[0]?.text?.trim() || "{}";
+          const parsed = JSON.parse(raw.replace(/^```json|^```|```$/gm, "").trim());
+          if (parsed.firstName) parsed.firstName = toTitleCase(parsed.firstName);
+          if (parsed.lastName)  parsed.lastName  = toTitleCase(parsed.lastName);
+          if (parsed.skills)    parsed.skills    = cleanSkillsString(parsed.skills);
+          return parsed;
+        } catch (e) {
+          console.warn("AI resume parsing failed, using fallback:", e);
+          return parseResumeTextFallback(text);
+        }
+      }
+
+      // ── FALLBACK REGEX PARSER ─────────────────────────────────
+      function parseResumeTextFallback(text) {
+        if (!text) return {};
+        const result = { firstName: "", lastName: "", email: "", phone: "", skills: "", experience: "" };
+
+        // ── EMAIL: anchor on @ sign, then collapse spaces in local + domain parts ──
+        // Handles PDF.js splitting email tokens mid-word e.g. "h ellocoder78@ gmail .com"
+        for (const line of text.split("\n")) {
+          const s = line.replace(/[^\x20-\x7E]/g, " ");
+          const atMatch = s.match(/([a-zA-Z0-9._%+\-\s]{2,50})\s*@\s*([a-zA-Z0-9.\-\s]{2,50})/);
+          if (atMatch) {
+            const local  = atMatch[1].replace(/\s+/g, "").replace(/[^a-zA-Z0-9._%+\-]/g, "");
+            const domain = atMatch[2].replace(/\s+/g, "").replace(/[^a-zA-Z0-9.\-]/g, "");
+            if (local && domain && domain.includes(".")) {
+              result.email = local + "@" + domain;
+              break;
+            }
+          }
+        }
+
+        // ── PHONE ──
+        const phoneMatch = text.match(/(?:\+?91[\s\-]?)?(?:\d[\s\-]?){9}\d/);
+        if (phoneMatch) {
+          const digits = phoneMatch[0].replace(/[^\d]/g, "");
+          if (digits.length === 10)      result.phone = "+91 " + digits;
+          else if (digits.length === 12) result.phone = "+" + digits;
+          else                           result.phone = phoneMatch[0].trim();
+        }
+
+        // ── NAME: find first line that looks like a person's name ──
+        const skipLine = /^(summary|objective|profile|education|experience|skills|contact|phone|email|address|linkedin|github|portfolio|work|projects|languages|certifications|awards|references|curriculum|vitae|resume|cv|page|\d)/i;
+        for (const line of text.split("\n").slice(0, 10)) {
+          // Strip pipes/separators and take only the first segment
+          const seg = line.replace(/[|]/g, "\n").split("\n")[0].trim();
+          let words = seg.split(/\s+/).filter(w => w.length > 0);
+          words = fixKerning(words);
+          // Must be 1-4 words, all alphabetic (allow hyphens/apostrophes), not a section header
+          if (
+            words.length >= 1 && words.length <= 4 &&
+            words.every(w => /^[A-Za-z][A-Za-z'\-]*$/.test(w)) &&
+            !skipLine.test(words[0]) &&
+            words.join("").length >= 3
+          ) {
+            result.firstName = toTitleCase(words[0]);
+            result.lastName  = toTitleCase(words.slice(1).join(" "));
+            break;
+          }
+        }
+
+        // ── SKILLS: find the skills section, then clean aggressively ──
+        // Match skills section heading and grab lines until next major section
+        const skillsSectionRx = /(?:technical\s+)?skills?[:\s]*\n?([\s\S]{10,500}?)(?=\n(?:experience|education|projects?|work|certifications?|awards?|achievements?|references?|activities?|relevant\s+coursework|coursework|publications?|extra\s*curricular|\n\n)|$)/i;
+        const sm = text.match(skillsSectionRx);
+        if (sm) {
+          result.skills = cleanSkillsString(sm[1]);
+        }
+
+        // ── EXPERIENCE ──
+        const expRx = [
+          /(\d+(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?experience/i,
+          /experience\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*\+?\s*years?/i,
+          /(\d+(?:\.\d+)?)\s*\+?\s*yrs?\s+(?:of\s+)?(?:experience|exp)/i,
+        ];
+        for (const rx of expRx) {
+          const m = text.match(rx);
+          if (m) { result.experience = m[1]; break; }
+        }
+
+        return result;
+      }
+
+            // ── FIREBASE STORAGE UPLOAD ───────────────────────────────
+      async function uploadFile(file, path, onProgress) {
+        const storageRef = ref(storage, path);
+        return new Promise((resolve, reject) => {
+          const task = uploadBytesResumable(storageRef, file);
+          task.on(
+            "state_changed",
+            (snap) =>
+              onProgress &&
+              onProgress(
+                Math.round((snap.bytesTransferred / snap.totalBytes) * 100),
+              ),
+            reject,
+            async () => {
+              resolve(await getDownloadURL(task.snapshot.ref));
+            },
+          );
+        });
+      }
+
+      // ── SAVE CANDIDATE ────────────────────────────────────────
+      window.saveCandidate = async function () {
+        const data = {
+          firstName: v("cf-first"),
+          lastName: v("cf-last"),
+          email: v("cf-email"),
+          phone: v("cf-phone"),
+          jobId: v("cf-job"),
+          stage: v("cf-stage"),
+          experience: v("cf-exp"),
+          skills: v("cf-skills"),
+          notes: v("cf-notes"),
+          interviewDate: v("cf-idate"),
+          interviewTime: v("cf-itime"),
+        };
+        if (!data.firstName) {
+          showToast("Please enter a first name", "error");
+          return;
+        }
+
+        const saveBtn = gel("cand-save-btn");
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving…";
+
+        try {
+          // Upload resume if selected
+          if (resumeFile) {
+            showProgress("resume-progress", 0);
+            const ts = Date.now();
+            const path = `resumes/${ts}_${resumeFile.name}`;
+            data.resumeUrl = await uploadFile(resumeFile, path, (p) =>
+              showProgress("resume-progress", p),
+            );
+            data.resumeName = resumeFile.name;
+            data.resumePath = path;
+            data.resumeText = await extractTextFromFile(resumeFile); // for full-text search
+            hideProgress("resume-progress");
+          }
+
+          if (editCandId) {
+            await updateDoc(doc(db, "candidates", editCandId), data);
+            showToast("Candidate updated!");
+          } else {
+            data.createdAt = serverTimestamp();
+            await addDoc(collection(db, "candidates"), data);
+            showToast("Candidate added!");
+          }
+          resumeFile = null;
+          closeModal("cand-modal");
+        } catch (e) {
+          showToast("Error: " + e.message, "error");
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save Candidate";
+        }
+      };
+
+      // ── SAVE JOB ──────────────────────────────────────────────
+      window.saveJob = async function () {
+        const data = {
+          title: v("jf-title"),
+          department: v("jf-dept"),
+          location: v("jf-loc"),
+          type: v("jf-type"),
+          status: v("jf-status"),
+          description: v("jf-desc"),
+          boards: getCheckedBoards(),
+        };
+        if (!data.title) {
+          showToast("Please enter a job title", "error");
+          return;
+        }
+
+        const saveBtn = gel("job-save-btn");
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving…";
+
+        try {
+          if (jdFile) {
+            showProgress("jd-progress", 0);
+            const path = `jds/${Date.now()}_${jdFile.name}`;
+            data.jdUrl = await uploadFile(jdFile, path, (p) =>
+              showProgress("jd-progress", p),
+            );
+            data.jdName = jdFile.name;
+            data.jdPath = path;
+            data.jdText = await extractTextFromFile(jdFile);
+            hideProgress("jd-progress");
+          }
+          if (editJobId) {
+            await updateDoc(doc(db, "jobs", editJobId), data);
+            showToast("Job updated!");
+          } else {
+            data.createdAt = serverTimestamp();
+            data.boardPostings = {};
+            await addDoc(collection(db, "jobs"), data);
+            showToast("Job posted!");
+          }
+          jdFile = null;
+          closeModal("job-modal");
+        } catch (e) {
+          showToast("Error: " + e.message, "error");
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save Job";
+        }
+      };
+
+      function getCheckedBoards() {
+        return [
+          "naukri",
+          "monster",
+          "linkedin",
+          "indeed",
+          "internshala",
+        ].filter((b) => gel("board-" + b)?.checked);
+      }
+
+      // ── RESUME SEARCH ─────────────────────────────────────────
+      window.runResumeSearch = function () {
+        const q = v("resume-search-input").toLowerCase();
+        if (!q) {
+          renderSearchResults(candidates);
+          return;
+        }
+        const terms = q.split(/\s+/).filter(Boolean);
+        const scored = candidates
+          .map((c) => {
+            const haystack = [
+              c.firstName,
+              c.lastName,
+              c.email,
+              c.skills,
+              c.notes,
+              c.resumeText,
+              jobs.find((j) => j.id === c.jobId)?.title,
+            ]
+              .join(" ")
+              .toLowerCase();
+            const hits = terms.filter((t) => haystack.includes(t)).length;
+            return { c, hits, pct: Math.round((hits / terms.length) * 100) };
+          })
+          .filter((x) => x.hits > 0)
+          .sort((a, b) => b.hits - a.hits);
+        renderSearchResults(
+          scored.map((x) => x.c),
+          scored,
+        );
+      };
+
+      function renderSearchResults(results, scored = []) {
+        const tbody = gel("search-results-tbody");
+        if (!tbody) return;
+        const scoreMap = {};
+        scored.forEach((x) => (scoreMap[x.c.id] = x.pct));
+        tbody.innerHTML = results.length
+          ? results
+              .map((c) => {
+                const job = jobs.find((j) => j.id === c.jobId);
+                const score = scoreMap[c.id];
+                return `<tr>
+      <td><div class="cname">${c.firstName} ${c.lastName}</div>
+          <div class="csub">${c.skills || "No skills listed"}</div></td>
+      <td>${job ? job.title : "—"}</td>
+      <td>${stageBadge(c.stage)}</td>
+      <td>${
+        c.resumeUrl
+          ? `<a href="${c.resumeUrl}" target="_blank" class="btn btn-ghost btn-sm">📄 ${c.resumeName || "Resume"}</a>`
+          : '<span class="csub">No resume</span>'
+      }</td>
+      <td>${
+        score != null
+          ? `<div class="match-bar"><div class="match-fill" style="width:${score}%"></div></div>
+           <div class="csub" style="margin-top:3px">${score}% match</div>`
+          : "—"
+      }</td>
+      <td><button class="icon-btn" onclick="openCandModal('${c.id}')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </button></td>
+    </tr>`;
+              })
+              .join("")
+          : '<tr><td colspan="6" class="empty-cell">No matches found</td></tr>';
+      }
+
+      // ── JOB BOARD QUICK POST ──────────────────────────────────
+      window.quickPostToBoard = function (board, jobId) {
+        const job = jobs.find((j) => j.id === jobId);
+        if (!job) return;
+        const title = encodeURIComponent(job.title);
+        const loc = encodeURIComponent(job.location || "India");
+        const desc = encodeURIComponent((job.description || "").slice(0, 500));
+        const urls = {
+          naukri: `https://www.naukri.com/employer/login`,
+          monster: `https://hiring.monster.com/employer/job-postings/create/`,
+          linkedin: `https://www.linkedin.com/job-posting/create/?jobTitle=${title}&location=${loc}`,
+          indeed: `https://employers.indeed.com/p/post-job?jt=${title}&l=${loc}`,
+          internshala: `https://internshala.com/employer/post-internship`,
+        };
+        const url = urls[board];
+        if (url) {
+          window.open(url, "_blank");
+          // Track posting
+          const j = jobs.find((x) => x.id === jobId);
+          if (j) {
+            const boardPostings = j.boardPostings || {};
+            boardPostings[board] = new Date().toISOString();
+            updateDoc(doc(db, "jobs", jobId), { boardPostings });
+            showToast(`Opening ${boardName(board)} to post "${job.title}"`);
+          }
+        }
+      };
+
+      function boardName(b) {
+        return (
+          {
+            naukri: "Naukri",
+            monster: "Monster",
+            linkedin: "LinkedIn",
+            indeed: "Indeed",
+            internshala: "Internshala",
+          }[b] || b
+        );
+      }
+      function boardColor(b) {
+        return (
+          {
+            naukri: "#FF7555",
+            monster: "#6D2077",
+            linkedin: "#0A66C2",
+            indeed: "#003A9B",
+            internshala: "#16A4E8",
+          }[b] || "#888"
+        );
+      }
+      function boardLogo(b) {
+        return (
+          {
+            naukri: "N",
+            monster: "M",
+            linkedin: "in",
+            indeed: "In",
+            internshala: "IS",
+          }[b] || "?"
+        );
+      }
+
+      // ── DELETE ────────────────────────────────────────────────
+      window.deleteCandidate = async function (id) {
+        if (!confirm("Delete this candidate?")) return;
+        const c = candidates.find((x) => x.id === id);
+        if (c?.resumePath) {
+          try {
+            await deleteObject(ref(storage, c.resumePath));
+          } catch (e) {}
+        }
+        await deleteDoc(doc(db, "candidates", id));
+        showToast("Candidate deleted");
+      };
+      window.deleteJob = async function (id) {
+        if (!confirm("Delete this job posting?")) return;
+        const j = jobs.find((x) => x.id === id);
+        if (j?.jdPath) {
+          try {
+            await deleteObject(ref(storage, j.jdPath));
+          } catch (e) {}
+        }
+        await deleteDoc(doc(db, "jobs", id));
+        showToast("Job deleted");
+      };
+
+      // ── EMAIL ─────────────────────────────────────────────────
+      function emailTpl(title, body) {
+        return `<!DOCTYPE html><html><head><style>
+    body{margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif}
+    .w{max-width:600px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+    .h{background:#1A1A1A;padding:28px 36px;text-align:center}
+    .logo{color:#E8870A;font-size:24px;font-weight:800;letter-spacing:2px}
+    .logo span{color:#fff}
+    .bar{height:4px;background:linear-gradient(90deg,#E8870A,#F5A623)}
+    .b{padding:36px}.t{font-size:22px;font-weight:700;color:#1A1A1A;margin-bottom:14px}
+    .p{font-size:15px;color:#444;line-height:1.7;margin-bottom:14px}
+    .box{background:#FFF8EE;border-left:4px solid #E8870A;border-radius:8px;padding:16px 20px;margin:20px 0}
+    .f{background:#f9f9f9;padding:20px 36px;text-align:center;font-size:12px;color:#999;border-top:1px solid #eee}
+    .f strong{color:#E8870A}
+  </style></head><body><div class="w">
+  <div class="h"><div class="logo">ZOR<span>TECH</span></div><div style="color:#888;font-size:12px;margin-top:4px">zortechs.in</div></div>
+  <div class="bar"></div>
+  <div class="b"><div class="t">${title}</div>${body}</div>
+  <div class="f">© ${new Date().getFullYear()} <strong>Zortech Solutions</strong> · hr@zortechs.in</div>
+  </div></body></html>`;
+      }
+
+      async function sendEmail(to, toName, subject, html) {
+        try {
+          const r = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${RESEND_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
+              to: [`${toName} <${to}>`],
+              subject,
+              html,
+            }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.message || "Failed");
+          return true;
+        } catch (e) {
+          showToast("Email error: " + e.message, "error");
+          return false;
+        }
+      }
+
+      window.sendInterviewInvite = async function (id) {
+        const c = candidates.find((x) => x.id === id);
+        const j = jobs.find((x) => x.id === c?.jobId);
+        if (!c?.email) {
+          showToast("No email on file", "error");
+          return;
+        }
+        const dateStr = c.interviewDate
+          ? new Date(c.interviewDate).toLocaleDateString("en-IN", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })
+          : "TBD";
+        const html = emailTpl(
+          "Interview Invitation 🎉",
+          `<p class="p">Dear <strong>${c.firstName}</strong>,</p>
+     <p class="p">We are pleased to invite you for an interview for the role of <strong>${j?.title || "the applied position"}</strong> at Zortech Solutions.</p>
+     <div class="box"><strong>📅 Interview Details</strong><br/><br/>
+       Date: ${dateStr}<br/>Time: ${c.interviewTime || "TBD"}<br/>Role: ${j?.title || "N/A"}${j?.location ? "<br/>Location: " + j.location : ""}
+     </div>
+     <p class="p">Please confirm your availability by replying to this email.</p>
+     <p class="p">Best regards,<br/><strong>HR Team – Zortech Solutions</strong></p>`,
+        );
+        const ok = await sendEmail(
+          c.email,
+          `${c.firstName} ${c.lastName}`,
+          `Interview Invitation – ${j?.title || "Position"} at Zortech Solutions`,
+          html,
+        );
+        if (ok) showToast(`Interview invite sent to ${c.email} ✉️`);
+      };
+
+      window.sendOfferLetter = async function (id) {
+        const c = candidates.find((x) => x.id === id);
+        const j = jobs.find((x) => x.id === c?.jobId);
+        if (!c?.email) {
+          showToast("No email on file", "error");
+          return;
+        }
+        const html = emailTpl(
+          "Congratulations! Offer of Employment 🎊",
+          `<p class="p">Dear <strong>${c.firstName}</strong>,</p>
+     <p class="p">We are thrilled to offer you the position of <strong>${j?.title || "the role"}</strong> at Zortech Solutions.</p>
+     <div class="box"><strong>📋 Offer Summary</strong><br/><br/>
+       Position: ${j?.title || "N/A"}<br/>Department: ${j?.department || "N/A"}<br/>Type: ${j?.type || "Full-time"}${j?.location ? "<br/>Location: " + j.location : ""}
+     </div>
+     <p class="p">Please confirm acceptance within <strong>3 business days</strong>.</p>
+     <p class="p">Warm regards,<br/><strong>HR Team – Zortech Solutions</strong></p>`,
+        );
+        const ok = await sendEmail(
+          c.email,
+          `${c.firstName} ${c.lastName}`,
+          `Offer Letter – ${j?.title} at Zortech Solutions`,
+          html,
+        );
+        if (ok) showToast(`Offer letter sent to ${c.email} ✉️`);
+      };
+
+      window.openBulkModal = function () {
+        bulkSelected = new Set(
+          candidates.filter((c) => c.email).map((c) => c.id),
+        );
+        renderBulkList();
+        gel("bulk-modal").classList.add("open");
+      };
+      window.toggleBulkSelect = function (id) {
+        bulkSelected.has(id) ? bulkSelected.delete(id) : bulkSelected.add(id);
+        const cnt = gel("bulk-count");
+        if (cnt) cnt.textContent = bulkSelected.size;
+      };
+      function renderBulkList() {
+        const el = gel("bulk-candidate-list");
+        if (!el) return;
+        el.innerHTML =
+          candidates
+            .filter((c) => c.email)
+            .map((c) => {
+              const j = jobs.find((x) => x.id === c.jobId);
+              return `<label class="bulk-row">
+      <input type="checkbox" ${bulkSelected.has(c.id) ? "checked" : ""} onchange="toggleBulkSelect('${c.id}')" style="accent-color:var(--orange);width:15px;height:15px"/>
+      <div><div style="font-size:13px;font-weight:600">${c.firstName} ${c.lastName}</div>
+           <div style="font-size:11px;color:var(--muted)">${c.email} · ${j?.title || "No job"}</div></div>
+    </label>`;
+            })
+            .join("") || '<p class="csub">No candidates with emails.</p>';
+        const cnt = gel("bulk-count");
+        if (cnt) cnt.textContent = bulkSelected.size;
+      }
+      window.sendBulkOutreach = async function () {
+        const subject = v("bulk-subject"),
+          message = v("bulk-message");
+        if (!subject || !message) {
+          showToast("Fill subject and message", "error");
+          return;
+        }
+        const sel = candidates.filter((c) => bulkSelected.has(c.id) && c.email);
+        if (!sel.length) {
+          showToast("No recipients selected", "error");
+          return;
+        }
+        const btn = gel("bulk-send-btn");
+        btn.disabled = true;
+        btn.textContent = `Sending 0/${sel.length}…`;
+        let sent = 0,
+          failed = 0;
+        for (const c of sel) {
+          const msg = message
+            .replace(/\{name\}/gi, c.firstName)
+            .replace(/\{fullname\}/gi, `${c.firstName} ${c.lastName}`)
+            .replace(
+              /\{role\}/gi,
+              jobs.find((j) => j.id === c.jobId)?.title || "the position",
+            );
+          const html = emailTpl(
+            subject,
+            `<p class="p">Dear <strong>${c.firstName}</strong>,</p><p class="p" style="white-space:pre-line">${msg}</p><p class="p">Best regards,<br/><strong>HR Team – Zortech Solutions</strong></p>`,
+          );
+          (await sendEmail(
+            c.email,
+            `${c.firstName} ${c.lastName}`,
+            subject,
+            html,
+          ))
+            ? sent++
+            : failed++;
+          btn.textContent = `Sending ${sent + failed}/${sel.length}…`;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        btn.disabled = false;
+        btn.textContent = "Send Campaign";
+        closeModal("bulk-modal");
+        showToast(
+          `Campaign done! ✅ ${sent} sent${failed ? ", " + failed + " failed" : ""}`,
+        );
+      };
+
+      // ── CSV EXPORT ────────────────────────────────────────────
+      window.exportCSV = function () {
+        const rows = [
+          [
+            "ID",
+            "First",
+            "Last",
+            "Email",
+            "Phone",
+            "Job",
+            "Stage",
+            "Experience",
+            "Skills",
+            "Interview Date",
+            "Resume",
+            "Added",
+          ],
+        ];
+        candidates.forEach((c) => {
+          const j = jobs.find((x) => x.id === c.jobId);
+          rows.push([
+            c.id,
+            c.firstName,
+            c.lastName,
+            c.email,
+            c.phone,
+            j?.title || "",
+            c.stage,
+            c.experience,
+            (c.skills || "").replace(/,/g, ";"),
+            c.interviewDate,
+            c.resumeUrl || "",
+            fmtDate(c.createdAt),
+          ]);
+        });
+        const csv = rows
+          .map((r) => r.map((x) => `"${x || ""}"`).join(","))
+          .join("\n");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        a.download =
+          "zortech-ats-" + new Date().toISOString().split("T")[0] + ".csv";
+        a.click();
+        showToast("CSV exported!");
+      };
+
+      // ── MODALS ────────────────────────────────────────────────
+      window.openCandModal = function (id = null) {
+        editCandId = id;
+        resumeFile = null;
+        gel("cand-modal-title").textContent = id
+          ? "Edit Candidate"
+          : "Add Candidate";
+        [
+          "cf-first",
+          "cf-last",
+          "cf-email",
+          "cf-phone",
+          "cf-job",
+          "cf-stage",
+          "cf-exp",
+          "cf-skills",
+          "cf-notes",
+          "cf-idate",
+          "cf-itime",
+        ].forEach((i) => {
+          const el = gel(i);
+          if (el)
+            el.value = el.tagName === "SELECT" ? el.options[0]?.value : "";
+        });
+        gel("resume-file-label").textContent = "No file chosen";
+        gel("resume-preview").style.display = "none";
+        hideProgress("resume-progress");
+        populateJobDropdowns();
+        if (id) {
+          const c = candidates.find((x) => x.id === id);
+          if (!c) return;
+          sv("cf-first", c.firstName);
+          sv("cf-last", c.lastName);
+          sv("cf-email", c.email);
+          sv("cf-phone", c.phone);
+          sv("cf-job", c.jobId);
+          sv("cf-stage", c.stage);
+          sv("cf-exp", c.experience);
+          sv("cf-skills", c.skills);
+          sv("cf-notes", c.notes);
+          sv("cf-idate", c.interviewDate);
+          sv("cf-itime", c.interviewTime);
+          if (c.resumeUrl) {
+            gel("resume-file-label").textContent =
+              c.resumeName || "Existing resume";
+            gel("resume-preview").style.display = "flex";
+            gel("resume-preview").href = c.resumeUrl;
+          }
+        }
+        gel("cand-modal").classList.add("open");
+      };
+
+      window.openJobModal = function (id = null) {
+        editJobId = id;
+        jdFile = null;
+        gel("job-modal-title").textContent = id
+          ? "Edit Job"
+          : "Add Job Posting";
+        [
+          "jf-title",
+          "jf-dept",
+          "jf-loc",
+          "jf-type",
+          "jf-status",
+          "jf-desc",
+        ].forEach((i) => {
+          const el = gel(i);
+          if (el)
+            el.value = el.tagName === "SELECT" ? el.options[0]?.value : "";
+        });
+        ["naukri", "monster", "linkedin", "indeed", "internshala"].forEach(
+          (b) => {
+            const el = gel("board-" + b);
+            if (el) el.checked = false;
+          },
+        );
+        gel("jd-file-label").textContent = "No file chosen";
+        gel("jd-preview").style.display = "none";
+        hideProgress("jd-progress");
+        if (id) {
+          const j = jobs.find((x) => x.id === id);
+          if (!j) return;
+          sv("jf-title", j.title);
+          sv("jf-dept", j.department);
+          sv("jf-loc", j.location);
+          sv("jf-type", j.type);
+          sv("jf-status", j.status);
+          sv("jf-desc", j.description);
+          (j.boards || []).forEach((b) => {
+            const el = gel("board-" + b);
+            if (el) el.checked = true;
+          });
+          if (j.jdUrl) {
+            gel("jd-file-label").textContent = j.jdName || "Existing JD";
+            gel("jd-preview").style.display = "flex";
+            gel("jd-preview").href = j.jdUrl;
+          }
+        }
+        gel("job-modal").classList.add("open");
+      };
+
+      window.closeModal = (id) => gel(id).classList.remove("open");
+      window.openAddModal = function () {
+        if (currentView === "jobs") openJobModal();
+        else if (currentView === "emails") openBulkModal();
+        else openCandModal();
+      };
+
+      // ── NAV ───────────────────────────────────────────────────
+      window.setView = function (view, btn) {
+        currentView = view;
+        document
+          .querySelectorAll(".view")
+          .forEach((v) => v.classList.remove("active"));
+        document
+          .querySelectorAll(".nav-item")
+          .forEach((n) => n.classList.remove("active"));
+        gel("view-" + view).classList.add("active");
+        btn.classList.add("active");
+        const titles = {
+          dashboard: "Dashboard",
+          candidates: "Candidates",
+          pipeline: "Pipeline",
+          jobs: "Job Postings",
+          interviews: "Interviews",
+          search: "Resume Search",
+          emails: "Email Campaigns",
+          boards: "Job Boards",
+        };
+        gel("topbar-title").textContent = titles[view] || view;
+        const addLabels = {
+          dashboard: "Add Candidate",
+          candidates: "Add Candidate",
+          pipeline: "Add Candidate",
+          jobs: "Add Job",
+          interviews: "Add Candidate",
+          search: "Add Candidate",
+          emails: "New Campaign",
+          boards: "Add Job",
+        };
+        gel("add-btn-label").textContent = addLabels[view] || "Add";
+        gel("export-btn").style.display =
+          view === "candidates" ? "flex" : "none";
+        renderAll();
+      };
+
+      // ── RENDER ALL ────────────────────────────────────────────
+      function renderAll() {
+        if (currentView === "dashboard") renderDashboard();
+        if (currentView === "candidates") renderCandidates();
+        if (currentView === "pipeline") renderPipeline();
+        if (currentView === "jobs") renderJobs();
+        if (currentView === "interviews") renderInterviews();
+        if (currentView === "search") renderSearch();
+        if (currentView === "emails") renderEmails();
+        if (currentView === "boards") renderBoards();
+      }
+
+      // ── DASHBOARD ─────────────────────────────────────────────
+      function renderDashboard() {
+        const stats = [
+          {
+            label: "Total Candidates",
+            value: candidates.length,
+            color: "var(--orange-light)",
+            bg: "#3D2800",
+            d: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
+          },
+          {
+            label: "Open Positions",
+            value: jobs.filter((j) => j.status === "Open").length,
+            color: "var(--blue)",
+            bg: "#1A2A3D",
+            d: "M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
+          },
+          {
+            label: "In Interviews",
+            value: candidates.filter((c) => c.stage === "Interview").length,
+            color: "var(--purple)",
+            bg: "#2D1A3D",
+            d: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+          },
+          {
+            label: "Hired",
+            value: candidates.filter((c) => c.stage === "Hired").length,
+            color: "var(--green)",
+            bg: "#1A3A2D",
+            d: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z",
+          },
+          {
+            label: "Resumes Uploaded",
+            value: candidates.filter((c) => c.resumeUrl).length,
+            color: "var(--yellow)",
+            bg: "#3D3A00",
+            d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
+          },
+          {
+            label: "Board Postings",
+            value: jobs.reduce(
+              (a, j) => a + Object.keys(j.boardPostings || {}).length,
+              0,
+            ),
+            color: "#F472B6",
+            bg: "#3D1A2D",
+            d: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9",
+          },
+        ];
+        gel("stats-row").innerHTML = stats
+          .map(
+            (s) => `
+    <div class="stat-card">
+      <div class="stat-icon" style="background:${s.bg};color:${s.color}">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${s.d}"/></svg>
+      </div>
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value" style="color:${s.color}">${s.value}</div>
+    </div>`,
+          )
+          .join("");
+        gel("recent-tbody").innerHTML =
+          candidates
+            .slice(0, 8)
+            .map((c) => {
+              const j = jobs.find((x) => x.id === c.jobId);
+              return `<tr>
+      <td><div class="cname">${c.firstName} ${c.lastName}</div><div class="csub">${c.email || ""}</div></td>
+      <td>${j?.title || "—"}</td>
+      <td>${stageBadge(c.stage)}</td>
+      <td>${c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank" class="file-chip">📄 Resume</a>` : '<span class="csub">—</span>'}</td>
+      <td class="muted">${fmtDate(c.createdAt)}</td>
+    </tr>`;
+            })
+            .join("") ||
+          '<tr><td colspan="5" class="empty-cell">No candidates yet</td></tr>';
+      }
+
+      // ── CANDIDATES ────────────────────────────────────────────
+      function renderCandidates() {
+        const search = gel("cand-search")?.value.toLowerCase() || "";
+        const stage = gel("cand-stage-filter")?.value || "";
+        const jobId = gel("cand-job-filter")?.value || "";
+        let filtered = candidates;
+        if (search)
+          filtered = filtered.filter((c) =>
+            `${c.firstName} ${c.lastName} ${c.email} ${c.skills}`
+              .toLowerCase()
+              .includes(search),
+          );
+        if (stage) filtered = filtered.filter((c) => c.stage === stage);
+        if (jobId) filtered = filtered.filter((c) => c.jobId === jobId);
+        const tbody = gel("cand-tbody");
+        if (!tbody) return;
+        tbody.innerHTML = filtered.length
+          ? filtered
+              .map((c) => {
+                const j = jobs.find((x) => x.id === c.jobId);
+                return `<tr>
+      <td><div class="cname">${c.firstName} ${c.lastName}</div><div class="csub">${c.skills || ""}</div></td>
+      <td>${j?.title || "—"}</td>
+      <td>${stageBadge(c.stage)}</td>
+      <td class="muted">${c.email || "—"}</td>
+      <td>${c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank" class="file-chip">📄 ${c.resumeName || "Resume"}</a>` : '<span class="csub">—</span>'}</td>
+      <td class="muted">${fmtDate(c.createdAt)}</td>
+      <td><div class="actions">
+        <button class="icon-btn" title="Edit" onclick="openCandModal('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+        <button class="icon-btn email-btn" title="Interview Invite" onclick="sendInterviewInvite('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></button>
+        <button class="icon-btn offer-btn" title="Send Offer" onclick="sendOfferLetter('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></button>
+        <button class="icon-btn del-btn" title="Delete" onclick="deleteCandidate('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+      </div></td>
+    </tr>`;
+              })
+              .join("")
+          : '<tr><td colspan="7" class="empty-cell">No candidates found</td></tr>';
+      }
+
+      // ── PIPELINE ──────────────────────────────────────────────
+      function renderPipeline() {
+        const stages = ["Applied", "Screening", "Interview", "Offer", "Hired"];
+        const cols = {
+          Applied: "var(--blue)",
+          Screening: "var(--purple)",
+          Interview: "var(--green)",
+          Offer: "var(--orange-light)",
+          Hired: "#4ADE80",
+        };
+        const board = gel("kanban-board");
+        if (!board) return;
+        board.innerHTML = stages
+          .map((stage) => {
+            const sc = candidates.filter((c) => c.stage === stage);
+            return `<div class="kanban-col">
+      <div class="kanban-col-header"><div class="kanban-col-title" style="color:${cols[stage]}">${stage}</div><div class="kanban-count">${sc.length}</div></div>
+      <div class="kanban-cards">
+        ${
+          sc
+            .map((c) => {
+              const j = jobs.find((x) => x.id === c.jobId);
+              return `<div class="kanban-card" onclick="openCandModal('${c.id}')">
+            <div class="kanban-card-name">${c.firstName} ${c.lastName}</div>
+            <div class="kanban-card-role">${j?.title || "No job"}</div>
+            ${c.resumeUrl ? `<div style="margin-top:6px"><span class="file-chip" style="font-size:10px">📄 Resume</span></div>` : ""}
+            <div class="kanban-card-meta"><span class="csub">${fmtDate(c.createdAt)}</span></div>
+          </div>`;
+            })
+            .join("") || '<div class="kanban-empty">Empty</div>'
+        }
+      </div>
+    </div>`;
+          })
+          .join("");
+      }
+
+      // ── JOBS ──────────────────────────────────────────────────
+      function renderJobs() {
+        const grid = gel("jobs-grid");
+        if (!grid) return;
+        const sc = {
+          Open: "var(--green)",
+          Paused: "var(--yellow)",
+          Closed: "var(--red)",
+        };
+        const sbg = { Open: "#1A3A2D", Paused: "#3D3A00", Closed: "#3D1A1A" };
+        grid.innerHTML = jobs.length
+          ? jobs
+              .map((j) => {
+                const count = candidates.filter((c) => c.jobId === j.id).length;
+                const posted = Object.keys(j.boardPostings || {});
+                return `<div class="job-card">
+      <div class="job-card-header">
+        <div><div class="job-title">${j.title}</div><div class="job-dept">${j.department || "—"}</div></div>
+        <span class="badge" style="background:${sbg[j.status]};color:${sc[j.status]}">${j.status}</span>
+      </div>
+      <div class="job-meta">
+        ${j.location ? `<span class="job-tag">📍 ${j.location}</span>` : ""}
+        ${j.type ? `<span class="job-tag">${j.type}</span>` : ""}
+        ${j.jdUrl ? `<a href="${j.jdUrl}" target="_blank" class="file-chip" style="font-size:11px">📄 JD</a>` : ""}
+      </div>
+      ${j.description ? `<div class="job-desc">${j.description.slice(0, 100)}${j.description.length > 100 ? "..." : ""}</div>` : ""}
+      ${posted.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">${posted.map((b) => `<span class="board-pill" style="background:${boardColor(b)}22;color:${boardColor(b)}">${boardName(b)}</span>`).join("")}</div>` : ""}
+      <div class="quick-post-row">
+        ${["naukri", "monster", "linkedin", "indeed", "internshala"]
+          .map(
+            (b) => `
+          <button class="board-post-btn" style="border-color:${boardColor(b)}44;color:${boardColor(b)}" onclick="quickPostToBoard('${b}','${j.id}')" title="Post to ${boardName(b)}">
+            ${boardName(b)}
+          </button>`,
+          )
+          .join("")}
+      </div>
+      <div class="job-footer">
+        <div class="job-applicants"><span>${count}</span> applicant${count !== 1 ? "s" : ""}</div>
+        <div class="actions">
+          <button class="icon-btn" onclick="openJobModal('${j.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+          <button class="icon-btn del-btn" onclick="deleteJob('${j.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+        </div>
+      </div>
+    </div>`;
+              })
+              .join("")
+          : '<div style="color:var(--muted);text-align:center;padding:60px;grid-column:1/-1">No job postings yet.</div>';
+      }
+
+      // ── INTERVIEWS ────────────────────────────────────────────
+      function renderInterviews() {
+        const list = gel("interview-list");
+        if (!list) return;
+        const wi = candidates
+          .filter((c) => c.interviewDate)
+          .sort(
+            (a, b) => new Date(a.interviewDate) - new Date(b.interviewDate),
+          );
+        list.innerHTML = wi.length
+          ? wi
+              .map((c) => {
+                const j = jobs.find((x) => x.id === c.jobId);
+                const d = new Date(c.interviewDate);
+                return `<div class="interview-card">
+      <div class="interview-date-box"><div class="interview-date-day">${d.getDate()}</div><div class="interview-date-month">${d.toLocaleString("default", { month: "short" })}</div></div>
+      <div class="interview-info">
+        <div class="interview-candidate">${c.firstName} ${c.lastName}</div>
+        <div class="interview-role">${j?.title || "No job"}</div>
+        ${c.interviewTime ? `<div class="interview-time">⏰ ${c.interviewTime}</div>` : ""}
+        ${c.notes ? `<div class="interview-note">"${c.notes.slice(0, 80)}${c.notes.length > 80 ? "..." : ""}"</div>` : ""}
+      </div>
+      <div class="actions" style="flex-direction:column;align-items:flex-end;gap:6px">
+        ${stageBadge(c.stage)}
+        ${c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank" class="file-chip">📄 Resume</a>` : ""}
+        <button class="btn btn-sm btn-primary" onclick="sendInterviewInvite('${c.id}')">Send Invite</button>
+      </div>
+    </div>`;
+              })
+              .join("")
+          : '<div style="color:var(--muted);text-align:center;padding:60px">No interviews scheduled.</div>';
+      }
+
+      // ── RESUME SEARCH ─────────────────────────────────────────
+      function renderSearch() {
+        renderSearchResults(candidates);
+      }
+
+      // ── EMAILS ────────────────────────────────────────────────
+      function renderEmails() {
+        const el = gel("email-view-content");
+        if (!el) return;
+        el.innerHTML = `
+  <div class="email-cards">
+    <div class="email-template-card" onclick="openBulkModal()">
+      <div class="email-icon" style="background:#1A2A3D;color:var(--blue)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="28" height="28"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+      <div class="email-template-title">Bulk Outreach</div>
+      <div class="email-template-desc">Send a personalized email to multiple candidates. Use <code>{name}</code>, <code>{role}</code> for personalization.</div>
+      <div class="btn btn-primary" style="margin-top:16px;justify-content:center">Launch Campaign →</div>
+    </div>
+    <div class="email-template-card">
+      <div class="email-icon" style="background:#2D1A3D;color:var(--purple)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="28" height="28"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+      <div class="email-template-title">Interview Invite</div>
+      <div class="email-template-desc">Send branded interview invitations with date, time & role details from the Candidates or Interviews tab.</div>
+      <div class="btn btn-ghost" style="margin-top:16px;justify-content:center">Go to Candidates →</div>
+    </div>
+    <div class="email-template-card">
+      <div class="email-icon" style="background:#1A3A2D;color:var(--green)"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="28" height="28"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+      <div class="email-template-title">Offer Letter</div>
+      <div class="email-template-desc">Send a professional offer letter with position details and next steps to your selected candidate.</div>
+      <div class="btn btn-ghost" style="margin-top:16px;justify-content:center">Go to Candidates →</div>
+    </div>
+  </div>
+  <div style="margin-top:28px">
+    <div class="section-title" style="margin-bottom:14px">📬 Quick Stats</div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">With Email</div><div class="stat-value" style="color:var(--orange-light)">${candidates.filter((c) => c.email).length}</div></div>
+      <div class="stat-card"><div class="stat-label">In Interview</div><div class="stat-value" style="color:var(--purple)">${candidates.filter((c) => c.stage === "Interview").length}</div></div>
+      <div class="stat-card"><div class="stat-label">Offer Stage</div><div class="stat-value" style="color:var(--green)">${candidates.filter((c) => c.stage === "Offer").length}</div></div>
+      <div class="stat-card"><div class="stat-label">Hired</div><div class="stat-value" style="color:#4ADE80">${candidates.filter((c) => c.stage === "Hired").length}</div></div>
+    </div>
+  </div>`;
+      }
+
+      // ── JOB BOARDS ────────────────────────────────────────────
+      function renderBoards() {
+        const el = gel("boards-content");
+        if (!el) return;
+        const boards = [
+          {
+            id: "naukri",
+            name: "Naukri.com",
+            desc: "India's largest job portal. Best for tech, finance and operations roles.",
+            url: "https://www.naukri.com/employer/login",
+            candidates: "15M+",
+          },
+          {
+            id: "linkedin",
+            name: "LinkedIn Jobs",
+            desc: "Professional network. Ideal for senior and specialized roles with direct sourcing.",
+            url: "https://www.linkedin.com/talent/",
+            candidates: "900M+",
+          },
+          {
+            id: "indeed",
+            name: "Indeed",
+            desc: "World's largest job site. High volume of applications across all levels.",
+            url: "https://employers.indeed.com/",
+            candidates: "300M+",
+          },
+          {
+            id: "monster",
+            name: "Monster.com",
+            desc: "Global job board with strong presence in IT, engineering and management.",
+            url: "https://hiring.monster.com/",
+            candidates: "6M+",
+          },
+          {
+            id: "internshala",
+            name: "Internshala",
+            desc: "India's #1 internship and fresher jobs platform. Best for entry-level hiring.",
+            url: "https://internshala.com/employer/",
+            candidates: "21M+",
+          },
+        ];
+        el.innerHTML = `
+  <div style="margin-bottom:24px">
+    <div class="section-title" style="margin-bottom:6px">Connected Job Boards</div>
+    <p style="color:var(--muted);font-size:13px">Click any job card to post directly to these platforms. Postings are tracked automatically.</p>
+  </div>
+  <div class="boards-grid">
+    ${boards
+      .map(
+        (b) => `
+    <div class="board-card">
+      <div class="board-card-header">
+        <div class="board-logo-circle" style="background:${boardColor(b.id)}22;color:${boardColor(b.id)};border:2px solid ${boardColor(b.id)}44">${boardLogo(b.id)}</div>
+        <div>
+          <div class="board-name">${b.name}</div>
+          <div class="csub">${b.candidates} candidates</div>
+        </div>
+        <a href="${b.url}" target="_blank" class="btn btn-ghost btn-sm" style="margin-left:auto">Open ↗</a>
+      </div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin:12px 0">${b.desc}</p>
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <div class="csub" style="margin-bottom:8px">Jobs posted to ${b.name}:</div>
+        ${
+          jobs.filter((j) => Object.keys(j.boardPostings || {}).includes(b.id))
+            .length
+            ? jobs
+                .filter((j) =>
+                  Object.keys(j.boardPostings || {}).includes(b.id),
+                )
+                .map(
+                  (j) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:13px;font-weight:500">${j.title}</span>
+              <span class="csub">${new Date(j.boardPostings[b.id]).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>
+            </div>`,
+                )
+                .join("")
+            : `<div class="csub" style="padding:8px 0">No jobs posted yet — go to Job Postings to post.</div>`
+        }
+      </div>
+    </div>`,
+      )
+      .join("")}
+  </div>`;
+      }
+
+      // ── HELPERS ───────────────────────────────────────────────
+      function populateJobDropdowns() {
+        ["cf-job", "cand-job-filter"].forEach((id) => {
+          const el = gel(id);
+          if (!el) return;
+          const val = el.value;
+          el.innerHTML =
+            (id === "cand-job-filter"
+              ? '<option value="">All Jobs</option>'
+              : '<option value="">Select Job</option>') +
+            jobs
+              .map((j) => `<option value="${j.id}">${j.title}</option>`)
+              .join("");
+          el.value = val;
+        });
+      }
+      function stageBadgeClass(s) {
+        const m = {
+          Applied: "badge-applied",
+          Screening: "badge-screening",
+          Interview: "badge-interview",
+          Offer: "badge-offer",
+          Hired: "badge-hired",
+          Rejected: "badge-rejected",
+        };
+        return "badge " + (m[s] || "badge-applied");
+      }
+      function stageBadge(s) {
+        return `<span class="${stageBadgeClass(s)}">${s}</span>`;
+      }
+      function fmtDate(ts) {
+        if (!ts) return "—";
+        const d = ts.toDate ? ts.toDate() : new Date(ts);
+        return d.toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        });
+      }
+      function gel(id) {
+        return document.getElementById(id);
+      }
+      function v(id) {
+        return (gel(id)?.value || "").trim();
+      }
+      function sv(id, val) {
+        const el = gel(id);
+        if (el && val != null) el.value = val;
+      }
+      function updateSyncBadge(ok) {
+        const b = gel("sync-badge");
+        if (b) {
+          b.textContent = ok ? "● Live" : "○ Offline";
+          b.style.color = ok ? "var(--green)" : "var(--red)";
+        }
+      }
+      function showProgress(id, pct) {
+        const el = gel(id);
+        if (el) {
+          el.style.display = "block";
+          const fill = el.querySelector(".prog-fill");
+          if (fill) fill.style.width = pct + "%";
+        }
+      }
+      function hideProgress(id) {
+        const el = gel(id);
+        if (el) el.style.display = "none";
+      }
+      window.showToast = function (msg, type = "success") {
+        const t = document.createElement("div");
+        t.className = "toast";
+        t.style.background = type === "error" ? "var(--red)" : "var(--green)";
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+      };
+
+      // File input handlers (exposed to HTML)
+      window.handleResumeFile = async function (input) {
+        resumeFile = input.files[0];
+        if (!resumeFile) return;
+
+        gel("resume-file-label").textContent = resumeFile.name;
+        gel("resume-preview").style.display = "none";
+
+        // Show parsing state on form fields
+        const fieldsToFill = ["cf-first", "cf-last", "cf-email", "cf-phone", "cf-skills"];
+        const saveBtn = gel("cand-save-btn");
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Parsing resume…"; }
+        fieldsToFill.forEach((id) => {
+          const el = gel(id);
+          if (el && !el.value) { el.placeholder = "Extracting…"; el.disabled = true; }
+        });
+
+        try {
+          showProgress("resume-progress", 20);
+          const text = await extractTextFromFile(resumeFile);
+          showProgress("resume-progress", 50);
+
+          if (text && text.trim().length > 20) {
+            showProgress("resume-progress", 70);
+            const parsed = await parseResumeWithAI(text);
+            showProgress("resume-progress", 100);
+
+            let filledCount = 0;
+            if (parsed.firstName) { gel("cf-first").value = parsed.firstName; filledCount++; }
+            if (parsed.lastName)  { gel("cf-last").value  = parsed.lastName;  filledCount++; }
+            if (parsed.email)     { gel("cf-email").value = parsed.email;      filledCount++; }
+            if (parsed.phone)     { gel("cf-phone").value = parsed.phone;      filledCount++; }
+            if (parsed.skills)    { gel("cf-skills").value = parsed.skills;    filledCount++; }
+            if (parsed.experience) {
+              const expNum = String(parsed.experience).replace(/[^0-9.]/g, "");
+              if (expNum) gel("cf-exp").value = expNum;
+            }
+
+            if (filledCount > 0) {
+              showToast(`✅ Resume parsed! ${filledCount} field${filledCount > 1 ? "s" : ""} auto-filled.`);
+            } else {
+              showToast("Resume uploaded. Could not extract details — please fill in manually.", "error");
+            }
+          } else {
+            showToast("Resume uploaded. No readable text found — please fill in manually.", "error");
+          }
+        } catch (e) {
+          console.warn("Resume parsing failed:", e);
+          showToast("Resume uploaded. Auto-fill failed — please fill in manually.", "error");
+        } finally {
+          hideProgress("resume-progress");
+          // Restore fields
+          fieldsToFill.forEach((id) => {
+            const el = gel(id);
+            if (el) {
+              el.disabled = false;
+              if (el.placeholder === "Extracting…") el.placeholder = el.id === "cf-first" ? "John" : el.id === "cf-last" ? "Doe" : "";
+            }
+          });
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save Candidate"; }
+        }
+      };
+      // ── JD TEXT CLEANER ──────────────────────────────────────
+      function cleanJDText(text) {
+        return text
+          // Strip PDF symbol artifacts (□ ■ etc)
+          .replace(/[\u25A0-\u25FF\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ")
+          // Replace bullet unicode chars with a space
+          .replace(/[\u2022\u2023\u2043\u204C\u204D\u2219\u25E6\uF0B7]/g, " ")
+          // Collapse multiple spaces/tabs
+          .replace(/[ \t]{2,}/g, " ")
+          // Trim each line, drop empty ones
+          .split("\n").map(l => l.trim()).filter(l => l.length > 0).join("\n");
+      }
+
+      // ── JD FIELD CLEANER ─────────────────────────────────────
+      // Strips PDF artifacts from a single extracted field value
+      function cleanJDField(val) {
+        if (!val) return "";
+        return val
+          .replace(/[■-◿�|]/g, "")
+          // Fix kerning ONLY when all three parts are uppercase — safe signal of PDF glyph split
+          // e.g. "SEN I OR" → "SENIOR", but leaves "foraSenior" alone
+          .replace(/([A-Z]{2,})\s+([A-Z]{1,2})\s+([A-Z]{2,})/g, (_, a, b, c) => a + b + c)
+          .replace(/\s{2,}/g, " ")
+          .trim();
+      }
+
+      // ── AI JD PARSER ─────────────────────────────────────────
+      async function parseJDWithAI(text) {
+        if (!text || text.trim().length < 20) return {};
+        try {
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 1000,
+              messages: [{
+                role: "user",
+                content: `Extract these fields from the job description and return ONLY a valid JSON object, no markdown, no backticks:
+{"title":"job title only — no symbols or punctuation","department":"department or team name","location":"work location e.g. Bangalore, Remote, Hybrid","type":"one of exactly: Full-time, Part-time, Contract, Internship","description":"concise 2-4 sentence summary of responsibilities and requirements"}
+Rules: If not found use "". For type infer from context. Return ONLY JSON.
+Job description:
+${text.substring(0, 4000)}`
+              }]
+            })
+          });
+          const data = await response.json();
+          const raw = data?.content?.[0]?.text?.trim() || "{}";
+          const parsed = JSON.parse(raw.replace(/^```json|^```|```$/gm, "").trim());
+          // Clean each field with the same PDF-artifact fixes
+          if (parsed.title)       parsed.title       = cleanJDField(parsed.title);
+          if (parsed.department)  parsed.department  = cleanJDField(parsed.department);
+          if (parsed.location)    parsed.location    = cleanJDField(parsed.location);
+          if (parsed.description) parsed.description = cleanJDField(parsed.description);
+          if (parsed.type) {
+            // Normalise to exact select option values
+            const typeMap = { "full": "Full-time", "part": "Part-time", "contract": "Contract", "intern": "Internship", "freelance": "Contract" };
+            const lower = parsed.type.toLowerCase();
+            parsed.type = Object.entries(typeMap).find(([k]) => lower.includes(k))?.[1] || "Full-time";
+          }
+          return parsed;
+        } catch (e) {
+          console.warn("AI JD parsing failed, using fallback:", e);
+          return parseJDTextFallback(text);
+        }
+      }
+
+      // ── FALLBACK REGEX JD PARSER ──────────────────────────────
+      function parseJDTextFallback(text) {
+        if (!text) return {};
+        const result = { title: "", department: "", location: "", type: "", description: "" };
+
+        text = cleanJDText(text);
+        const lines = text.split("\n").filter(l => l.length > 1);
+
+        // ── TITLE ──
+        // 1. Try explicit label
+        const titleLabel = text.match(/(?:job\s*title|position(?!\s+is)|role(?!\s+will))\s*[:\-]\s*([^\n]{3,80})/i);
+        if (titleLabel) {
+          result.title = cleanJDField(titleLabel[1]);
+        } else {
+          // 2. Use inline extraction ONLY when the first line is a long sentence (no clean title line)
+          //    e.g. "We are looking for an experienced Cloud Developer / DevOps Engineer to join our"
+          const firstLine = lines[0] || "";
+          const firstLineIsSentence = firstLine.split(/\s+/).length > 8;
+          const inlineTitle = firstLineIsSentence
+            ? text.match(/(?:looking for|seeking)\s+(?:an?\s+)?(?:experienced\s+)?([A-Za-z][\w\s\/\-]{3,60}?)(?=\s+to\s+(?:join|work|lead|manage|help|build|develop|oversee|support)|\s+who\b)/i)
+            : null;
+          if (inlineTitle) {
+            result.title = cleanJDField(inlineTitle[1].trim()).substring(0, 80);
+          } else {
+            // 3. Short standalone line (2-7 words) — skip sentences, headers, and label lines (contain ":")
+            const sentenceSignals = /\b(we are|we're|looking for|seeking|join our|responsible for|will be|you will|you'll|this role|this position|our team|dynamic|experienced)\b/i;
+            const sectionHeaders = /^(about|we are|our company|overview|summary|responsibilities|requirements|skills|qualifications|benefits|education|experience|skills and|technical)/i;
+            for (const line of lines.slice(0, 8)) {
+              const clean = line.replace(/^[\s\-\u2013\u2014|:\u25A0\u25A1]+/, "").trim();
+              const words = clean.split(/\s+/);
+              if (words.length >= 2 && words.length <= 7 &&
+                  !clean.includes(":") &&
+                  !sentenceSignals.test(clean) &&
+                  !sectionHeaders.test(clean)) {
+                result.title = cleanJDField(fixKerning([...words]).join(" ")).substring(0, 80);
+                break;
+              }
+            }
+          }
+        }
+
+        // ── DEPARTMENT ──
+        // 1. Explicit label
+        const deptLabel = text.match(/(?:department|team|division|group)\s*[:\-]\s*([^\n]{2,60})/i);
+        if (deptLabel) {
+          result.department = cleanJDField(deptLabel[1]);
+        } else {
+          // 2. Scan ALL "our X team" mentions, pick first non-generic
+          const genericAdj = /^(dynamic|talented|growing|great|awesome|dedicated|amazing|passionate|fast|young|innovative)$/i;
+          const allDeptMatches = [...text.matchAll(/(?:with\s+our|join(?:ing)?\s+our|our)\s+([A-Za-z][a-zA-Z]{2,25}(?:\s+[A-Za-z][a-zA-Z]{2,25})?)\s+(?:team|department|division|group)/gi)];
+          const deptCand = allDeptMatches.map(m => m[1].trim()).find(c => !genericAdj.test(c));
+          if (deptCand) result.department = cleanJDField(deptCand);
+          // 3. "the [DEPT] team" with capital word
+          if (!result.department) {
+            const deptInfer2 = text.match(/the\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(?:team|department)/);
+            if (deptInfer2) result.department = cleanJDField(deptInfer2[1].trim());
+          }
+        }
+
+        // ── LOCATION ──
+        // 1. Explicit label
+        const locLabel = text.match(/(?:location|based\s+in|office|workplace)\s*[:\-]\s*([^\n]{2,80})/i);
+        if (locLabel) {
+          result.location = cleanJDField(locLabel[1]);
+        } else {
+          // 2. Prose patterns: "based in X", "located in X", "collaborate in X"
+          const locProse = text.match(/(?:based\s+in|located\s+in|working\s+(?:from|out\s+of)|our\s+office\s+in|collaborate\s+(?:from|in))\s+([A-Z][\w\s\/,]{2,40}?)(?:\s*\.\s|\s*,\s|\n|$)/i);
+          if (locProse) {
+            result.location = cleanJDField(locProse[1].trim().replace(/\s*\/\s*/g, " / "));
+          } else if (/remote/i.test(text)) {
+            // If city also mentioned alongside Remote, capture "City / Remote"
+            const cityRemote = text.match(/([A-Z][a-z]{2,}(?:\s*\/\s*Remote|,?\s*Remote))/i);
+            result.location = cityRemote ? cleanJDField(cityRemote[1]) : (/hybrid/i.test(text) ? "Hybrid" : "Remote");
+          }
+          // 3. "team/role/position in [City]" — covers "join our X team in Mumbai"
+          if (!result.location) {
+            const cityMatch = text.match(/(?:team|position|role|job|opportunity)\s+in\s+([A-Z][a-z]{2,}(?:\s*[\/,]\s*[A-Z][a-z]{2,})*)/);
+            if (cityMatch) result.location = cleanJDField(cityMatch[1].trim());
+          }
+        }
+
+        // ── TYPE ──
+        if      (/intern(ship)?/i.test(text))      result.type = "Internship";
+        else if (/contract|freelance/i.test(text))  result.type = "Contract";
+        else if (/part[\s\-]time/i.test(text))    result.type = "Part-time";
+        else                                         result.type = "Full-time";
+
+        // ── DESCRIPTION ──
+        // Strategy: find the biggest block of substantive content.
+        // For docx (mammoth): paragraphs are \n-separated, not \n\n.
+        // Section headers are short standalone lines (1-4 words, no punctuation).
+        // We split on these headers and take the longest substantive chunk.
+
+        // Identify section-header lines (short, no colon, not numbers)
+        const headerPattern = /^([A-Z][A-Za-z\s&]{1,35})$/;
+        const sectionKeywords = /^(responsibilities|requirements?|qualifications?|skills?|about|overview|summary|benefits?|compensation|education|experience|what we offer|how to apply|why join|about us|our company|job description|role description|key responsibilities)/i;
+
+        // Split text into sections at header lines
+        const allLines = text.split("\n");
+        const sections = [];
+        let currentHeader = "";
+        let currentBody = [];
+        for (const line of allLines) {
+          const words = line.trim().split(/\s+/);
+          const isHeader = words.length <= 5 && !line.includes(":") && !line.match(/^\d/) && (sectionKeywords.test(line.trim()) || (headerPattern.test(line.trim()) && words.length <= 4));
+          if (isHeader) {
+            if (currentBody.length > 0) sections.push({ header: currentHeader, body: currentBody.join(" ") });
+            currentHeader = line.trim();
+            currentBody = [];
+          } else {
+            if (line.trim().length > 3) currentBody.push(line.trim());
+          }
+        }
+        if (currentBody.length > 0) sections.push({ header: currentHeader, body: currentBody.join(" ") });
+
+        // Priority order for description: named content sections > longest body chunk > full text
+        const descPriority = ["responsibilities", "about the role", "role description", "job description", "overview", "summary", "about us"];
+        const namedSection = sections.find(s => descPriority.some(k => s.header.toLowerCase().includes(k)));
+        if (namedSection && namedSection.body.length > 80) {
+          result.description = namedSection.body.replace(/\s{2,}/g, " ").trim().substring(0, 2000);
+        } else {
+          // Take the longest substantive body section
+          const longest = sections.filter(s => s.body.length > 80).sort((a,b) => b.body.length - a.body.length)[0];
+          if (longest) {
+            result.description = longest.body.replace(/\s{2,}/g, " ").trim().substring(0, 2000);
+          } else {
+            // Last resort: join all non-label lines excluding metadata at end
+            const bodyLines = allLines.filter(l => {
+              const t = l.trim();
+              return t.length > 20 && !sectionKeywords.test(t) && !/^(location|type|department|status)\s*:/i.test(t);
+            });
+            result.description = bodyLines.join(" ").replace(/\s{2,}/g, " ").trim().substring(0, 2000);
+          }
+        }
+        result.description = cleanJDField(result.description);
+
+        return result;
+      }
+
+            window.handleJdFile = async function (input) {
+        jdFile = input.files[0];
+        if (!jdFile) return;
+
+        gel("jd-file-label").textContent = jdFile.name;
+        gel("jd-preview").style.display = "none";
+
+        // Fields to fill and disable during parsing
+        const textFields = ["jf-title", "jf-dept", "jf-loc", "jf-desc"];
+        const saveBtn = gel("job-save-btn");
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Parsing JD…"; }
+        textFields.forEach((id) => {
+          const el = gel(id);
+          if (el && !el.value) { el.placeholder = "Extracting…"; el.disabled = true; }
+        });
+
+        try {
+          showProgress("jd-progress", 20);
+          const text = await extractTextFromFile(jdFile);
+          showProgress("jd-progress", 50);
+
+          if (text && text.trim().length > 20) {
+            showProgress("jd-progress", 70);
+            const parsed = await parseJDWithAI(text);
+            showProgress("jd-progress", 100);
+
+            let filledCount = 0;
+            if (parsed.title)       { gel("jf-title").value = parsed.title;       filledCount++; }
+            if (parsed.department)  { gel("jf-dept").value  = parsed.department;  filledCount++; }
+            if (parsed.location)    { gel("jf-loc").value   = parsed.location;    filledCount++; }
+            if (parsed.description) { gel("jf-desc").value  = parsed.description; filledCount++; }
+            if (parsed.type) {
+              const typeEl = gel("jf-type");
+              const match = Array.from(typeEl.options).find(o => o.value.toLowerCase() === parsed.type.toLowerCase());
+              if (match) { typeEl.value = match.value; filledCount++; }
+            }
+
+            if (filledCount > 0) {
+              showToast(`✅ JD parsed! ${filledCount} field${filledCount > 1 ? "s" : ""} auto-filled.`);
+            } else {
+              showToast("JD uploaded. Could not extract details — please fill in manually.", "error");
+            }
+          } else {
+            showToast("JD uploaded. No readable text found — please fill in manually.", "error");
+          }
+        } catch (e) {
+          console.warn("JD parsing failed:", e);
+          showToast("JD uploaded. Auto-fill failed — please fill in manually.", "error");
+        } finally {
+          hideProgress("jd-progress");
+          textFields.forEach((id) => {
+            const el = gel(id);
+            if (el) {
+              el.disabled = false;
+              if (el.placeholder === "Extracting…") {
+                const placeholders = { "jf-title": "Senior AI Engineer", "jf-dept": "Engineering", "jf-loc": "Remote / Bangalore", "jf-desc": "Role overview, responsibilities, requirements…" };
+                el.placeholder = placeholders[id] || "";
+              }
+            }
+          });
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save Job"; }
+        }
+      };
+
+      renderAll();
+      populateJobDropdowns();
+    </script>
+
+    <style>
+      :root {
+        --orange: #e8870a;
+        --orange-light: #f5a623;
+        --orange-dim: #3d2800;
+        --dark: #1a1a1a;
+        --darker: #111111;
+        --card: #212121;
+        --card2: #2a2a2a;
+        --border: #333;
+        --text: #e8e8e8;
+        --muted: #777;
+        --green: #22c55e;
+        --blue: #3b82f6;
+        --purple: #a855f7;
+        --red: #ef4444;
+        --yellow: #eab308;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "DM Sans", sans-serif;
+        background: var(--darker);
+        color: var(--text);
+        min-height: 100vh;
+        overflow-x: hidden;
+        display: flex;
+      }
+
+      /* ── LOGIN ──────────────────────────────────────────────── */
+      #login-screen {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        z-index: 999;
+        background: var(--darker);
+        overflow: hidden;
+      }
+      .login-bg {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .login-orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.18;
+      }
+      .login-orb-1 {
+        width: 500px;
+        height: 500px;
+        background: var(--orange);
+        top: -100px;
+        left: -100px;
+        animation: orbFloat 8s ease-in-out infinite;
+      }
+      .login-orb-2 {
+        width: 400px;
+        height: 400px;
+        background: #3b82f6;
+        bottom: -80px;
+        right: -80px;
+        animation: orbFloat 10s ease-in-out infinite reverse;
+      }
+      @keyframes orbFloat {
+        0%,
+        100% {
+          transform: translate(0, 0);
+        }
+        50% {
+          transform: translate(30px, 20px);
+        }
+      }
+      .login-card {
+        position: relative;
+        background: var(--dark);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 44px 40px 32px;
+        width: 100%;
+        max-width: 440px;
+        box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5);
+        animation: loginAppear 0.4s ease;
+      }
+      @keyframes loginAppear {
+        from {
+          opacity: 0;
+          transform: translateY(24px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .login-logo-wrap {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .login-logo-wrap img {
+        width: 170px;
+      }
+      .login-tagline {
+        font-family: "Syne", sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 6px;
+      }
+      .login-sub {
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 28px;
+      }
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .login-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .login-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .login-input-wrap {
+        position: relative;
+      }
+      .login-input-icon {
+        position: absolute;
+        left: 13px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        color: var(--muted);
+      }
+      .login-input {
+        width: 100%;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 11px 14px 11px 40px;
+        color: var(--text);
+        font-size: 14px;
+        font-family: "DM Sans", sans-serif;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      .login-input:focus {
+        border-color: var(--orange);
+      }
+      .login-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        padding: 13px;
+        border-radius: 11px;
+        background: var(--orange);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: "Syne", sans-serif;
+        margin-top: 4px;
+        letter-spacing: 0.02em;
+      }
+      .login-btn:hover {
+        background: var(--orange-light);
+        transform: translateY(-1px);
+        box-shadow: 0 8px 24px rgba(232, 135, 10, 0.3);
+      }
+      .login-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .login-forgot {
+        background: none;
+        border: none;
+        color: var(--muted);
+        font-size: 12px;
+        cursor: pointer;
+        font-family: "DM Sans", sans-serif;
+        text-align: center;
+        padding: 4px;
+        transition: color 0.15s;
+      }
+      .login-forgot:hover {
+        color: var(--orange);
+      }
+      .login-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* ── APP SHELL ───────────────────────────────────────────── */
+      #app-shell {
+        width: 100%;
+        display: flex;
+      }
+
+      /* SIDEBAR */
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 236px;
+        height: 100vh;
+        background: var(--dark);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        z-index: 100;
+      }
+      .logo-wrap {
+        padding: 18px 18px 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .logo-wrap img {
+        width: 120px;
+      }
+      .sync-badge {
+        font-size: 10px;
+        font-weight: 600;
+        margin-left: auto;
+        white-space: nowrap;
+      }
+      .nav {
+        flex: 1;
+        padding: 12px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        overflow-y: auto;
+      }
+      .nav-section {
+        font-size: 10px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        padding: 10px 10px 4px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 11px;
+        border-radius: 9px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        transition: all 0.18s;
+        border: none;
+        background: none;
+        width: 100%;
+        text-align: left;
+        font-family: "DM Sans", sans-serif;
+      }
+      .nav-item:hover {
+        background: var(--card);
+        color: var(--text);
+      }
+      .nav-item.active {
+        background: var(--orange-dim);
+        color: var(--orange-light);
+      }
+      .nav-item svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      .sidebar-footer {
+        padding: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .user-chip {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px;
+        border-radius: 9px;
+        background: var(--card);
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--orange);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 12px;
+        color: #fff;
+        font-family: "Syne", sans-serif;
+        flex-shrink: 0;
+      }
+      .user-name {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .user-role {
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      /* MAIN */
+      .main {
+        margin-left: 236px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .topbar {
+        height: 60px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 28px;
+        background: var(--dark);
+        position: sticky;
+        top: 0;
+        z-index: 50;
+      }
+      .topbar h1 {
+        font-family: "Syne", sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .content {
+        padding: 26px 28px;
+        flex: 1;
+      }
+
+      /* BUTTONS */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 16px;
+        border-radius: 9px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition: all 0.18s;
+        font-family: "DM Sans", sans-serif;
+      }
+      .btn-primary {
+        background: var(--orange);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--orange-light);
+      }
+      .btn-ghost {
+        background: var(--card);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-ghost:hover {
+        background: var(--card2);
+      }
+      .btn-sm {
+        padding: 5px 10px;
+        font-size: 11px;
+        border-radius: 7px;
+      }
+      .icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        border: 1px solid var(--border);
+        background: none;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        transition: all 0.18s;
+      }
+      .icon-btn:hover {
+        background: var(--card2);
+        color: var(--text);
+      }
+      .icon-btn svg {
+        width: 13px;
+        height: 13px;
+      }
+      .email-btn:hover {
+        color: var(--blue);
+        border-color: var(--blue);
+      }
+      .offer-btn:hover {
+        color: var(--green);
+        border-color: var(--green);
+      }
+      .del-btn:hover {
+        color: var(--red);
+        border-color: var(--red);
+      }
+
+      /* STATS */
+      .stats-row {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin-bottom: 26px;
+      }
+      .stat-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 16px;
+      }
+      .stat-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 10px;
+      }
+      .stat-icon svg {
+        width: 17px;
+        height: 17px;
+      }
+      .stat-label {
+        font-size: 10px;
+        color: var(--muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 5px;
+      }
+      .stat-value {
+        font-family: "Syne", sans-serif;
+        font-size: 26px;
+        font-weight: 700;
+      }
+
+      /* TABLE */
+      .table-wrap {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        overflow: hidden;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      thead th {
+        padding: 10px 15px;
+        text-align: left;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        border-bottom: 1px solid var(--border);
+        background: var(--darker);
+      }
+      tbody tr {
+        border-bottom: 1px solid var(--border);
+        transition: background 0.12s;
+      }
+      tbody tr:last-child {
+        border-bottom: none;
+      }
+      tbody tr:hover {
+        background: var(--card2);
+      }
+      td {
+        padding: 12px 15px;
+        font-size: 13px;
+        vertical-align: middle;
+      }
+      .cname {
+        font-weight: 600;
+      }
+      .csub,
+      .muted {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 1px;
+      }
+      .empty-cell {
+        text-align: center;
+        color: var(--muted);
+        padding: 40px !important;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      /* BADGES */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .badge::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .badge-applied {
+        background: #1a2a3d;
+        color: var(--blue);
+      }
+      .badge-screening {
+        background: #2d1a3d;
+        color: var(--purple);
+      }
+      .badge-interview {
+        background: #1a3a2d;
+        color: var(--green);
+      }
+      .badge-offer {
+        background: #3d2800;
+        color: var(--orange-light);
+      }
+      .badge-hired {
+        background: #1a2a1a;
+        color: #4ade80;
+      }
+      .badge-rejected {
+        background: #3d1a1a;
+        color: var(--red);
+      }
+
+      /* FILE CHIP */
+      .file-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        background: #3d2800;
+        color: var(--orange-light);
+        text-decoration: none;
+        transition: all 0.15s;
+      }
+      .file-chip:hover {
+        background: #5a3a00;
+      }
+
+      /* FILTERS */
+      .filters-bar {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .search-box {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 7px 12px;
+        flex: 1;
+        min-width: 180px;
+      }
+      .search-box input {
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-size: 13px;
+        font-family: "DM Sans", sans-serif;
+        width: 100%;
+      }
+      .search-box svg {
+        width: 14px;
+        height: 14px;
+        color: var(--muted);
+        flex-shrink: 0;
+      }
+      select.filter-select {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 7px 12px;
+        color: var(--text);
+        font-size: 13px;
+        font-family: "DM Sans", sans-serif;
+        outline: none;
+        cursor: pointer;
+      }
+      select.filter-select option {
+        background: var(--dark);
+      }
+
+      /* KANBAN */
+      .kanban {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 11px;
+        overflow-x: auto;
+        padding-bottom: 8px;
+      }
+      .kanban-col {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 12px;
+        min-width: 190px;
+      }
+      .kanban-col-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .kanban-col-title {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+      .kanban-count {
+        background: var(--card2);
+        border-radius: 20px;
+        padding: 2px 7px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+      .kanban-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        min-height: 50px;
+      }
+      .kanban-card {
+        background: var(--darker);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 11px;
+        cursor: pointer;
+        transition: all 0.18s;
+      }
+      .kanban-card:hover {
+        border-color: var(--orange);
+        transform: translateY(-1px);
+      }
+      .kanban-card-name {
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+      .kanban-card-role {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .kanban-card-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 7px;
+      }
+      .kanban-empty {
+        color: var(--muted);
+        font-size: 11px;
+        text-align: center;
+        padding: 12px;
+      }
+
+      /* JOBS */
+      .jobs-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 14px;
+      }
+      .job-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 18px;
+        transition: all 0.18s;
+      }
+      .job-card:hover {
+        border-color: var(--orange);
+      }
+      .job-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .job-title {
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .job-dept {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .job-meta {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+        align-items: center;
+      }
+      .job-tag {
+        background: var(--card2);
+        border-radius: 6px;
+        padding: 2px 7px;
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .job-desc {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 10px;
+        line-height: 1.5;
+      }
+      .quick-post-row {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .board-post-btn {
+        padding: 4px 9px;
+        border-radius: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        background: transparent;
+        border: 1px solid;
+        transition: all 0.15s;
+        font-family: "DM Sans", sans-serif;
+      }
+      .board-post-btn:hover {
+        opacity: 0.8;
+        transform: translateY(-1px);
+      }
+      .board-pill {
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 700;
+      }
+      .job-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-top: 1px solid var(--border);
+        padding-top: 10px;
+        margin-top: 4px;
+      }
+      .job-applicants {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .job-applicants span {
+        color: var(--orange-light);
+        font-weight: 700;
+      }
+
+      /* INTERVIEWS */
+      .interview-list {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .interview-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        padding: 15px;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        transition: all 0.18s;
+      }
+      .interview-card:hover {
+        border-color: var(--orange);
+      }
+      .interview-date-box {
+        background: var(--orange-dim);
+        border-radius: 9px;
+        padding: 9px 13px;
+        text-align: center;
+        flex-shrink: 0;
+      }
+      .interview-date-day {
+        font-family: "Syne", sans-serif;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--orange-light);
+        line-height: 1;
+      }
+      .interview-date-month {
+        font-size: 10px;
+        color: var(--orange);
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+      .interview-info {
+        flex: 1;
+      }
+      .interview-candidate {
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .interview-role {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .interview-time {
+        font-size: 12px;
+        color: var(--orange-light);
+        margin-top: 4px;
+        font-weight: 600;
+      }
+      .interview-note {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 3px;
+        font-style: italic;
+      }
+
+      /* RESUME SEARCH */
+      .search-hero {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 28px;
+        margin-bottom: 22px;
+        text-align: center;
+      }
+      .search-hero h2 {
+        font-family: "Syne", sans-serif;
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .search-hero p {
+        color: var(--muted);
+        font-size: 13px;
+        margin-bottom: 20px;
+      }
+      .search-big {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--darker);
+        border: 2px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 18px;
+        max-width: 700px;
+        margin: 0 auto;
+        transition: border-color 0.2s;
+      }
+      .search-big:focus-within {
+        border-color: var(--orange);
+      }
+      .search-big input {
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-size: 15px;
+        font-family: "DM Sans", sans-serif;
+        flex: 1;
+      }
+      .search-big svg {
+        width: 20px;
+        height: 20px;
+        color: var(--muted);
+        flex-shrink: 0;
+      }
+      .match-bar {
+        height: 5px;
+        background: var(--border);
+        border-radius: 3px;
+        overflow: hidden;
+        width: 80px;
+      }
+      .match-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--orange), var(--orange-light));
+        border-radius: 3px;
+        transition: width 0.3s;
+      }
+
+      /* EMAILS */
+      .email-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      .email-template-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 22px;
+        cursor: pointer;
+        transition: all 0.18s;
+      }
+      .email-template-card:hover {
+        border-color: var(--orange);
+        transform: translateY(-2px);
+      }
+      .email-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 14px;
+      }
+      .email-template-title {
+        font-family: "Syne", sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .email-template-desc {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      /* JOB BOARDS */
+      .boards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        gap: 14px;
+      }
+      .board-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        transition: all 0.18s;
+      }
+      .board-card:hover {
+        border-color: var(--orange);
+      }
+      .board-card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .board-logo-circle {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: 13px;
+        flex-shrink: 0;
+      }
+      .board-name {
+        font-family: "Syne", sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      /* SECTION */
+      .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .section-title {
+        font-family: "Syne", sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+
+      /* MODAL */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.78);
+        backdrop-filter: blur(6px);
+        z-index: 200;
+        display: none;
+        place-items: center;
+        padding: 20px;
+      }
+      .modal-overlay.open {
+        display: grid;
+      }
+      .modal {
+        background: var(--dark);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        width: 100%;
+        max-width: 600px;
+        max-height: 92vh;
+        overflow-y: auto;
+        animation: slideUp 0.22s ease;
+      }
+      .modal-lg {
+        max-width: 700px;
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(18px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .modal-header {
+        padding: 20px 24px 16px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        position: sticky;
+        top: 0;
+        background: var(--dark);
+        z-index: 1;
+      }
+      .modal-title {
+        font-family: "Syne", sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .modal-close {
+        width: 29px;
+        height: 29px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: none;
+        cursor: pointer;
+        color: var(--muted);
+        display: grid;
+        place-items: center;
+        transition: all 0.15s;
+      }
+      .modal-close:hover {
+        background: var(--card);
+        color: var(--text);
+      }
+      .modal-close svg {
+        width: 14px;
+        height: 14px;
+      }
+      .modal-body {
+        padding: 20px 24px;
+      }
+      .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: flex-end;
+        gap: 9px;
+        position: sticky;
+        bottom: 0;
+        background: var(--dark);
+      }
+
+      /* FORM */
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 13px;
+      }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .form-group.full {
+        grid-column: 1/-1;
+      }
+      label {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      input,
+      select,
+      textarea {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 9px 12px;
+        color: var(--text);
+        font-size: 13px;
+        font-family: "DM Sans", sans-serif;
+        outline: none;
+        width: 100%;
+        transition: border-color 0.18s;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        border-color: var(--orange);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 75px;
+      }
+      select option {
+        background: var(--dark);
+      }
+
+      /* FILE UPLOAD */
+      .file-upload-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .file-upload-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        background: var(--card2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+        font-family: "DM Sans", sans-serif;
+      }
+      .file-upload-btn:hover {
+        border-color: var(--orange);
+        color: var(--orange);
+      }
+      .file-upload-btn svg {
+        width: 14px;
+        height: 14px;
+      }
+      .file-name-label {
+        font-size: 12px;
+        color: var(--muted);
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      input[type="file"] {
+        display: none;
+      }
+
+      /* PROGRESS */
+      .prog-bar {
+        display: none;
+        height: 4px;
+        background: var(--border);
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 6px;
+      }
+      .prog-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--orange), var(--orange-light));
+        border-radius: 3px;
+        transition: width 0.3s;
+        width: 0%;
+      }
+
+      /* BOARD CHECKBOXES */
+      .board-checks {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .board-check-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: all 0.15s;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .board-check-item:hover {
+        border-color: var(--orange);
+      }
+      .board-check-item input {
+        accent-color: var(--orange);
+        width: 14px;
+        height: 14px;
+      }
+
+      /* BULK */
+      .bulk-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px;
+        border-radius: 7px;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--darker);
+        margin-bottom: 5px;
+      }
+      .bulk-row:hover {
+        border-color: var(--orange);
+      }
+
+      /* TOAST */
+      .toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 9px;
+        font-size: 13px;
+        font-weight: 600;
+        z-index: 999;
+        animation: fadeInUp 0.25s ease;
+        pointer-events: none;
+        max-width: 320px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
     </style>
   </head>
   <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+    <!-- ═══════════════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════════════════ -->
+    <div id="login-screen" style="display: none">
+      <div class="login-bg">
+        <div class="login-orb login-orb-1"></div>
+        <div class="login-orb login-orb-2"></div>
+      </div>
+      <div class="login-card">
+        <!-- Logo -->
+        <div class="login-logo-wrap">
+          <img
+            src="data:image/jpeg;base64,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"
+            alt="Zortech"
+            style="width: 180px"
+          />
+        </div>
+
+        <!-- Tagline -->
+        <div class="login-tagline">Applicant Tracking System</div>
+        <p class="login-sub">Sign in to your HR workspace</p>
+
+        <!-- Error box -->
+        <div
+          id="login-error"
+          style="
+            display: none;
+            padding: 10px 14px;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 16px;
+          "
+        ></div>
+
+        <!-- Form -->
+        <div class="login-form">
+          <div class="login-field">
+            <label class="login-label">Email Address</label>
+            <div class="login-input-wrap">
+              <svg
+                class="login-input-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
+              </svg>
+              <input
+                class="login-input"
+                id="login-email"
+                type="email"
+                placeholder="you@zortechs.in"
+                onkeydown="loginKeydown(event)"
+              />
+            </div>
+          </div>
+          <div class="login-field">
+            <label class="login-label">Password</label>
+            <div class="login-input-wrap">
+              <svg
+                class="login-input-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
+              </svg>
+              <input
+                class="login-input"
+                id="login-pass"
+                type="password"
+                placeholder="••••••••"
+                onkeydown="loginKeydown(event)"
+              />
+            </div>
+          </div>
+          <button class="login-btn" id="login-btn" onclick="doLogin()">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"
+              />
+            </svg>
+            Sign In
+          </button>
+          <button class="login-forgot" onclick="doForgotPassword()">
+            Forgot password?
+          </button>
+        </div>
+
+        <div class="login-footer">
+          <span>🔒 Secured by Firebase Authentication</span>
+          <span>Zortech Solutions · zortechs.in</span>
+        </div>
+      </div>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+    <!-- ═══════════════════════════════════════════════════════
+     APP SHELL (hidden until logged in)
+════════════════════════════════════════════════════════ -->
+    <div id="app-shell" style="display: none; width: 100%">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="logo-wrap">
+          <img
+            src="data:image/jpeg;base64,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"
+            alt="Zortech"
+          />
+          <span class="sync-badge" id="sync-badge" style="color: var(--muted)"
+            >○ Connecting</span
+          >
+        </div>
+        <nav class="nav">
+          <div class="nav-section">Main</div>
+          <button class="nav-item active" onclick="setView('dashboard', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+              />
+            </svg>
+            <span>Dashboard</span>
+          </button>
+          <button class="nav-item" onclick="setView('candidates', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+            <span>Candidates</span>
+          </button>
+          <button class="nav-item" onclick="setView('pipeline', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"
+              />
+            </svg>
+            <span>Pipeline</span>
+          </button>
+          <button class="nav-item" onclick="setView('interviews', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <span>Interviews</span>
+          </button>
+          <div class="nav-section">Jobs & Search</div>
+          <button class="nav-item" onclick="setView('jobs', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+            <span>Job Postings</span>
+          </button>
+          <button class="nav-item" onclick="setView('boards', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"
+              />
+            </svg>
+            <span>Job Boards</span>
+          </button>
+          <button class="nav-item" onclick="setView('search', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"
+              />
+            </svg>
+            <span>Resume Search</span>
+          </button>
+          <div class="nav-section">Communication</div>
+          <button class="nav-item" onclick="setView('emails', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+            <span>Email Campaigns</span>
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="user-chip">
+            <div class="avatar">ZT</div>
+            <div style="flex: 1; min-width: 0">
+              <div class="user-name" id="user-display-name">Zortech HR</div>
+              <div class="user-role" id="user-display-role"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="39514b7943564b4d5c5a514a175057">[email&#160;protected]</a></div>
+            </div>
+            <button
+              onclick="doLogout()"
+              title="Sign out"
+              style="
+                background: none;
+                border: none;
+                cursor: pointer;
+                color: var(--muted);
+                padding: 4px;
+                border-radius: 6px;
+                display: grid;
+                place-items: center;
+                transition: color 0.15s;
+              "
+              onmouseover="this.style.color = 'var(--red)'"
+              onmouseout="this.style.color = 'var(--muted)'"
+            >
+              <svg
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </aside>
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
-        }
-      });
-    </script>
-  </body>
-</html>
+      <!-- MAIN -->
+      <main class="main">
+        <div class="topbar">
+          <h1 id="topbar-title">Dashboard</h1>
+          <div class="topbar-actions">
+            <button
+              class="btn btn-ghost"
+              id="export-btn"
+              onclick="exportCSV()"
+              style="display: none"
+            >
+              <svg
+                width="13"
+                height="13"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                />
+              </svg>
+              Export CSV
+            </button>
+            <button class="btn btn-primary" onclick="openAddModal()">
+              <svg
+                width="13"
+                height="13"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span id="add-btn-label">Add Candidate</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="content">
+          <!-- DASHBOARD -->
+          <div class="view active" id="view-dashboard">
+            <div class="stats-row" id="stats-row"></div>
+            <div class="section-header">
+              <div class="section-title">Recent Candidates</div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Candidate</th>
+                    <th>Job</th>
+                    <th>Stage</th>
+                    <th>Resume</th>
+                    <th>Added</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- CANDIDATES -->
+          <div class="view" id="view-candidates">
+            <div class="filters-bar">
+              <div class="search-box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  id="cand-search"
+                  placeholder="Search name, skills, email…"
+                  oninput="renderCandidates()"
+                />
+              </div>
+              <select
+                class="filter-select"
+                id="cand-stage-filter"
+                onchange="renderCandidates()"
+              >
+                <option value="">All Stages</option>
+                <option>Applied</option>
+                <option>Screening</option>
+                <option>Interview</option>
+                <option>Offer</option>
+                <option>Hired</option>
+                <option>Rejected</option>
+              </select>
+              <select
+                class="filter-select"
+                id="cand-job-filter"
+                onchange="renderCandidates()"
+              >
+                <option value="">All Jobs</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name / Skills</th>
+                    <th>Job</th>
+                    <th>Stage</th>
+                    <th>Email</th>
+                    <th>Resume</th>
+                    <th>Added</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="cand-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PIPELINE -->
+          <div class="view" id="view-pipeline">
+            <div class="kanban" id="kanban-board"></div>
+          </div>
+
+          <!-- JOBS -->
+          <div class="view" id="view-jobs">
+            <div class="jobs-grid" id="jobs-grid"></div>
+          </div>
+
+          <!-- INTERVIEWS -->
+          <div class="view" id="view-interviews">
+            <div class="interview-list" id="interview-list"></div>
+          </div>
+
+          <!-- RESUME SEARCH -->
+          <div class="view" id="view-search">
+            <div class="search-hero">
+              <h2>🔍 Resume & Candidate Search</h2>
+              <p>
+                Search across candidate profiles, skills, notes, and full resume
+                text extracted from uploaded PDFs and Word docs.
+              </p>
+              <div class="search-big">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  id="resume-search-input"
+                  placeholder='Try "React developer", "5 years", "machine learning", "Delhi"…'
+                  oninput="runResumeSearch()"
+                />
+                <button
+                  class="btn btn-primary btn-sm"
+                  onclick="runResumeSearch()"
+                >
+                  Search
+                </button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Candidate</th>
+                    <th>Job</th>
+                    <th>Stage</th>
+                    <th>Resume</th>
+                    <th>Match Score</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="search-results-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- EMAILS -->
+          <div class="view" id="view-emails">
+            <div id="email-view-content"></div>
+          </div>
+
+          <!-- BOARDS -->
+          <div class="view" id="view-boards">
+            <div id="boards-content"></div>
+          </div>
+        </div>
+      </main>
+
+      <!-- CANDIDATE MODAL -->
+      <div class="modal-overlay" id="cand-modal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title" id="cand-modal-title">Add Candidate</div>
+            <button class="modal-close" onclick="closeModal('cand-modal')">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>First Name *</label
+                ><input id="cf-first" placeholder="John" />
+              </div>
+              <div class="form-group">
+                <label>Last Name</label><input id="cf-last" placeholder="Doe" />
+              </div>
+              <div class="form-group full">
+                <label>Email</label
+                ><input
+                  id="cf-email"
+                  type="email"
+                  placeholder="john@example.com"
+                />
+              </div>
+              <div class="form-group">
+                <label>Phone</label
+                ><input id="cf-phone" placeholder="+91 9876543210" />
+              </div>
+              <div class="form-group">
+                <label>Experience (yrs)</label
+                ><input id="cf-exp" type="number" placeholder="3" />
+              </div>
+              <div class="form-group full">
+                <label
+                  >Skills
+                  <span
+                    style="
+                      font-weight: 400;
+                      text-transform: none;
+                      font-size: 10px;
+                    "
+                    >(comma separated)</span
+                  ></label
+                ><input
+                  id="cf-skills"
+                  placeholder="React, Node.js, Python, AWS"
+                />
+              </div>
+              <div class="form-group">
+                <label>Job Applied</label
+                ><select id="cf-job">
+                  <option value="">Select Job</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Stage</label>
+                <select id="cf-stage">
+                  <option>Applied</option>
+                  <option>Screening</option>
+                  <option>Interview</option>
+                  <option>Offer</option>
+                  <option>Hired</option>
+                  <option>Rejected</option>
+                </select>
+              </div>
+              <div class="form-group full">
+                <label
+                  >Resume / CV
+                  <span
+                    style="
+                      font-weight: 400;
+                      text-transform: none;
+                      font-size: 10px;
+                    "
+                    >(PDF, Word, TXT — text extracted for search)</span
+                  ></label
+                >
+                <div class="file-upload-row">
+                  <label class="file-upload-btn" for="resume-file-input">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                      />
+                    </svg>
+                    Browse File
+                  </label>
+                  <input
+                    type="file"
+                    id="resume-file-input"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onchange="handleResumeFile(this)"
+                  />
+                  <span class="file-name-label" id="resume-file-label"
+                    >No file chosen</span
+                  >
+                  <a
+                    id="resume-preview"
+                    href="#"
+                    target="_blank"
+                    class="file-chip"
+                    style="display: none"
+                    >📄 View</a
+                  >
+                </div>
+                <div class="prog-bar" id="resume-progress">
+                  <div class="prog-fill"></div>
+                </div>
+              </div>
+              <div class="form-group full">
+                <label>Notes</label
+                ><textarea
+                  id="cf-notes"
+                  placeholder="Interview notes, observations, recommendations…"
+                ></textarea>
+              </div>
+              <div class="form-group">
+                <label>Interview Date</label><input id="cf-idate" type="date" />
+              </div>
+              <div class="form-group">
+                <label>Interview Time</label><input id="cf-itime" type="time" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('cand-modal')">
+              Cancel
+            </button>
+            <button
+              class="btn btn-primary"
+              id="cand-save-btn"
+              onclick="saveCandidate()"
+            >
+              Save Candidate
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- JOB MODAL -->
+      <div class="modal-overlay" id="job-modal">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title" id="job-modal-title">Add Job Posting</div>
+            <button class="modal-close" onclick="closeModal('job-modal')">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-grid">
+              <div class="form-group full">
+                <label>Job Title *</label
+                ><input id="jf-title" placeholder="Senior AI Engineer" />
+              </div>
+              <div class="form-group">
+                <label>Department</label
+                ><input id="jf-dept" placeholder="Engineering" />
+              </div>
+              <div class="form-group">
+                <label>Location</label
+                ><input id="jf-loc" placeholder="Remote / Bangalore" />
+              </div>
+              <div class="form-group">
+                <label>Type</label
+                ><select id="jf-type">
+                  <option>Full-time</option>
+                  <option>Part-time</option>
+                  <option>Contract</option>
+                  <option>Internship</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Status</label
+                ><select id="jf-status">
+                  <option>Open</option>
+                  <option>Paused</option>
+                  <option>Closed</option>
+                </select>
+              </div>
+              <div class="form-group full">
+                <label>Job Description</label
+                ><textarea
+                  id="jf-desc"
+                  placeholder="Role overview, responsibilities, requirements…"
+                ></textarea>
+              </div>
+              <div class="form-group full">
+                <label
+                  >Job Description File
+                  <span
+                    style="
+                      font-weight: 400;
+                      text-transform: none;
+                      font-size: 10px;
+                    "
+                    >(PDF, Word, TXT)</span
+                  ></label
+                >
+                <div class="file-upload-row">
+                  <label class="file-upload-btn" for="jd-file-input">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                      />
+                    </svg>
+                    Browse File
+                  </label>
+                  <input
+                    type="file"
+                    id="jd-file-input"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onchange="handleJdFile(this)"
+                  />
+                  <span class="file-name-label" id="jd-file-label"
+                    >No file chosen</span
+                  >
+                  <a
+                    id="jd-preview"
+                    href="#"
+                    target="_blank"
+                    class="file-chip"
+                    style="display: none"
+                    >📄 View</a
+                  >
+                </div>
+                <div class="prog-bar" id="jd-progress">
+                  <div class="prog-fill"></div>
+                </div>
+              </div>
+              <div class="form-group full">
+                <label
+                  >Post to Job Boards
+                  <span
+                    style="
+                      font-weight: 400;
+                      text-transform: none;
+                      font-size: 10px;
+                    "
+                    >(select to enable quick-post buttons)</span
+                  ></label
+                >
+                <div class="board-checks">
+                  <label class="board-check-item"
+                    ><input type="checkbox" id="board-naukri" /><span
+                      style="color: #ff7555"
+                      >N</span
+                    >
+                    Naukri.com</label
+                  >
+                  <label class="board-check-item"
+                    ><input type="checkbox" id="board-monster" /><span
+                      style="color: #6d2077"
+                      >M</span
+                    >
+                    Monster</label
+                  >
+                  <label class="board-check-item"
+                    ><input type="checkbox" id="board-linkedin" /><span
+                      style="color: #0a66c2"
+                      >in</span
+                    >
+                    LinkedIn</label
+                  >
+                  <label class="board-check-item"
+                    ><input type="checkbox" id="board-indeed" /><span
+                      style="color: #003a9b"
+                      >In</span
+                    >
+                    Indeed</label
+                  >
+                  <label class="board-check-item"
+                    ><input type="checkbox" id="board-internshala" /><span
+                      style="color: #16a4e8"
+                      >IS</span
+                    >
+                    Internshala</label
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('job-modal')">
+              Cancel
+            </button>
+            <button
+              class="btn btn-primary"
+              id="job-save-btn"
+              onclick="saveJob()"
+            >
+              Save Job
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BULK EMAIL MODAL -->
+      <div class="modal-overlay" id="bulk-modal">
+        <div class="modal modal-lg">
+          <div class="modal-header">
+            <div class="modal-title">📬 Bulk Outreach Campaign</div>
+            <button class="modal-close" onclick="closeModal('bulk-modal')">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-grid">
+              <div class="form-group full">
+                <label>Subject Line</label
+                ><input
+                  id="bulk-subject"
+                  placeholder="Exciting Opportunity at Zortech Solutions!"
+                />
+              </div>
+              <div class="form-group full">
+                <label
+                  >Message
+                  <span
+                    style="
+                      font-weight: 400;
+                      text-transform: none;
+                      color: var(--orange);
+                    "
+                    >Use {name}, {fullname}, {role} to personalize</span
+                  ></label
+                >
+                <textarea
+                  id="bulk-message"
+                  style="min-height: 110px"
+                  placeholder="Dear {name},&#10;&#10;We noticed your profile and believe you'd be a great fit for the {role} position…"
+                ></textarea>
+              </div>
+              <div class="form-group full">
+                <label
+                  >Recipients —
+                  <span id="bulk-count" style="color: var(--orange-light)"
+                    >0</span
+                  >
+                  selected</label
+                >
+                <div
+                  id="bulk-candidate-list"
+                  style="max-height: 200px; overflow-y: auto; margin-top: 6px"
+                ></div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('bulk-modal')">
+              Cancel
+            </button>
+            <button
+              class="btn btn-primary"
+              id="bulk-send-btn"
+              onclick="sendBulkOutreach()"
+            >
+              <svg
+                width="13"
+                height="13"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+              Send Campaign
+            </b
