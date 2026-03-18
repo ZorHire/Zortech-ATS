@@ -2885,6 +2885,84 @@ ${text.substring(0, 4000)}`
         font-weight: 700;
       }
 
+      /* TOOLS SECTION */
+      .tools-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+        margin-bottom: 8px;
+      }
+      .tool-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        transition: all 0.18s;
+      }
+      .tool-card:hover {
+        border-color: var(--orange);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 28px rgba(232,135,10,0.12);
+      }
+      .tool-card-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        flex-shrink: 0;
+      }
+      .tool-card-title {
+        font-family: "Syne", sans-serif;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 4px;
+      }
+      .tool-card-desc {
+        font-size: 12.5px;
+        color: var(--muted);
+        line-height: 1.65;
+        flex: 1;
+      }
+      .tool-card-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: .05em;
+        text-transform: uppercase;
+        padding: 3px 9px;
+        border-radius: 20px;
+        width: fit-content;
+      }
+      .tool-launch-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 18px;
+        border-radius: 9px;
+        border: none;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s;
+        text-decoration: none;
+        width: 100%;
+        justify-content: center;
+      }
+      .tool-launch-btn:hover {
+        filter: brightness(1.12);
+        transform: translateY(-1px);
+      }
+
+      /* SECTION */
       /* SECTION */
       .section-header {
         display: flex;
@@ -3505,6 +3583,55 @@ ${text.substring(0, 4000)}`
                 </thead>
                 <tbody id="recent-tbody"></tbody>
               </table>
+            </div>
+
+            <!-- TOOLS SECTION -->
+            <div class="section-header" style="margin-top:32px">
+              <div class="section-title">🛠️ Zortech Tools</div>
+              <span style="font-size:12px;color:var(--muted)">Integrated hiring utilities</span>
+            </div>
+            <div class="tools-grid">
+
+              <!-- HireCalc -->
+              <div class="tool-card">
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                  <div class="tool-card-icon" style="background:#3D2800;">
+                    🧮
+                  </div>
+                  <div style="flex:1">
+                    <div class="tool-card-title">HireCalc</div>
+                    <span class="tool-card-tag" style="background:#3D2800;color:var(--orange-light);">Finance</span>
+                  </div>
+                </div>
+                <div class="tool-card-desc">
+                  Calculate the true cost of hiring — including salary, recruiter fees, onboarding, benefits, and overhead. Get instant breakdowns per hire and plan your budget with confidence.
+                </div>
+                <button class="tool-launch-btn" style="background:var(--orange);color:#fff;" onclick="window.open('HireCalc.html','_blank')">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  Open HireCalc
+                </button>
+              </div>
+
+              <!-- Vendor Portal -->
+              <div class="tool-card">
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                  <div class="tool-card-icon" style="background:#1A2A3D;">
+                    🏢
+                  </div>
+                  <div style="flex:1">
+                    <div class="tool-card-title">Vendor Portal</div>
+                    <span class="tool-card-tag" style="background:#1A2A3D;color:var(--blue);">Partners</span>
+                  </div>
+                </div>
+                <div class="tool-card-desc">
+                  Manage staffing vendors, agency partnerships, and third-party recruiters. Track submissions, agreements, and vendor performance in one place.
+                </div>
+                <button class="tool-launch-btn" style="background:var(--blue);color:#fff;" onclick="window.open('vendor-portal.html','_blank')">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                  Open Vendor Portal
+                </button>
+              </div>
+
             </div>
           </div>
 
