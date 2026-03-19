@@ -97,7 +97,8 @@
 
       // Apply RBAC visibility to nav items and tool cards
       function applyRBAC() {
-        // Nav items — show/hide based on permissions
+        // Nav items — hide non-tool items user can't access; 
+        // for tool items keep visible but mark locked
         const navMap = {
           'nav-dashboard':   'dashboard',
           'nav-candidates':  'candidates',
@@ -107,16 +108,37 @@
           'nav-boards':      'boards',
           'nav-search':      'search',
           'nav-emails':      'emails',
-          'nav-hirecalc':    'hirecalc',
-          'nav-vendor':      'vendor',
-          'nav-performance': 'performance',
         };
         Object.entries(navMap).forEach(([id, view]) => {
           const el = gel(id);
           if (el) el.style.display = canAccess(view) ? '' : 'none';
         });
 
-        // Tool cards on dashboard
+        // Tool nav items — always visible, but locked if no permission
+        const toolNavMap = {
+          'nav-hirecalc':    'hirecalc',
+          'nav-vendor':      'vendor',
+          'nav-performance': 'performance',
+        };
+        const lockedMsgs = {
+          hirecalc:    '🚫 You are not authorized to access HireCalc. Contact your admin.',
+          vendor:      '🚫 You are not authorized to access the Vendor Portal. Contact your admin.',
+          performance: '🚫 You are not authorized to access Performance Summary. Contact your admin.',
+        };
+        Object.entries(toolNavMap).forEach(([id, view]) => {
+          const el = gel(id);
+          if (!el) return;
+          el.style.display = ''; // always show
+          if (canAccess(view)) {
+            el.classList.remove('nav-tool-locked');
+            el.removeAttribute('data-locked-msg');
+          } else {
+            el.classList.add('nav-tool-locked');
+            el.setAttribute('data-locked-msg', lockedMsgs[view]);
+          }
+        });
+
+        // Tool cards on dashboard — show always, locked state if no access
         const tcMap = {
           'tool-card-hirecalc':    'hirecalc',
           'tool-card-vendor':      'vendor',
@@ -124,13 +146,21 @@
         };
         Object.entries(tcMap).forEach(([id, view]) => {
           const el = gel(id);
-          if (el) el.style.display = canAccess(view) ? '' : 'none';
+          if (!el) return;
+          el.style.display = ''; // always visible
+          const btn = el.querySelector('.tool-launch-btn');
+          if (canAccess(view)) {
+            el.classList.remove('tool-card-locked');
+            if (btn) { btn.removeAttribute('data-locked'); btn.style.opacity = ''; btn.style.cursor = ''; }
+          } else {
+            el.classList.add('tool-card-locked');
+            if (btn) { btn.setAttribute('data-locked', lockedMsgs[view]); btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed'; }
+          }
         });
 
-        // Nav section labels — hide "Tools" label if all tools hidden
-        const toolsVisible = canAccess('hirecalc') || canAccess('vendor') || canAccess('performance');
+        // Tools section label — always visible (tools are always shown)
         const toolsLabel = gel('nav-section-tools');
-        if (toolsLabel) toolsLabel.style.display = toolsVisible ? '' : 'none';
+        if (toolsLabel) toolsLabel.style.display = '';
 
         // Role badge in sidebar
         const badge = gel('user-role-badge');
@@ -4520,6 +4550,129 @@ ${text.substring(0, 4000)}`
 
 
 
+
+      /* ── LOCKED TOOL NAV ITEMS ───────────────────────────────── */
+      .nav-item.nav-tool-locked {
+        opacity: 0.55;
+        cursor: not-allowed;
+        position: relative;
+      }
+      .nav-item.nav-tool-locked:hover {
+        background: rgba(239,68,68,0.08) !important;
+        color: var(--red) !important;
+      }
+      .nav-item.nav-tool-locked svg {
+        color: var(--red);
+        opacity: 0.7;
+      }
+      /* Tooltip bubble */
+      .nav-item.nav-tool-locked::after {
+        content: attr(data-locked-msg);
+        position: absolute;
+        left: calc(100% + 10px);
+        top: 50%;
+        transform: translateY(-50%);
+        background: #1a1a1a;
+        color: var(--text);
+        border: 1px solid var(--red);
+        border-radius: 8px;
+        padding: 7px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.18s;
+        z-index: 999;
+        max-width: 220px;
+        white-space: normal;
+        line-height: 1.5;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      }
+      .nav-item.nav-tool-locked:hover::after {
+        opacity: 1;
+      }
+      /* Arrow pointing left toward the button */
+      .nav-item.nav-tool-locked::before {
+        content: '';
+        position: absolute;
+        left: calc(100% + 4px);
+        top: 50%;
+        transform: translateY(-50%);
+        border: 6px solid transparent;
+        border-right-color: var(--red);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.18s;
+        z-index: 999;
+      }
+      .nav-item.nav-tool-locked:hover::before {
+        opacity: 1;
+      }
+
+
+      /* ── LOCKED TOOL CARDS ───────────────────────────────────── */
+      .tool-card-locked {
+        position: relative;
+      }
+      .tool-card-locked .tool-launch-btn {
+        background: var(--card2) !important;
+        color: var(--muted) !important;
+        cursor: not-allowed !important;
+        opacity: 0.55 !important;
+      }
+      .tool-card-locked .tool-launch-btn:hover {
+        filter: none !important;
+        transform: none !important;
+      }
+      /* Tooltip on the locked launch button */
+      .tool-launch-btn[data-locked] {
+        position: relative;
+      }
+      .tool-launch-btn[data-locked]::after {
+        content: attr(data-locked);
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a1a1a;
+        color: var(--text);
+        border: 1px solid var(--red);
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.5;
+        white-space: normal;
+        max-width: 260px;
+        text-align: center;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.18s;
+        z-index: 100;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      }
+      .tool-launch-btn[data-locked]:hover::after {
+        opacity: 1;
+      }
+      /* Small red arrow below tooltip */
+      .tool-launch-btn[data-locked]::before {
+        content: '';
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 50%;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: var(--red);
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.18s;
+        z-index: 100;
+      }
+      .tool-launch-btn[data-locked]:hover::before {
+        opacity: 1;
+      }
+
     </style>
   </head>
   <body>
@@ -4734,25 +4887,6 @@ ${text.substring(0, 4000)}`
             </svg>
             <span>Resume Search</span>
           </button>
-          <div class="nav-section" id="nav-section-tools">Tools</div>
-          <button class="nav-item" id="nav-hirecalc" onclick="setView('hirecalc', this)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-            </svg>
-            <span>HireCalc</span>
-          </button>
-          <button class="nav-item" id="nav-vendor" onclick="setView('vendor', this)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-            </svg>
-            <span>Vendor Portal</span>
-          </button>
-          <button class="nav-item" id="nav-performance" onclick="setView('performance', this)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
-            <span>Performance</span>
-          </button>
           <div class="nav-section">Communication</div>
           <button class="nav-item" id="nav-emails" onclick="setView('emails', this)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4764,6 +4898,25 @@ ${text.substring(0, 4000)}`
               />
             </svg>
             <span>Email Campaigns</span>
+          </button>
+          <div class="nav-section" id="nav-section-tools">Tools</div>
+          <button class="nav-item nav-tool-btn" id="nav-hirecalc" onclick="handleToolNav('hirecalc', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            <span>HireCalc</span>
+          </button>
+          <button class="nav-item nav-tool-btn" id="nav-vendor" onclick="handleToolNav('vendor', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+            </svg>
+            <span>Vendor Portal</span>
+          </button>
+          <button class="nav-item nav-tool-btn" id="nav-performance" onclick="handleToolNav('performance', this)">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            <span>Performance</span>
           </button>
         </nav>
         <div class="sidebar-footer">
@@ -6744,6 +6897,14 @@ ${text.substring(0, 4000)}`
         var dashBtn = document.getElementById('nav-dashboard');
         setView('dashboard', dashBtn);
       };
+      window.handleToolNav = function(view, btn) {
+        if (!canAccess(view)) {
+          // Already shown via CSS tooltip — do nothing on click
+          return;
+        }
+        setView(view, btn);
+      };
+
 
       /* ═══ ADMIN FUNCTIONS ═══ */
       window.openAdminPanel = function() {
