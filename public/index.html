@@ -9,11 +9,14 @@
       rel="stylesheet"
     />
     <!-- Chart.js for Performance Summary -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <!-- Chart.js deferred — only needed in Performance view -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
     <!-- PDF.js for text extraction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- PDF.js deferred — only needed when a PDF file is uploaded -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <!-- Mammoth for DOCX extraction -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <!-- mammoth.js deferred — only needed when a .docx file is uploaded -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -24,6 +27,8 @@
         updateDoc,
         deleteDoc,
         doc,
+        getDoc,
+        setDoc,
         onSnapshot,
         query,
         orderBy,
@@ -53,7 +58,17 @@
         messagingSenderId: "797010724174",
         appId: "1:797010724174:web:724700e165d98c9abd4a1f",
       };
-      const RESEND_KEY = "re_VKDarZqY_LM77pZPjWZLSFDoY6sDAnSWs";
+      // ── UI TIMING CONSTANTS ──────────────────────────────────
+      const TOAST_DURATION    = 3000;  // ms — toast auto-dismiss
+      const SAVE_SUCCESS_FLASH = 800;  // ms — "Saved ✓" button flash before modal close
+      const EMAIL_SEND_DELAY   = 250;  // ms — throttle between bulk emails
+
+      // ── EMAIL CONFIG ─────────────────────────────────────────
+      // SECURITY: RESEND_KEY must NOT be committed to source control.
+      // Set it via Firebase Hosting custom header or a meta tag at build time:
+      //   <meta name="resend-key" content="re_YOUR_KEY_HERE">
+      // For now it is read from that meta tag; fallback to empty string (emails disabled).
+      const RESEND_KEY = document.querySelector('meta[name="resend-key"]')?.content || "";
       const SENDER_EMAIL = "hr@zortechs.in";
       const SENDER_NAME = "Zortech Solutions HR";
 
@@ -291,9 +306,18 @@
       };
 
       window.doLogout = async function () {
-        await signOut(auth);
-        showToast("Signed out successfully");
-      };
+        try {
+          // Unsubscribe Firestore listeners before signing out
+          // (onAuthStateChanged else branch also does this, but belt-and-suspenders)
+          if (typeof unsubCandidates === 'function') unsubCandidates();
+          if (typeof unsubJobs === 'function') unsubJobs();
+          await signOut(auth);
+          showToast("Signed out successfully");
+        } catch (e) {
+          console.error("Logout error:", e);
+          showToast("Sign out failed: " + e.message, "error");
+        }
+      };;
 
       window.doForgotPassword = async function () {
         const email = v("login-email");
@@ -337,12 +361,12 @@
         if (roleEl) roleEl.textContent = user.email;
         // Load role from Firestore users/{uid} document
         try {
-          const { getDoc, doc: fsDoc } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
           // Try UID first, then email-sanitized key
-          let snap = await getDoc(fsDoc(db, "users", user.uid));
+          // getDoc + doc already imported at top-level
+          let snap = await getDoc(doc(db, "users", user.uid));
           if (!snap.exists()) {
             const emailKey = user.email.replace(/[^a-zA-Z0-9]/g, '_');
-            snap = await getDoc(fsDoc(db, "users", emailKey));
+            snap = await getDoc(doc(db, "users", emailKey));
           }
           userRole = snap.exists() ? (snap.data().role || "recruiter_dashboard") : "recruiter_dashboard";
         } catch(e) {
@@ -980,6 +1004,11 @@ ${text.substring(0, 4000)}`
 
 
       async function sendEmail(to, toName, subject, html) {
+        // Guard: if key not configured, fail gracefully instead of making a bad API call
+        if (!RESEND_KEY) {
+          showToast("Email not configured — add resend-key meta tag", "error");
+          return false;
+        }
         try {
           const r = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -1004,6 +1033,7 @@ ${text.substring(0, 4000)}`
       }
 
       window.sendInterviewInvite = async function (id) {
+        try {
         const c = candidates.find((x) => x.id === id);
         const j = jobs.find((x) => x.id === c?.jobId);
         if (!c?.email) {
@@ -1035,9 +1065,11 @@ ${text.substring(0, 4000)}`
           html,
         );
         if (ok) showToast(`Interview invite sent to ${c.email} ✉️`);
+        } catch (e) { showToast("Error sending invite: " + e.message, "error"); }
       };
 
       window.sendOfferLetter = async function (id) {
+        try {
         const c = candidates.find((x) => x.id === id);
         const j = jobs.find((x) => x.id === c?.jobId);
         if (!c?.email) {
@@ -1061,6 +1093,7 @@ ${text.substring(0, 4000)}`
           html,
         );
         if (ok) showToast(`Offer letter sent to ${c.email} ✉️`);
+        } catch (e) { showToast("Error sending offer: " + e.message, "error"); }
       };
 
       window.openBulkModal = function () {
@@ -1085,8 +1118,8 @@ ${text.substring(0, 4000)}`
               const j = jobs.find((x) => x.id === c.jobId);
               return `<label class="bulk-row">
       <input type="checkbox" ${bulkSelected.has(c.id) ? "checked" : ""} onchange="toggleBulkSelect('${c.id}')" style="accent-color:var(--orange);width:15px;height:15px"/>
-      <div><div style="font-size:13px;font-weight:600">${c.firstName} ${c.lastName}</div>
-           <div style="font-size:11px;color:var(--muted)">${c.email} · ${j?.title || "No job"}</div></div>
+      <div><div style="font-size:13px;font-weight:600">${esc(c.firstName)} ${esc(c.lastName)}</div>
+           <div style="font-size:11px;color:var(--muted)">${esc(c.email)} · ${esc(j?.title || "No job")}</div></div>
     </label>`;
             })
             .join("") || '<p class="csub">No candidates with emails.</p>';
@@ -1094,6 +1127,7 @@ ${text.substring(0, 4000)}`
         if (cnt) cnt.textContent = bulkSelected.size;
       }
       window.sendBulkOutreach = async function () {
+        try {
         const subject = v("bulk-subject"),
           message = v("bulk-message");
         if (!subject || !message) {
@@ -1131,7 +1165,7 @@ ${text.substring(0, 4000)}`
             ? sent++
             : failed++;
           btn.textContent = `Sending ${sent + failed}/${sel.length}…`;
-          await new Promise((r) => setTimeout(r, 250));
+          await new Promise((r) => setTimeout(r, EMAIL_SEND_DELAY));
         }
         btn.disabled = false;
         btn.textContent = "Send Campaign";
@@ -1139,6 +1173,10 @@ ${text.substring(0, 4000)}`
         showToast(
           `Campaign done! ✅ ${sent} sent${failed ? ", " + failed + " failed" : ""}`,
         );
+      } catch (e) {
+          if (btn) { btn.disabled = false; btn.textContent = "Send Campaign"; }
+          showToast("Campaign error: " + e.message, "error");
+        }
       };
 
       // ── CSV EXPORT ────────────────────────────────────────────
@@ -1571,8 +1609,8 @@ ${text.substring(0, 4000)}`
             .map((c) => {
               const j = jobs.find((x) => x.id === c.jobId);
               return `<tr>
-      <td><div class="cname">${c.firstName} ${c.lastName}</div><div class="csub">${c.email || ""}</div></td>
-      <td>${j?.title || "—"}</td>
+      <td><div class="cname">${esc(c.firstName)} ${esc(c.lastName)}</div><div class="csub">${esc(c.email || "")}</div></td>
+      <td>${esc(j?.title || "—")}</td>
       <td>${stageBadge(c.stage)}</td>
       <td>${c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank" class="file-chip">📄 Resume</a>` : '<span class="csub">—</span>'}</td>
       <td class="muted">${fmtDate(c.createdAt)}</td>
@@ -1606,8 +1644,8 @@ ${text.substring(0, 4000)}`
               .map((c) => {
                 const j = jobs.find((x) => x.id === c.jobId);
                 return `<tr>
-      <td><div class="cname">${c.firstName} ${c.lastName}</div><div class="csub">${c.skills || ""}</div></td>
-      <td>${j?.title || "—"}</td>
+      <td><div class="cname">${esc(c.firstName)} ${esc(c.lastName)}</div><div class="csub">${esc(c.skills || "")}</div></td>
+      <td>${esc(j?.title || "—")}</td>
       <td>${stageBadge(c.stage)}</td>
       <td class="muted">${c.email || "—"}</td>
       <td>${c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank" class="file-chip">📄 ${c.resumeName || "Resume"}</a>` : '<span class="csub">—</span>'}</td>
@@ -1648,7 +1686,7 @@ ${text.substring(0, 4000)}`
               const j = jobs.find((x) => x.id === c.jobId);
               return `<div class="kanban-card" onclick="openCandModal('${c.id}')">
             <div class="kanban-card-name">${c.firstName} ${c.lastName}</div>
-            <div class="kanban-card-role">${j?.title || "No job"}</div>
+            <div class="kanban-card-role">${esc(j?.title || "No job")}</div>
             ${c.resumeUrl ? `<div style="margin-top:6px"><span class="file-chip" style="font-size:10px">📄 Resume</span></div>` : ""}
             <div class="kanban-card-meta"><span class="csub">${fmtDate(c.createdAt)}</span></div>
           </div>`;
@@ -1729,7 +1767,7 @@ ${text.substring(0, 4000)}`
       <div class="interview-date-box"><div class="interview-date-day">${d.getDate()}</div><div class="interview-date-month">${d.toLocaleString("default", { month: "short" })}</div></div>
       <div class="interview-info">
         <div class="interview-candidate">${c.firstName} ${c.lastName}</div>
-        <div class="interview-role">${j?.title || "No job"}</div>
+        <div class="interview-role">${esc(j?.title || "No job")}</div>
         ${c.interviewTime ? `<div class="interview-time">⏰ ${c.interviewTime}</div>` : ""}
         ${c.notes ? `<div class="interview-note">"${c.notes.slice(0, 80)}${c.notes.length > 80 ? "..." : ""}"</div>` : ""}
       </div>
@@ -1920,6 +1958,15 @@ ${text.substring(0, 4000)}`
         const el = gel(id);
         if (el && val != null) el.value = val;
       }
+      // XSS-safe HTML escape — use esc() on any user data interpolated into innerHTML
+      function esc(s) {
+        return String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
       function updateSyncBadge(ok) {
         const b = gel("sync-badge");
         if (b) {
@@ -1945,7 +1992,7 @@ ${text.substring(0, 4000)}`
         t.style.background = type === "error" ? "var(--red)" : "var(--green)";
         t.textContent = msg;
         document.body.appendChild(t);
-        setTimeout(() => t.remove(), 3000);
+        setTimeout(() => t.remove(), TOAST_DURATION);
       };
 
       // File input handlers (exposed to HTML)
@@ -2301,6 +2348,12 @@ ${text.substring(0, 4000)}`
         --purple: #a855f7;
         --red: #ef4444;
         --yellow: #eab308;
+        /* ── Z-INDEX SCALE ── */
+        --z-content:  50;
+        --z-overlay:  190;
+        --z-sidebar:  200;
+        --z-modal:    500;
+        --z-toast:    9999;
       }
       * {
         margin: 0;
@@ -2322,7 +2375,7 @@ ${text.substring(0, 4000)}`
         inset: 0;
         display: grid;
         place-items: center;
-        z-index: 999;
+        z-index: var(--z-sidebar);
         background: var(--darker);
         overflow: hidden;
       }
@@ -2518,7 +2571,7 @@ ${text.substring(0, 4000)}`
         border-right: 1px solid var(--border);
         display: flex;
         flex-direction: column;
-        z-index: 100;
+        z-index: var(--z-sidebar);
         /* Prevent content bleed-through */
         isolation: isolate;
       }
@@ -2635,7 +2688,7 @@ ${text.substring(0, 4000)}`
         background: var(--dark);
         position: sticky;
         top: 0;
-        z-index: 50;
+        z-index: var(--z-content);
       }
       .topbar h1 {
         font-family: "Syne", sans-serif;
@@ -3327,7 +3380,7 @@ ${text.substring(0, 4000)}`
         inset: 0;
         background: rgba(0, 0, 0, 0.78);
         backdrop-filter: blur(6px);
-        z-index: 200;
+        z-index: var(--z-sidebar);
         display: none;
         place-items: center;
         padding: 20px;
@@ -3569,7 +3622,7 @@ ${text.substring(0, 4000)}`
         border-radius: 9px;
         font-size: 13px;
         font-weight: 600;
-        z-index: 999;
+        z-index: var(--z-sidebar);
         animation: fadeInUp 0.25s ease;
         pointer-events: none;
         max-width: 320px;
@@ -3910,7 +3963,7 @@ ${text.substring(0, 4000)}`
     border-bottom: 1px solid var(--border);
     position: sticky;
     top: 0;
-    z-index: 100;
+    z-index: var(--z-sidebar);
   }
 
   
@@ -4182,7 +4235,7 @@ ${text.substring(0, 4000)}`
     position: fixed; inset: 0;
     background: rgba(0,0,0,.65);
     backdrop-filter: blur(3px);
-    z-index: 200;
+    z-index: var(--z-sidebar);
     align-items: center;
     justify-content: center;
   }
@@ -4785,7 +4838,7 @@ ${text.substring(0, 4000)}`
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.18s;
-        z-index: 999;
+        z-index: var(--z-sidebar);
         max-width: 220px;
         white-space: normal;
         line-height: 1.5;
@@ -4806,7 +4859,7 @@ ${text.substring(0, 4000)}`
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.18s;
-        z-index: 999;
+        z-index: var(--z-sidebar);
       }
       .nav-item.nav-tool-locked:hover::before {
         opacity: 1;
@@ -4854,7 +4907,7 @@ ${text.substring(0, 4000)}`
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.82);
-        z-index: 190;
+        z-index: var(--z-overlay);
         pointer-events: none;
         opacity: 0;
         transition: opacity 0.25s ease;
@@ -4879,7 +4932,7 @@ ${text.substring(0, 4000)}`
           transform: translateX(-100%);
           transition: transform 0.28s cubic-bezier(.4,0,.2,1);
           will-change: transform;
-          z-index: 999 !important;
+          z-index: var(--z-sidebar) !important;
           width: 270px;
           background: var(--dark) !important;
           box-shadow: 6px 0 32px rgba(0,0,0,0.8);
@@ -5240,7 +5293,7 @@ ${text.substring(0, 4000)}`
       #view-vendor-ext .vp-jd-body { padding: 14px 18px; }
 
       /* ── Overlays (modals from new file) ── */
-      #view-vendor-ext .ov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 500; align-items: center; justify-content: center; }
+      #view-vendor-ext .ov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: var(--z-modal); align-items: center; justify-content: center; }
       #view-vendor-ext .ov.on { display: flex; }
       #view-vendor-ext .modal { background: var(--card); border: 1px solid var(--border); border-radius: var(--r2); width: 540px; max-width: 95vw; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
       #view-vendor-ext .mh { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); }
@@ -5252,7 +5305,7 @@ ${text.substring(0, 4000)}`
       #view-vendor-ext .mf { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
 
       /* ── Toast (ztx-specific) ── */
-      #ztx-toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; background: var(--green); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; transform: translateY(20px); opacity: 0; transition: all .25s; pointer-events: none; }
+      #ztx-toast { position: fixed; bottom: 24px; right: 24px; z-index: var(--z-toast); background: var(--green); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; transform: translateY(20px); opacity: 0; transition: all .25s; pointer-events: none; }
       #ztx-toast.show { transform: translateY(0); opacity: 1; }
       #ztx-toast.to { background: var(--orange); }
       #ztx-toast.tr { background: var(--red); }
@@ -7950,10 +8003,10 @@ ${text.substring(0, 4000)}`
         res.textContent = 'Looking up user…';
         try {
           // Query Firestore for the user by email field, or create/update by email as doc ID
-          const { setDoc, doc: fsDoc, collection: fsCol, query: fsQuery, where, getDocs } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+          // setDoc + doc imported at top-level in module, available on window via module scope
           // Use email as the document ID (safe approach without Admin SDK)
           const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
-          await setDoc(fsDoc(db, 'users', safeId), { email, role, updatedAt: new Date().toISOString() }, { merge: true });
+          await setDoc(doc(db, 'users', safeId), { email, role, updatedAt: new Date().toISOString() }, { merge: true });
           res.style.background = '#1A3A2D'; res.style.color = 'var(--green)';
           res.textContent = `✅ Role "${role}" assigned to ${email}`;
           showToast(`Role updated for ${email}`);
@@ -8477,69 +8530,7 @@ window.addEventListener('load', () => {
   switchPeriod('monthly');
 });
       })();
-      /* ═══ FALLBACK STUBS (if Firebase module fails to load) ═══ */
-      // These get overridden when the module loads successfully
-      if (!window.saveCandidate) {
-        window.saveCandidate = function() {
-          var el = document.getElementById('cand-save-btn');
-          if (el) el.textContent = 'Connecting…';
-          setTimeout(function() {
-            alert('Firebase not connected. Please deploy to Firebase Hosting or check your internet connection.');
-            if (el) el.textContent = 'Save Candidate';
-          }, 200);
-        };
-      }
-      if (!window.saveJob) {
-        window.saveJob = function() {
-          var el = document.getElementById('job-save-btn');
-          if (el) el.textContent = 'Connecting…';
-          setTimeout(function() {
-            alert('Firebase not connected. Please deploy to Firebase Hosting or check your internet connection.');
-            if (el) el.textContent = 'Save Job';
-          }, 200);
-        };
-      }
-      if (!window.openCandModal) {
-        window.openCandModal = function() {
-          var m = document.getElementById('cand-modal');
-          if (m) m.classList.add('open');
-        };
-      }
-      if (!window.openJobModal) {
-        window.openJobModal = function() {
-          var m = document.getElementById('job-modal');
-          if (m) m.classList.add('open');
-        };
-      }
-      if (!window.closeModal) {
-        window.closeModal = function(id) {
-          var m = document.getElementById(id);
-          if (m) m.classList.remove('open');
-        };
-      }
-      if (!window.showToast) {
-        window.showToast = function(msg) {
-          console.log('Toast:', msg);
-        };
-      }
-      if (!window.setView) {
-        window.setView = function(view, btn) {
-          document.querySelectorAll('.view').forEach(function(v) { v.classList.remove('active'); });
-          document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
-          var viewEl = document.getElementById('view-' + view);
-          if (viewEl) viewEl.classList.add('active');
-          if (btn) btn.classList.add('active');
-          var titleEl = document.getElementById('topbar-title');
-          var titles = { dashboard:'Dashboard', candidates:'Candidates', pipeline:'Pipeline', jobs:'Job Postings', interviews:'Interviews', search:'Resume Search', emails:'Email Campaigns', boards:'Job Boards', hirecalc:'HireCalc', vendor:'Vendor Portal', performance:'Performance Summary' };
-          if (titleEl) titleEl.textContent = titles[view] || view;
-        };
-      }
-      if (!window.openAddModal) {
-        window.openAddModal = function() {
-          var m = document.getElementById('cand-modal');
-          if (m) m.classList.add('open');
-        };
-      }
+      /* Fallback stubs removed — module always loads before standalone */
 
       /* ═══ VENDOR-EXT (ZTX) INTERACTIVE FUNCTIONS ═══ */
       (function() {
