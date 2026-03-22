@@ -242,6 +242,7 @@
                   const tb = b.createdAt?.toMillis?.() ?? 0;
                   return tb - ta;
                 });
+              window.candidates = candidates;
               renderAll();
               updateSyncBadge(true);
             },
@@ -261,6 +262,7 @@
                   const tb = b.createdAt?.toMillis?.() ?? 0;
                   return tb - ta;
                 });
+              window.jobs = jobs;
               renderAll();
               populateJobDropdowns();
             },
@@ -2379,6 +2381,31 @@ ${text.substring(0, 4000)}`
 
       renderAll();
       populateJobDropdowns();
+
+      // ── EXPOSE MODULE GLOBALS FOR PREVIEW SCRIPTS ────────────
+      // The preview modals live in a plain <script> outside this module.
+      // We expose everything they need on window so they can reach it.
+      window.candidates   = candidates;
+      window.jobs         = jobs;
+      window.db           = db;
+      window.updateDoc    = updateDoc;
+      window.doc          = doc;
+      window.stageBadge   = stageBadge;
+      window.boardColor   = boardColor;
+      window.boardName    = boardName;
+      window.fmtDate      = fmtDate;
+
+      // Keep window.candidates / window.jobs in sync whenever Firestore pushes updates
+      const _origRenderAll = renderAll;
+      // Patch the Firestore listeners to sync window refs after every update
+      // (candidates/jobs arrays are reassigned on each snapshot, so we re-sync)
+      const _patchSync = () => {
+        window.candidates = candidates;
+        window.jobs       = jobs;
+      };
+      // Override renderAll to also sync window refs
+      window._syncGlobals = _patchSync;
+
     </script>
 
     <style>
@@ -9654,8 +9681,9 @@ window.pvwJobDownload = function() {
 
 window.pvwJobStatus = function(status) {
   if (!_pvwJobId) return;
-  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
-    updateDoc(doc(db,'jobs',_pvwJobId),{status:status})
+  var _updateDoc = window.updateDoc, _doc = window.doc, _db = window.db;
+  if (typeof _updateDoc==='function' && typeof _doc==='function' && _db) {
+    _updateDoc(_doc(_db,'jobs',_pvwJobId),{status:status})
       .then(function(){ if(typeof showToast==='function') showToast('Job set to '+status); closeJobPvw(); })
       .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
   } else {
@@ -9665,8 +9693,9 @@ window.pvwJobStatus = function(status) {
 
 /* ═══ JOB CARD QUICK STATUS (from card buttons) ══════ */
 window.setJobStatus = function(jobId, status) {
-  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
-    updateDoc(doc(db,'jobs',jobId),{status:status})
+  var _updateDoc = window.updateDoc, _doc = window.doc, _db = window.db;
+  if (typeof _updateDoc==='function' && typeof _doc==='function' && _db) {
+    _updateDoc(_doc(_db,'jobs',jobId),{status:status})
       .then(function(){ if(typeof showToast==='function') showToast('Job '+status.toLowerCase()); })
       .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
   }
