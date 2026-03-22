@@ -1339,7 +1339,12 @@ ${text.substring(0, 4000)}`
         gel("job-modal").classList.add("open");
       };
 
-      window.closeModal = (id) => gel(id).classList.remove("open");
+      window.closeModal = (id) => {
+        const el = gel(id);
+        if (!el) return;
+        el.classList.remove("open");
+        el.style.display = "";
+      };
       window.openAddModal = function () {
         if (currentView === "jobs") openJobModal();
         else if (currentView === "emails") openBulkModal();
@@ -5287,16 +5292,45 @@ ${text.substring(0, 4000)}`
       #view-vendor-ext .sg3 { grid-template-columns: repeat(3,1fr); }
       #view-vendor-ext .sg4 { grid-template-columns: repeat(4,1fr); }
       #view-vendor-ext .sg6 { grid-template-columns: repeat(6,1fr); }
-      /* SLA card grid layout */
+      /* SLA card grid layout — 5 fixed columns */
       #view-vendor-ext .sla-main {
         display: grid;
-        grid-template-columns: 1fr auto auto auto auto;
+        grid-template-columns: 220px 1fr 130px 120px 110px;
         align-items: center;
-        padding: 14px 16px;
-        gap: 16px;
+        padding: 16px 18px;
+        gap: 20px;
         cursor: pointer;
       }
-      #view-vendor-ext .sla-main:hover { background: rgba(255,255,255,.02); }
+      #view-vendor-ext .sla-main:hover { background: rgba(255,255,255,.025); }
+      /* vendor name col */
+      #view-vendor-ext .sla-vendor-col { min-width: 0; }
+      #view-vendor-ext .sla-vendor-col .sla-vname { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #view-vendor-ext .sla-vendor-col .sla-jdname { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+      /* progress col */
+      #view-vendor-ext .sla-prog-col { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      #view-vendor-ext .sla-prog-col .sla-arc { flex-shrink: 0; }
+      #view-vendor-ext .sla-prog-col .sla-bar-wrap { flex: 1; min-width: 0; }
+      #view-vendor-ext .sla-prog-col .sla-bar-label { display: flex; justify-content: space-between; margin-bottom: 5px; }
+      /* deadline col */
+      #view-vendor-ext .sla-dl-col { text-align: center; }
+      #view-vendor-ext .sla-dl-col .sla-dl-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
+      #view-vendor-ext .sla-dl-col .sla-dl-date { font-size: 16px; font-weight: 700; font-family: var(--mono); letter-spacing: -.5px; }
+      #view-vendor-ext .sla-dl-col .sla-dl-rel { font-size: 10px; margin-top: 4px; font-family: var(--mono); }
+      /* set-by col */
+      #view-vendor-ext .sla-setby-col { text-align: center; }
+      #view-vendor-ext .sla-setby-col .sla-setby-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
+      #view-vendor-ext .sla-setby-col .sla-setby-name { font-size: 12px; font-weight: 500; }
+      #view-vendor-ext .sla-setby-col .sla-setby-date { font-size: 10px; color: var(--muted); margin-top: 2px; }
+      /* actions col */
+      #view-vendor-ext .sla-actions-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+      /* status left-border accent */
+      #view-vendor-ext .sla-card.sb { border-left: 3px solid var(--red); }
+      #view-vendor-ext .sla-card.sr { border-left: 3px solid var(--amber); }
+      #view-vendor-ext .sla-card.so { border-left: 3px solid var(--green); }
+      #view-vendor-ext .sla-card.sd { border-left: 3px solid var(--teal); }
+      /* expand detail strip */
+      #view-vendor-ext .sla-expand { border-top: 1px solid var(--border); background: rgba(0,0,0,.15); padding: 11px 18px; display: none; }
+      #view-vendor-ext .sla-card.open .sla-expand { display: block; }
       #view-vendor-ext .sc { background: var(--card); border: 1px solid var(--border); border-radius: var(--r2); padding: 14px 16px; }
       #view-vendor-ext .sv { font-size: 26px; font-weight: 700; font-family: var(--mono); letter-spacing: -1px; }
       #view-vendor-ext .sl2 { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
@@ -7800,40 +7834,182 @@ ${text.substring(0, 4000)}`
   <div class="sgrid sg6"><div class="sc"><div class="sv">5</div><div class="sl2">Active SLAs</div></div><div class="sc"><div class="sv" style="color:var(--green)">2</div><div class="sl2">On Track</div></div><div class="sc"><div class="sv" style="color:var(--amber)">1</div><div class="sl2">At Risk</div></div><div class="sc"><div class="sv" style="color:var(--red)">2</div><div class="sl2">Breached</div></div><div class="sc"><div class="sv" style="color:var(--teal)">1</div><div class="sl2">Completed</div></div><div class="sc"><div class="sv" style="color:var(--orange)">3</div><div class="sl2">Nudges Sent</div></div></div>
   <div id="sla-list"><div class="sla-card sb" data-status="breach">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v1">TG</div><div><div style="font-size:12px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)">DevOps Engineer JD</div><div style="margin-top:4px"><span class="pill pr">&#9888; Breached</span></div></div></div>
-<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="98.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">25%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>1</strong><span style="color:var(--muted)"> / 4</span></span></div><div class="bar"><div class="bar-fill" style="width:25%;background:var(--red)"></div></div></div></div>
-<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline passed</div><div class="cd-seg" style="color:var(--red);">Mar 19</div><div style="font-size:10px;color:var(--red);margin-top:5px;font-family:var(--mono)">Today</div></div>
-<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 12</div></div>
-<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
-</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 4 profiles &middot; 1 submitted &middot; Set by Riya Kapoor on Mar 12 &middot; Status: &#9888; Breached</div></div></div><div class="sla-card sb" data-status="breach">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="va va-md v1">TG</div>
+    <div class="sla-vendor-col">
+      <div class="sla-vname">TechGate Staffing</div>
+      <div class="sla-jdname">DevOps Engineer JD</div>
+      <div style="margin-top:6px"><span class="pill pr">⚠ Breached</span></div>
+    </div>
+  </div>
+  <div class="sla-prog-col">
+    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="98.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">25%</span><span class="arc-sub">done</span></div></div>
+    <div class="sla-bar-wrap">
+      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">1 <span style="color:var(--muted);font-weight:400">/ 4</span></span></div>
+      <div class="bar"><div class="bar-fill" style="width:25%;background:var(--red)"></div></div>
+    </div>
+  </div>
+  <div class="sla-dl-col">
+    <div class="sla-dl-lbl">Deadline passed</div>
+    <div class="sla-dl-date" style="color:var(--red)">Mar 19</div>
+    <div class="sla-dl-rel" style="color:var(--red)">Today</div>
+  </div>
+  <div class="sla-setby-col">
+    <div class="sla-setby-lbl">Set by</div>
+    <div class="sla-setby-name">Riya Kapoor</div>
+    <div class="sla-setby-date">Mar 12</div>
+  </div>
+  <div class="sla-actions-col">
+    <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button>
+    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
+    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
+  </div>
+</div>
+<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 4 profiles · 1 submitted · Set by Riya Kapoor on Mar 12 · Status: ⚠ Breached</span></div>
+</div>
+
+<div class="sla-card sb" data-status="breach">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v3">RH</div><div><div style="font-size:12px;font-weight:600">RapidHire India</div><div style="font-size:10px;color:var(--muted)">Data Analyst JD</div><div style="margin-top:4px"><span class="pill pr">&#9888; Breached</span></div></div></div>
-<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="65.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">50%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>2</strong><span style="color:var(--muted)"> / 4</span></span></div><div class="bar"><div class="bar-fill" style="width:50%;background:var(--red)"></div></div></div></div>
-<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline passed</div><div class="cd-seg" style="color:var(--red);">Mar 15</div><div style="font-size:10px;color:var(--red);margin-top:5px;font-family:var(--mono)">4 days ago</div></div>
-<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 8</div></div>
-<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
-</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 4 profiles &middot; 2 submitted &middot; Set by Riya Kapoor on Mar 8 &middot; Status: &#9888; Breached</div></div></div><div class="sla-card sr" data-status="risk">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="va va-md v3">RH</div>
+    <div class="sla-vendor-col">
+      <div class="sla-vname">RapidHire India</div>
+      <div class="sla-jdname">Data Analyst JD</div>
+      <div style="margin-top:6px"><span class="pill pr">⚠ Breached</span></div>
+    </div>
+  </div>
+  <div class="sla-prog-col">
+    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="65.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">50%</span><span class="arc-sub">done</span></div></div>
+    <div class="sla-bar-wrap">
+      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">2 <span style="color:var(--muted);font-weight:400">/ 4</span></span></div>
+      <div class="bar"><div class="bar-fill" style="width:50%;background:var(--red)"></div></div>
+    </div>
+  </div>
+  <div class="sla-dl-col">
+    <div class="sla-dl-lbl">Deadline passed</div>
+    <div class="sla-dl-date" style="color:var(--red)">Mar 15</div>
+    <div class="sla-dl-rel" style="color:var(--red)">4 days ago</div>
+  </div>
+  <div class="sla-setby-col">
+    <div class="sla-setby-lbl">Set by</div>
+    <div class="sla-setby-name">Riya Kapoor</div>
+    <div class="sla-setby-date">Mar 8</div>
+  </div>
+  <div class="sla-actions-col">
+    <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button>
+    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
+    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
+  </div>
+</div>
+<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 4 profiles · 2 submitted · Set by Riya Kapoor on Mar 8 · Status: ⚠ Breached</span></div>
+</div>
+
+<div class="sla-card sr" data-status="risk">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v1">TG</div><div><div style="font-size:12px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)">Senior React Dev JD</div><div style="margin-top:4px"><span class="pill pa">&#9889; At Risk</span></div></div></div>
-<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--amber)" stroke-dasharray="125.7" stroke-dashoffset="52.8"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--amber)">60%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>3</strong><span style="color:var(--muted)"> / 5</span></span></div><div class="bar"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div></div></div>
-<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline</div><div class="cd-seg" style="color:var(--amber);">Mar 22</div><div style="font-size:10px;color:var(--amber);margin-top:5px;font-family:var(--mono)">2d 14h</div></div>
-<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 15</div></div>
-<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
-</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 5 profiles &middot; 3 submitted &middot; Set by Riya Kapoor on Mar 15 &middot; Status: &#9889; At Risk</div></div></div><div class="sla-card so" data-status="ok">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="va va-md v1">TG</div>
+    <div class="sla-vendor-col">
+      <div class="sla-vname">TechGate Staffing</div>
+      <div class="sla-jdname">Senior React Dev JD</div>
+      <div style="margin-top:6px"><span class="pill pa">⚡ At Risk</span></div>
+    </div>
+  </div>
+  <div class="sla-prog-col">
+    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--amber)" stroke-dasharray="125.7" stroke-dashoffset="52.8"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--amber)">60%</span><span class="arc-sub">done</span></div></div>
+    <div class="sla-bar-wrap">
+      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--amber)">3 <span style="color:var(--muted);font-weight:400">/ 5</span></span></div>
+      <div class="bar"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div>
+    </div>
+  </div>
+  <div class="sla-dl-col">
+    <div class="sla-dl-lbl">Deadline</div>
+    <div class="sla-dl-date" style="color:var(--amber)">Mar 22</div>
+    <div class="sla-dl-rel" style="color:var(--amber)">2d 14h left</div>
+  </div>
+  <div class="sla-setby-col">
+    <div class="sla-setby-lbl">Set by</div>
+    <div class="sla-setby-name">Riya Kapoor</div>
+    <div class="sla-setby-date">Mar 15</div>
+  </div>
+  <div class="sla-actions-col">
+    <button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button>
+    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
+    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
+  </div>
+</div>
+<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 5 profiles · 3 submitted · Set by Riya Kapoor on Mar 15 · Status: ⚡ At Risk</span></div>
+</div>
+
+<div class="sla-card so" data-status="ok">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v2">NS</div><div><div style="font-size:12px;font-weight:600">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)">Product Manager JD</div><div style="margin-top:4px"><span class="pill pg">&#10003; On Track</span></div></div></div>
-<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--green)" stroke-dasharray="125.7" stroke-dashoffset="43.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--green)">67%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>2</strong><span style="color:var(--muted)"> / 3</span></span></div><div class="bar"><div class="bar-fill" style="width:67%;background:var(--green)"></div></div></div></div>
-<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline</div><div class="cd-seg" style="">Apr 5</div><div style="font-size:10px;margin-top:5px;font-family:var(--mono)">5d 8h</div></div>
-<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 14</div></div>
-<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
-</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 3 profiles &middot; 2 submitted &middot; Set by Riya Kapoor on Mar 14 &middot; Status: &#10003; On Track</div></div></div><div class="sla-card sd" data-status="done">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="va va-md v2">NS</div>
+    <div class="sla-vendor-col">
+      <div class="sla-vname">NextStep Solutions</div>
+      <div class="sla-jdname">Product Manager JD</div>
+      <div style="margin-top:6px"><span class="pill pg">✓ On Track</span></div>
+    </div>
+  </div>
+  <div class="sla-prog-col">
+    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--green)" stroke-dasharray="125.7" stroke-dashoffset="43.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--green)">67%</span><span class="arc-sub">done</span></div></div>
+    <div class="sla-bar-wrap">
+      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--green)">2 <span style="color:var(--muted);font-weight:400">/ 3</span></span></div>
+      <div class="bar"><div class="bar-fill" style="width:67%;background:var(--green)"></div></div>
+    </div>
+  </div>
+  <div class="sla-dl-col">
+    <div class="sla-dl-lbl">Deadline</div>
+    <div class="sla-dl-date">Apr 5</div>
+    <div class="sla-dl-rel" style="color:var(--muted)">5d 8h left</div>
+  </div>
+  <div class="sla-setby-col">
+    <div class="sla-setby-lbl">Set by</div>
+    <div class="sla-setby-name">Riya Kapoor</div>
+    <div class="sla-setby-date">Mar 14</div>
+  </div>
+  <div class="sla-actions-col">
+    <button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button>
+    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
+    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
+  </div>
+</div>
+<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 3 profiles · 2 submitted · Set by Riya Kapoor on Mar 14 · Status: ✓ On Track</span></div>
+</div>
+
+<div class="sla-card sd" data-status="done">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v4">BT</div><div><div style="font-size:12px;font-weight:600">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)">UI/UX Designer JD</div><div style="margin-top:4px"><span class="pill pt2">&#10003; Completed</span></div></div></div>
-<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--teal)" stroke-dasharray="125.7" stroke-dashoffset="0"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--teal)">100%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>3</strong><span style="color:var(--muted)"> / 3</span></span></div><div class="bar"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div></div></div>
-<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Completed</div><div class="cd-seg" style="color:var(--teal);">Mar 18</div><div style="font-size:10px;color:var(--teal);margin-top:5px;font-family:var(--mono)">2 days early</div></div>
-<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 10</div></div>
-<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
-</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 3 profiles &middot; 3 submitted &middot; Set by Riya Kapoor on Mar 10 &middot; Status: &#10003; Completed</div></div></div></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="va va-md v4">BT</div>
+    <div class="sla-vendor-col">
+      <div class="sla-vname">BridgeTalent Co.</div>
+      <div class="sla-jdname">UI/UX Designer JD</div>
+      <div style="margin-top:6px"><span class="pill pt2">✓ Completed</span></div>
+    </div>
+  </div>
+  <div class="sla-prog-col">
+    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--teal)" stroke-dasharray="125.7" stroke-dashoffset="0"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--teal)">100%</span><span class="arc-sub">done</span></div></div>
+    <div class="sla-bar-wrap">
+      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--teal)">3 <span style="color:var(--muted);font-weight:400">/ 3</span></span></div>
+      <div class="bar"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div>
+    </div>
+  </div>
+  <div class="sla-dl-col">
+    <div class="sla-dl-lbl">Completed</div>
+    <div class="sla-dl-date" style="color:var(--teal)">Mar 18</div>
+    <div class="sla-dl-rel" style="color:var(--teal)">2 days early</div>
+  </div>
+  <div class="sla-setby-col">
+    <div class="sla-setby-lbl">Set by</div>
+    <div class="sla-setby-name">Riya Kapoor</div>
+    <div class="sla-setby-date">Mar 10</div>
+  </div>
+  <div class="sla-actions-col">
+    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
+    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
+  </div>
+</div>
+<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 3 profiles · 3 submitted · Set by Riya Kapoor on Mar 10 · Status: ✓ Completed</span></div>
+</div></div>
 </div>
 
           <div class="view" id="v-ratings"><div class="ph"><div><div class="ptitle">Vendor Ratings</div><div class="psub">Score vendors on 5 dimensions after each placement</div></div><div class="ph-r"><button class="btn btn-p btn-sm" onclick="ztxOpenOv('ov-rate')">+ Add Rating</button></div></div><div class="g2"><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v1">TG</div><div><div style="font-weight:600;font-size:13px">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)">12 placements &middot; 4 ratings</div></div></div><div class="ring ring-md" style="background:var(--gdim);border:2px solid var(--green);color:var(--green)">4.2</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:90%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.5</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:80%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:84%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:92%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.6</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v2">NS</div><div><div style="font-weight:600;font-size:13px">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)">8 placements &middot; 3 ratings</div></div></div><div class="ring ring-md" style="background:var(--gdim);border:2px solid var(--green);color:var(--green)">3.9</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:82%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.1</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:72%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.6</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:84%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v3">RH</div><div><div style="font-weight:600;font-size:13px">RapidHire India</div><div style="font-size:10px;color:var(--muted)">5 placements &middot; 2 ratings</div></div></div><div class="ring ring-md" style="background:var(--adim);border:2px solid var(--amber);color:var(--amber)">3.3</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:70%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.5</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:60%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:64%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v4">BT</div><div><div style="font-weight:600;font-size:13px">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)">3 placements &middot; 1 rating</div></div></div><div class="ring ring-md" style="background:var(--rdim);border:2px solid var(--red);color:var(--red)">3.1</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:64%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:56%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">2.8</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:70%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.5</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:64%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.2</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div></div></div>
