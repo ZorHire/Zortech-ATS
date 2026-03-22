@@ -1009,8 +1009,209 @@ ${text.substring(0, 4000)}`
   <div class="f">© ${new Date().getFullYear()} <strong>Zortech Solutions</strong> · hr@zortechs.in</div>
 
   </div>
-</body></html>`;
 
+
+<script>
+/* ═══ CANDIDATE PREVIEW ══════════════════════════════ */
+var _pvwCandId = null;
+
+window.openCandPreview = function(id) {
+  var cand = (window.candidates||[]).find(function(x){return x.id===id;});
+  if (!cand) return;
+  _pvwCandId = id;
+  var job = (window.jobs||[]).find(function(j){return j.id===cand.jobId;});
+
+  // Avatar
+  var av = ((cand.firstName||'')[0]||'').toUpperCase() + ((cand.lastName||'')[0]||'').toUpperCase();
+  document.getElementById('pvw-c-av').textContent = av || '?';
+  document.getElementById('pvw-c-name').textContent = ((cand.firstName||'')+' '+(cand.lastName||'')).trim() || '—';
+  document.getElementById('pvw-c-sub').textContent = job ? job.title : 'No job assigned';
+  document.getElementById('pvw-c-stage').innerHTML = typeof stageBadge==='function' ? stageBadge(cand.stage) : (cand.stage||'');
+
+  // Contact
+  document.getElementById('pvw-c-email').textContent  = cand.email  || '—';
+  document.getElementById('pvw-c-phone').textContent  = cand.phone  || '—';
+  document.getElementById('pvw-c-exp').textContent    = cand.experience ? cand.experience+' yrs' : '—';
+  document.getElementById('pvw-c-vendor').textContent = cand.vendor || '—';
+  document.getElementById('pvw-c-job').textContent    = job ? job.title : '—';
+
+  // Skills
+  var skillsSec = document.getElementById('pvw-c-skills-sec');
+  var skillsEl  = document.getElementById('pvw-c-skills');
+  if (cand.skills) {
+    skillsEl.innerHTML = cand.skills.split(',').map(function(s){
+      s=s.trim(); if(!s)return'';
+      return '<span class="pvw-tag">'+s.replace(/</g,'&lt;')+'</span>';
+    }).join('');
+    skillsSec.style.display='';
+  } else { skillsSec.style.display='none'; }
+
+  // Notes
+  var notesSec = document.getElementById('pvw-c-notes-sec');
+  if (cand.notes) {
+    document.getElementById('pvw-c-notes').textContent = cand.notes;
+    notesSec.style.display='';
+  } else { notesSec.style.display='none'; }
+
+  // Interview
+  var ivSec = document.getElementById('pvw-c-iv-sec');
+  if (cand.interviewDate) {
+    document.getElementById('pvw-c-idate').textContent = cand.interviewDate;
+    document.getElementById('pvw-c-itime').textContent = cand.interviewTime||'—';
+    ivSec.style.display='';
+  } else { ivSec.style.display='none'; }
+
+  // Resume
+  var slot  = document.getElementById('pvw-c-resume-slot');
+  var dlBtn = document.getElementById('pvw-c-dl-btn');
+  if (cand.resumeUrl) {
+    var rname = (cand.resumeName||'Resume').replace(/</g,'&lt;');
+    slot.innerHTML = '<a href="'+cand.resumeUrl+'" target="_blank" class="file-chip" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px">📄 '+rname+' &nbsp;— click to view</a>';
+    dlBtn.disabled = false; dlBtn.style.opacity='1';
+  } else {
+    slot.innerHTML = '<span style="color:var(--muted);font-size:12px">No resume uploaded</span>';
+    dlBtn.disabled = true; dlBtn.style.opacity='0.4';
+  }
+
+  document.getElementById('pvw-cand').classList.add('open');
+};
+
+window.closeCandPvw = function() {
+  document.getElementById('pvw-cand').classList.remove('open');
+  _pvwCandId = null;
+};
+
+window.pvwCandEdit = function() {
+  var id = _pvwCandId; closeCandPvw();
+  if (id && typeof openCandModal==='function') openCandModal(id);
+};
+
+window.pvwCandDownload = function() {
+  if (!_pvwCandId) return;
+  var cand = (window.candidates||[]).find(function(x){return x.id===_pvwCandId;});
+  if (!cand||!cand.resumeUrl) { if(typeof showToast==='function') showToast('No resume uploaded','error'); return; }
+  var a=document.createElement('a'); a.href=cand.resumeUrl;
+  a.download=cand.resumeName||'resume.pdf'; a.target='_blank'; a.click();
+};
+
+window.pvwCandInvite = function() {
+  var id=_pvwCandId; closeCandPvw();
+  if (id&&typeof sendInterviewInvite==='function') sendInterviewInvite(id);
+};
+
+window.pvwCandOffer = function() {
+  var id=_pvwCandId; closeCandPvw();
+  if (id&&typeof sendOfferLetter==='function') sendOfferLetter(id);
+};
+
+/* ═══ JOB PREVIEW ════════════════════════════════════ */
+var _pvwJobId = null;
+
+window.openJobPreview = function(id) {
+  var job = (window.jobs||[]).find(function(j){return j.id===id;});
+  if (!job) return;
+  _pvwJobId = id;
+
+  var cands = (window.candidates||[]).filter(function(c){return c.jobId===id;});
+  var posted = Object.keys(job.boardPostings||{});
+  var sc  = {Open:'var(--green)', Paused:'#f59e0b', Closed:'var(--red)'};
+  var sbg = {Open:'#1A3A2D', Paused:'#3D3A00', Closed:'#3D1A1A'};
+
+  document.getElementById('pvw-j-title').textContent = job.title||'—';
+  document.getElementById('pvw-j-sub').textContent   = (job.department||'') + (job.location?' · '+job.location:'');
+  document.getElementById('pvw-j-status').innerHTML  =
+    '<span class="badge" style="background:'+sbg[job.status]+';color:'+sc[job.status]+'">'+job.status+'</span>';
+  document.getElementById('pvw-j-dept').textContent  = job.department||'—';
+  document.getElementById('pvw-j-type').textContent  = job.type||'—';
+  document.getElementById('pvw-j-loc').textContent   = job.location||'—';
+  document.getElementById('pvw-j-count').textContent = cands.length;
+
+  // Description
+  var descSec = document.getElementById('pvw-j-desc-sec');
+  if (job.description) {
+    document.getElementById('pvw-j-desc').textContent = job.description;
+    descSec.style.display='';
+  } else { descSec.style.display='none'; }
+
+  // Boards posted
+  var boardsSec = document.getElementById('pvw-j-boards-sec');
+  if (posted.length) {
+    document.getElementById('pvw-j-boards').innerHTML = posted.map(function(b){
+      var bc = typeof boardColor==='function'?boardColor(b):'#aaa';
+      var bn = typeof boardName==='function'?boardName(b):b;
+      return '<span class="pvw-tag" style="background:'+bc+'22;color:'+bc+'">'+bn+'</span>';
+    }).join('');
+    boardsSec.style.display='';
+  } else { boardsSec.style.display='none'; }
+
+  // Applicants list
+  var listEl = document.getElementById('pvw-j-applist');
+  if (cands.length) {
+    listEl.innerHTML = cands.map(function(cand){
+      var av = ((cand.firstName||'')[0]||'').toUpperCase()+((cand.lastName||'')[0]||'').toUpperCase();
+      var badge = typeof stageBadge==='function'?stageBadge(cand.stage):'';
+      var fname = (cand.firstName||'').replace(/</g,'&lt;');
+      var lname = (cand.lastName||'').replace(/</g,'&lt;');
+      var email = (cand.email||'—').replace(/</g,'&lt;');
+      return '<div class="pvw-applicant-row">'
+        +'<div style="display:flex;align-items:center;gap:10px">'
+        +'<div style="width:34px;height:34px;border-radius:50%;background:var(--orange-dim);color:var(--orange-light);display:grid;place-items:center;font-size:11px;font-weight:700;flex-shrink:0">'+av+'</div>'
+        +'<div><div style="font-size:13px;font-weight:600">'+fname+' '+lname+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+email+'</div></div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px">'+badge
+        +'<button onclick="closeJobPvw();openCandPreview(''+cand.id+'')" style="padding:3px 10px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">View</button>'
+        +'</div></div>';
+    }).join('');
+  } else {
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px 0">No applicants yet</div>';
+  }
+
+  // JD download btn
+  var dlBtn = document.getElementById('pvw-j-dl-btn');
+  dlBtn.disabled = !job.jdUrl; dlBtn.style.opacity = job.jdUrl?'1':'0.4';
+
+  document.getElementById('pvw-job').classList.add('open');
+};
+
+window.closeJobPvw = function() {
+  document.getElementById('pvw-job').classList.remove('open');
+  _pvwJobId = null;
+};
+
+window.pvwJobEdit = function() {
+  var id=_pvwJobId; closeJobPvw();
+  if (id&&typeof openJobModal==='function') openJobModal(id);
+};
+
+window.pvwJobDownload = function() {
+  if (!_pvwJobId) return;
+  var job = (window.jobs||[]).find(function(j){return j.id===_pvwJobId;});
+  if (!job||!job.jdUrl) { if(typeof showToast==='function') showToast('No JD file uploaded','error'); return; }
+  var a=document.createElement('a'); a.href=job.jdUrl;
+  a.download=(job.title||'job-description')+'.pdf'; a.target='_blank'; a.click();
+};
+
+window.pvwJobStatus = function(status) {
+  if (!_pvwJobId) return;
+  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
+    updateDoc(doc(db,'jobs',_pvwJobId),{status:status})
+      .then(function(){ if(typeof showToast==='function') showToast('Job set to '+status); closeJobPvw(); })
+      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
+  } else {
+    if(typeof showToast==='function') showToast('Status update requires Firebase connection','error');
+  }
+};
+
+/* ═══ JOB CARD QUICK STATUS (from card buttons) ══════ */
+window.setJobStatus = function(jobId, status) {
+  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
+    updateDoc(doc(db,'jobs',jobId),{status:status})
+      .then(function(){ if(typeof showToast==='function') showToast('Job '+status.toLowerCase()); })
+      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
+  }
+};
+<\/script>
+</body></html>`;
       }
 
 
@@ -1340,10 +1541,10 @@ ${text.substring(0, 4000)}`
       };
 
       window.closeModal = (id) => {
-        const el = document.getElementById(id);
+        const el = gel(id);
         if (!el) return;
-        el.classList.remove("open");
-        el.style.display = "";
+        el.classList.remove('open');
+        el.style.display = '';
       };
       window.openAddModal = function () {
         if (currentView === "jobs") openJobModal();
@@ -1693,8 +1894,11 @@ ${text.substring(0, 4000)}`
               .map((c) => {
                 const j = jobs.find((x) => x.id === c.jobId);
                 return `<tr>
-      <td class="cname-link" onclick="openCandPreview('${c.id}')">
-        <div class="cname">${esc(c.firstName)} ${esc(c.lastName)}</div>
+      <td class="cname-link" onclick="openCandPreview('${c.id}')" title="Click to view full profile">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <div class="cname">${esc(c.firstName)} ${esc(c.lastName)}</div>
+          <span class="pvw-chip">👁 Preview</span>
+        </div>
         <div class="csub">${esc(c.skills || "")}</div>
       </td>
       <td>${esc(j?.title || "—")}</td>
@@ -2386,32 +2590,123 @@ ${text.substring(0, 4000)}`
 
       renderAll();
       populateJobDropdowns();
-
-      // ── EXPOSE MODULE GLOBALS FOR PREVIEW SCRIPTS ────────────
-      // The preview modals live in a plain <script> outside this module.
-      // We expose everything they need on window so they can reach it.
-      window.candidates   = candidates;
-      window.jobs         = jobs;
-      window.db           = db;
-      window.updateDoc    = updateDoc;
-      window.doc          = doc;
-      window.stageBadge   = stageBadge;
-      window.boardColor   = boardColor;
-      window.boardName    = boardName;
-      window.fmtDate      = fmtDate;
-
-      // Keep window.candidates / window.jobs in sync whenever Firestore pushes updates
-      const _origRenderAll = renderAll;
-      // Patch the Firestore listeners to sync window refs after every update
-      // (candidates/jobs arrays are reassigned on each snapshot, so we re-sync)
-      const _patchSync = () => {
-        window.candidates = candidates;
-        window.jobs       = jobs;
-      };
-      // Override renderAll to also sync window refs
-      window._syncGlobals = _patchSync;
-
     </script>
+
+<!-- ═══════════════════════════════════════════════════
+     CANDIDATE PROFILE PREVIEW MODAL
+════════════════════════════════════════════════════ -->
+<div class="pvw-overlay" id="pvw-cand" onclick="if(event.target===this)closeCandPvw()">
+  <div class="pvw-sheet">
+    <div class="pvw-head">
+      <div class="pvw-av pvw-av-cand" id="pvw-c-av">?</div>
+      <div style="flex:1;min-width:0">
+        <div class="pvw-head-title" id="pvw-c-name">—</div>
+        <div class="pvw-head-sub" id="pvw-c-sub">—</div>
+      </div>
+      <span id="pvw-c-stage" style="margin-top:2px"></span>
+      <button class="pvw-close" onclick="closeCandPvw()">✕</button>
+    </div>
+    <div class="pvw-body">
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Contact &amp; Details</div>
+        <div class="pvw-grid2">
+          <div><div class="pvw-field-lbl">Email</div><div class="pvw-field-val" id="pvw-c-email">—</div></div>
+          <div><div class="pvw-field-lbl">Phone</div><div class="pvw-field-val" id="pvw-c-phone">—</div></div>
+          <div><div class="pvw-field-lbl">Experience</div><div class="pvw-field-val" id="pvw-c-exp">—</div></div>
+          <div><div class="pvw-field-lbl">Vendor / Agency</div><div class="pvw-field-val" id="pvw-c-vendor">—</div></div>
+        </div>
+      </div>
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Applied For</div>
+        <div class="pvw-field-val" id="pvw-c-job">—</div>
+      </div>
+      <div class="pvw-section" id="pvw-c-skills-sec">
+        <div class="pvw-section-lbl">Skills</div>
+        <div class="pvw-tags" id="pvw-c-skills"></div>
+      </div>
+      <div class="pvw-section" id="pvw-c-notes-sec" style="display:none">
+        <div class="pvw-section-lbl">Notes</div>
+        <div class="pvw-note" id="pvw-c-notes"></div>
+      </div>
+      <div class="pvw-section" id="pvw-c-iv-sec" style="display:none">
+        <div class="pvw-section-lbl">Interview Scheduled</div>
+        <div class="pvw-grid2">
+          <div><div class="pvw-field-lbl">Date</div><div class="pvw-field-val" id="pvw-c-idate">—</div></div>
+          <div><div class="pvw-field-lbl">Time</div><div class="pvw-field-val" id="pvw-c-itime">—</div></div>
+        </div>
+      </div>
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Resume</div>
+        <div id="pvw-c-resume-slot"></div>
+      </div>
+    </div>
+    <div class="pvw-foot">
+      <div style="display:flex;gap:8px">
+        <button class="pvw-btn pvw-btn-primary" onclick="pvwCandEdit()">✏️ Edit</button>
+        <button class="pvw-btn pvw-btn-ghost" id="pvw-c-dl-btn" onclick="pvwCandDownload()">⬇️ Resume</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="pvw-btn pvw-btn-blue"  onclick="pvwCandInvite()">✉️ Invite</button>
+        <button class="pvw-btn pvw-btn-green"  onclick="pvwCandOffer()">📄 Offer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     JOB PROFILE PREVIEW MODAL
+════════════════════════════════════════════════════ -->
+<div class="pvw-overlay" id="pvw-job" onclick="if(event.target===this)closeJobPvw()">
+  <div class="pvw-sheet">
+    <div class="pvw-head">
+      <div class="pvw-av pvw-av-job">💼</div>
+      <div style="flex:1;min-width:0">
+        <div class="pvw-head-title" id="pvw-j-title">—</div>
+        <div class="pvw-head-sub"   id="pvw-j-sub">—</div>
+      </div>
+      <span id="pvw-j-status" style="margin-top:2px"></span>
+      <button class="pvw-close" onclick="closeJobPvw()">✕</button>
+    </div>
+    <div class="pvw-body">
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Overview</div>
+        <div class="pvw-grid2">
+          <div><div class="pvw-field-lbl">Department</div><div class="pvw-field-val" id="pvw-j-dept">—</div></div>
+          <div><div class="pvw-field-lbl">Type</div><div class="pvw-field-val" id="pvw-j-type">—</div></div>
+          <div><div class="pvw-field-lbl">Location</div><div class="pvw-field-val" id="pvw-j-loc">—</div></div>
+          <div>
+            <div class="pvw-field-lbl">Applicants</div>
+            <div class="pvw-field-val" id="pvw-j-count" style="font-size:22px;font-weight:700;color:var(--orange-light)">0</div>
+          </div>
+        </div>
+      </div>
+      <div class="pvw-section" id="pvw-j-desc-sec">
+        <div class="pvw-section-lbl">Job Description</div>
+        <div class="pvw-note" id="pvw-j-desc"></div>
+      </div>
+      <div class="pvw-section" id="pvw-j-boards-sec" style="display:none">
+        <div class="pvw-section-lbl">Posted On</div>
+        <div class="pvw-tags" id="pvw-j-boards"></div>
+      </div>
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Applicants</div>
+        <div id="pvw-j-applist"><div style="color:var(--muted);font-size:12px">No applicants yet</div></div>
+      </div>
+    </div>
+    <div class="pvw-foot">
+      <div style="display:flex;gap:8px">
+        <button class="pvw-btn pvw-btn-primary" onclick="pvwJobEdit()">✏️ Edit Job</button>
+        <button class="pvw-btn pvw-btn-ghost" id="pvw-j-dl-btn" onclick="pvwJobDownload()">⬇️ JD</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="pvw-btn pvw-btn-green"  onclick="pvwJobStatus('Open')">▶ Open</button>
+        <button class="pvw-btn pvw-btn-amber"  onclick="pvwJobStatus('Paused')">⏸ Pause</button>
+        <button class="pvw-btn pvw-btn-red"    onclick="pvwJobStatus('Closed')">✕ Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
     <style>
       :root {
@@ -4348,6 +4643,8 @@ ${text.substring(0, 4000)}`
 
   
       #view-vendor .panel-overlay.open { display: flex; }
+      /* Global panel-overlay open state (used outside view-vendor) */
+      .panel-overlay.open { display: flex; }
 
   
       #view-vendor .panel {
@@ -5292,45 +5589,16 @@ ${text.substring(0, 4000)}`
       #view-vendor-ext .sg3 { grid-template-columns: repeat(3,1fr); }
       #view-vendor-ext .sg4 { grid-template-columns: repeat(4,1fr); }
       #view-vendor-ext .sg6 { grid-template-columns: repeat(6,1fr); }
-      /* SLA card grid layout — 5 fixed columns */
+      /* SLA card grid layout */
       #view-vendor-ext .sla-main {
         display: grid;
-        grid-template-columns: 220px 1fr 130px 120px 110px;
+        grid-template-columns: 1fr auto auto auto auto;
         align-items: center;
-        padding: 16px 18px;
-        gap: 20px;
+        padding: 14px 16px;
+        gap: 16px;
         cursor: pointer;
       }
-      #view-vendor-ext .sla-main:hover { background: rgba(255,255,255,.025); }
-      /* vendor name col */
-      #view-vendor-ext .sla-vendor-col { min-width: 0; }
-      #view-vendor-ext .sla-vendor-col .sla-vname { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      #view-vendor-ext .sla-vendor-col .sla-jdname { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-      /* progress col */
-      #view-vendor-ext .sla-prog-col { display: flex; align-items: center; gap: 12px; min-width: 0; }
-      #view-vendor-ext .sla-prog-col .sla-arc { flex-shrink: 0; }
-      #view-vendor-ext .sla-prog-col .sla-bar-wrap { flex: 1; min-width: 0; }
-      #view-vendor-ext .sla-prog-col .sla-bar-label { display: flex; justify-content: space-between; margin-bottom: 5px; }
-      /* deadline col */
-      #view-vendor-ext .sla-dl-col { text-align: center; }
-      #view-vendor-ext .sla-dl-col .sla-dl-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
-      #view-vendor-ext .sla-dl-col .sla-dl-date { font-size: 16px; font-weight: 700; font-family: var(--mono); letter-spacing: -.5px; }
-      #view-vendor-ext .sla-dl-col .sla-dl-rel { font-size: 10px; margin-top: 4px; font-family: var(--mono); }
-      /* set-by col */
-      #view-vendor-ext .sla-setby-col { text-align: center; }
-      #view-vendor-ext .sla-setby-col .sla-setby-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 4px; }
-      #view-vendor-ext .sla-setby-col .sla-setby-name { font-size: 12px; font-weight: 500; }
-      #view-vendor-ext .sla-setby-col .sla-setby-date { font-size: 10px; color: var(--muted); margin-top: 2px; }
-      /* actions col */
-      #view-vendor-ext .sla-actions-col { display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
-      /* status left-border accent */
-      #view-vendor-ext .sla-card.sb { border-left: 3px solid var(--red); }
-      #view-vendor-ext .sla-card.sr { border-left: 3px solid var(--amber); }
-      #view-vendor-ext .sla-card.so { border-left: 3px solid var(--green); }
-      #view-vendor-ext .sla-card.sd { border-left: 3px solid var(--teal); }
-      /* expand detail strip */
-      #view-vendor-ext .sla-expand { border-top: 1px solid var(--border); background: rgba(0,0,0,.15); padding: 11px 18px; display: none; }
-      #view-vendor-ext .sla-card.open .sla-expand { display: block; }
+      #view-vendor-ext .sla-main:hover { background: rgba(255,255,255,.02); }
       #view-vendor-ext .sc { background: var(--card); border: 1px solid var(--border); border-radius: var(--r2); padding: 14px 16px; }
       #view-vendor-ext .sv { font-size: 26px; font-weight: 700; font-family: var(--mono); letter-spacing: -1px; }
       #view-vendor-ext .sl2 { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 3px; }
@@ -5436,6 +5704,9 @@ ${text.substring(0, 4000)}`
       #view-vendor-ext .vp-jd-body { padding: 14px 18px; }
 
       /* ── Overlays (modals from new file) ── */
+      /* .ov overlays — hidden by default globally, shown only with .on */
+      .ov { display: none !important; }
+      .ov.on { display: flex !important; }
       #view-vendor-ext .ov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: var(--z-modal); align-items: center; justify-content: center; }
       #view-vendor-ext .ov.on { display: flex; }
       #view-vendor-ext .modal { background: var(--card); border: 1px solid var(--border); border-radius: var(--r2); width: 540px; max-width: 95vw; max-height: 85vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -6016,6 +6287,16 @@ ${text.substring(0, 4000)}`
       .job-card-clickable:hover .job-title { color: var(--orange-light); }
       .job-title { transition: color .15s; }
       .cname { transition: color .15s; }
+
+
+      .pvw-chip {
+        font-size: 9px; font-weight: 600; color: var(--orange-light);
+        background: var(--orange-dim); border: 1px solid var(--orange);
+        padding: 2px 7px; border-radius: 20px; opacity: 0;
+        transition: opacity .15s; white-space: nowrap; flex-shrink: 0;
+      }
+      .cname-link:hover .pvw-chip { opacity: 1; }
+      .cname-link:hover .cname { color: var(--orange-light); text-decoration: underline; text-underline-offset: 3px; }
 
     </style>
   </head>
@@ -7375,113 +7656,6 @@ ${text.substring(0, 4000)}`
   </div>
 </div>
 
-<!-- MODAL: ADD VENDOR -->
-<div class="ov" id="addVendorModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;align-items:center;justify-content:center;">
-  <div class="modal" style="background:var(--card);border:1px solid var(--border);border-radius:16px;width:560px;max-width:95vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5);">
-    <!-- Header -->
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:24px 28px 20px;border-bottom:1px solid var(--border);">
-      <div>
-        <div style="font-size:18px;font-weight:700;color:var(--text);">Add New Vendor</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Set up portal access for a new sourcing partner</div>
-      </div>
-      <button onclick="var e=document.getElementById('addVendorModal');e.style.display='none';" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">✕</button>
-    </div>
-    <!-- Body -->
-    <div style="padding:24px 28px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;">
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Company Name *</label>
-        <input style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="e.g. TechGate Staffing" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-        <div>
-          <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Contact Person</label>
-          <input style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="e.g. Anil Mehta" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
-        </div>
-        <div>
-          <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Contact Email *</label>
-          <input type="email" style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="vendor@company.com" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
-        </div>
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Phone</label>
-        <input style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="+91 98765 43210" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Portal Login Email</label>
-        <input type="email" style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="Portal login credential" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Initial Status</label>
-        <select style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;cursor:pointer;" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'">
-          <option>Active</option>
-          <option>On Hold</option>
-          <option>Inactive</option>
-        </select>
-      </div>
-      <div style="background:rgba(232,135,10,.06);border:1px dashed rgba(232,135,10,.3);border-radius:10px;padding:13px 16px;font-size:12px;color:var(--muted);">
-        🔐 An invite email with portal access link will be sent to the vendor upon saving.
-      </div>
-    </div>
-    <!-- Footer -->
-    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:16px 28px;border-top:1px solid var(--border);background:var(--darker);">
-      <button onclick="var e=document.getElementById('addVendorModal');e.style.display='none';" style="padding:10px 20px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;">Cancel</button>
-      <button onclick="var e=document.getElementById('addVendorModal');e.style.display='none';if(typeof showToast==='function')showToast('Vendor created ✓');" style="padding:10px 22px;border-radius:10px;border:none;background:var(--orange);color:#fff;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Create Vendor →</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: ASSIGN JD -->
-<div class="panel-overlay" id="assignJDModal">
-  <div class="panel">
-    <div class="panel-header">
-      <div>
-        <div class="panel-title">Assign Job Description to Vendor</div>
-        <div class="panel-sub">Only the selected vendor will see this JD in their portal</div>
-      </div>
-      <button class="close-btn" onclick="closeModal('assignJDModal')">✕</button>
-    </div>
-    <div class="panel-body">
-      <div class="form-group">
-        <label class="form-label">Select Vendor *</label>
-        <select class="form-select">
-          <option>— Choose vendor —</option>
-          <option>TechGate Staffing</option>
-          <option>NextStep Solutions</option>
-          <option>RapidHire India</option>
-          <option>BridgeTalent Co.</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Select Job Description *</label>
-        <select class="form-select">
-          <option>— Choose JD —</option>
-          <option>Senior React Developer</option>
-          <option>DevOps Engineer</option>
-          <option>Product Manager</option>
-          <option>Data Analyst</option>
-          <option>UI/UX Designer</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Submission Deadline</label>
-          <input class="form-input" type="date" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Max Profiles Allowed</label>
-          <input class="form-input" type="number" placeholder="e.g. 5" />
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Note to Vendor (optional)</label>
-        <textarea class="form-textarea" placeholder="Any specific instructions for this vendor…"></textarea>
-      </div>
-    </div>
-    <div class="panel-footer">
-      <button class="btn btn-outline" onclick="closeModal('assignJDModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('assignJDModal')">Assign JD →</button>
-    </div>
-  </div>
 </div>
 
 
@@ -7802,9 +7976,9 @@ ${text.substring(0, 4000)}`
 
     <!-- Main content area -->
     <div class="tool-main" id="ztx-main">
-<div class="view" id="v-vp-vendors"><div class="ph"><div><div class="ptitle">Vendor Management</div><div class="psub">Manage your sourcing partners</div></div><div class="ph-r"><button class="btn btn-o btn-sm" onclick="ztxNavTo('v-vp-vendor-view',null)">&#128065; Preview Vendor View</button><button class="btn btn-p btn-sm" onclick="ztxOpenOv('ov-add-vendor')">+ Add Vendor</button></div></div><div class="sgrid sg4"><div class="sc"><div class="sv" style="color:var(--orange)">4</div><div class="sl2">Active Vendors</div><div class="sd up">&#8593; 1 this month</div></div><div class="sc"><div class="sv" style="color:var(--amber)">11</div><div class="sl2">JDs Assigned</div></div><div class="sc"><div class="sv" style="color:var(--green)">12</div><div class="sl2">Profiles Submitted</div></div><div class="sc"><div class="sv" style="color:var(--purple)">3</div><div class="sl2">Under Review</div></div></div><div class="scard"><div class="sch"><span class="scht">All Vendors</span><span style="font-size:10px;color:var(--muted)">&#128274; Visible only to you</span></div><div class="ti" style="padding:13px 16px"><div class="va va-md v1">TG</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7f0b1a1c17181e0b1a3f0c0b1e1919161118511c1012">[email&#160;protected]</a> &middot; Anil Mehta</div></div><span class="pill pg">Active</span><span class="pill pb">4 JDs</span><span class="pill pn">5 profiles</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-assign-jd')">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v2">NS</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2c445e6c424954585f58495c024542">[email&#160;protected]</a> &middot; Priya Sharma</div></div><span class="pill pg">Active</span><span class="pill pb">3 JDs</span><span class="pill pn">4 profiles</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-assign-jd')">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v3">RH</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">RapidHire India</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7d0f1c0d14193d15140f18531e12">[email&#160;protected]</a> &middot; Kiran Das</div></div><span class="pill pa">On Hold</span><span class="pill pb">2 JDs</span><span class="pill pn">2 profiles</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-assign-jd')">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v4">BT</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6d0f1f04090a082d190c01080319430402">[email&#160;protected]</a> &middot; Sneha Raju</div></div><span class="pill pg">Active</span><span class="pill pb">2 JDs</span><span class="pill pn">1 profiles</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-assign-jd')">+ Assign JD</button></div></div></div>
+<div class="view" id="v-vp-vendors"><div class="ph"><div><div class="ptitle">Vendor Management</div><div class="psub">Manage your sourcing partners</div></div><div class="ph-r"><button class="btn btn-o btn-sm" onclick="ztxNavTo('v-vp-vendor-view',null)">&#128065; Preview Vendor View</button><button class="btn btn-p btn-sm" onclick="openAddVendor()">+ Add Vendor</button></div></div><div class="sgrid sg4"><div class="sc"><div class="sv" style="color:var(--orange)">4</div><div class="sl2">Active Vendors</div><div class="sd up">&#8593; 1 this month</div></div><div class="sc"><div class="sv" style="color:var(--amber)">11</div><div class="sl2">JDs Assigned</div></div><div class="sc"><div class="sv" style="color:var(--green)">12</div><div class="sl2">Profiles Submitted</div></div><div class="sc"><div class="sv" style="color:var(--purple)">3</div><div class="sl2">Under Review</div></div></div><div class="scard"><div class="sch"><span class="scht">All Vendors</span><span style="font-size:10px;color:var(--muted)">&#128274; Visible only to you</span></div><div class="ti" style="padding:13px 16px"><div class="va va-md v1">TG</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7f0b1a1c17181e0b1a3f0c0b1e1919161118511c1012">[email&#160;protected]</a> &middot; Anil Mehta</div></div><span class="pill pg">Active</span><span class="pill pb">4 JDs</span><span class="pill pn">5 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v2">NS</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2c445e6c424954585f58495c024542">[email&#160;protected]</a> &middot; Priya Sharma</div></div><span class="pill pg">Active</span><span class="pill pb">3 JDs</span><span class="pill pn">4 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v3">RH</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">RapidHire India</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7d0f1c0d14193d15140f18531e12">[email&#160;protected]</a> &middot; Kiran Das</div></div><span class="pill pa">On Hold</span><span class="pill pb">2 JDs</span><span class="pill pn">2 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v4">BT</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6d0f1f04090a082d190c01080319430402">[email&#160;protected]</a> &middot; Sneha Raju</div></div><span class="pill pg">Active</span><span class="pill pb">2 JDs</span><span class="pill pn">1 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div></div></div>
 
-          <div class="view" id="v-vp-jds"><div class="ph"><div><div class="ptitle">JD Assignments</div><div class="psub">Control which vendor sees which job description</div></div><div class="ph-r"><button class="btn btn-p btn-sm" onclick="ztxOpenOv('ov-assign-jd')">+ Assign JD</button></div></div><div class="scard"><div class="sch"><span class="scht">Active JD Assignments</span></div><table class="tbl"><thead><tr><th>Job Description</th><th>Assigned Vendor</th><th>Deadline</th><th>Profiles</th><th>Status</th><th>Actions</th></tr></thead><tbody><tr><td style="font-weight:500">Senior React Dev</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v1">TG</div><span style="font-size:11px">TechGate Staffing</span></div></td><td style="font-family:var(--mono);font-size:10px">28 Mar</td><td><span class="pill pb">3 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">DevOps Engineer</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v1">TG</div><span style="font-size:11px">TechGate Staffing</span></div></td><td style="font-family:var(--mono);font-size:10px">01 Apr</td><td><span class="pill pa">1 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">Product Manager</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v2">NS</div><span style="font-size:11px">NextStep Solutions</span></div></td><td style="font-family:var(--mono);font-size:10px">05 Apr</td><td><span class="pill pn">0 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">Data Analyst</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v3">RH</div><span style="font-size:11px">RapidHire India</span></div></td><td style="font-family:var(--mono);font-size:10px">15 Mar</td><td><span class="pill pb">2 submitted</span></td><td><span class="pill pr">Closed</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">UI/UX Designer</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v4">BT</div><span style="font-size:11px">BridgeTalent Co.</span></div></td><td style="font-family:var(--mono);font-size:10px">10 Apr</td><td><span class="pill pn">1 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr></tbody></table></div></div>
+          <div class="view" id="v-vp-jds"><div class="ph"><div><div class="ptitle">JD Assignments</div><div class="psub">Control which vendor sees which job description</div></div><div class="ph-r"><button class="btn btn-p btn-sm" onclick="openAssignJD()">+ Assign JD</button></div></div><div class="scard"><div class="sch"><span class="scht">Active JD Assignments</span></div><table class="tbl"><thead><tr><th>Job Description</th><th>Assigned Vendor</th><th>Deadline</th><th>Profiles</th><th>Status</th><th>Actions</th></tr></thead><tbody><tr><td style="font-weight:500">Senior React Dev</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v1">TG</div><span style="font-size:11px">TechGate Staffing</span></div></td><td style="font-family:var(--mono);font-size:10px">28 Mar</td><td><span class="pill pb">3 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">DevOps Engineer</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v1">TG</div><span style="font-size:11px">TechGate Staffing</span></div></td><td style="font-family:var(--mono);font-size:10px">01 Apr</td><td><span class="pill pa">1 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">Product Manager</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v2">NS</div><span style="font-size:11px">NextStep Solutions</span></div></td><td style="font-family:var(--mono);font-size:10px">05 Apr</td><td><span class="pill pn">0 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">Data Analyst</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v3">RH</div><span style="font-size:11px">RapidHire India</span></div></td><td style="font-family:var(--mono);font-size:10px">15 Mar</td><td><span class="pill pb">2 submitted</span></td><td><span class="pill pr">Closed</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">UI/UX Designer</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v4">BT</div><span style="font-size:11px">BridgeTalent Co.</span></div></td><td style="font-family:var(--mono);font-size:10px">10 Apr</td><td><span class="pill pn">1 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr></tbody></table></div></div>
 
           <div class="view" id="v-vp-profiles"><div class="ph"><div><div class="ptitle">Submitted Profiles</div><div class="psub">All candidate profiles submitted by vendors</div></div><div class="ph-r"><div class="tog-row"><button class="tog-btn on">All (12)</button><button class="tog-btn">Pending (3)</button><button class="tog-btn">Shortlisted (7)</button><button class="tog-btn">Rejected (2)</button></div></div></div><div class="scard"><div class="sch"><span class="scht">Candidate Profiles</span><span style="font-size:10px;color:var(--muted)">&#128274; Only you can see these</span></div><table class="tbl"><thead><tr><th>#</th><th>Candidate</th><th>Applied For</th><th>Vendor</th><th>Experience</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead><tbody><tr><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">#001</td><td style="font-weight:500">Rahul Verma</td><td style="font-size:11px">Senior React Dev</td><td><div class="va va-sm v1">TG</div></td><td style="font-family:var(--mono);font-size:11px">6 yrs</td><td><span class="pill pg">Shortlisted</span></td><td style="font-size:10px;color:var(--muted);font-family:var(--mono)">17 Mar</td><td><button class="btn btn-g btn-xs">&#128196; Resume</button></td></tr><tr><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">#002</td><td style="font-weight:500">Sneha Iyer</td><td style="font-size:11px">DevOps Engineer</td><td><div class="va va-sm v1">TG</div></td><td style="font-family:var(--mono);font-size:11px">4 yrs</td><td><span class="pill pa">Under Review</span></td><td style="font-size:10px;color:var(--muted);font-family:var(--mono)">16 Mar</td><td><button class="btn btn-g btn-xs">&#128196; Resume</button></td></tr><tr><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">#003</td><td style="font-weight:500">Arjun Nair</td><td style="font-size:11px">UI/UX Designer</td><td><div class="va va-sm v4">BT</div></td><td style="font-family:var(--mono);font-size:11px">3 yrs</td><td><span class="pill pr">Rejected</span></td><td style="font-size:10px;color:var(--muted);font-family:var(--mono)">14 Mar</td><td><button class="btn btn-g btn-xs">&#128196; Resume</button></td></tr><tr><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">#004</td><td style="font-weight:500">Dev Kumar</td><td style="font-size:11px">ML Engineer</td><td><div class="va va-sm v2">NS</div></td><td style="font-family:var(--mono);font-size:11px">8 yrs</td><td><span class="pill pb">Screening</span></td><td style="font-size:10px;color:var(--muted);font-family:var(--mono)">12 Mar</td><td><button class="btn btn-g btn-xs">&#128196; Resume</button></td></tr></tbody></table></div></div>
 
@@ -7837,182 +8011,40 @@ ${text.substring(0, 4000)}`
   <div class="sgrid sg6"><div class="sc"><div class="sv">5</div><div class="sl2">Active SLAs</div></div><div class="sc"><div class="sv" style="color:var(--green)">2</div><div class="sl2">On Track</div></div><div class="sc"><div class="sv" style="color:var(--amber)">1</div><div class="sl2">At Risk</div></div><div class="sc"><div class="sv" style="color:var(--red)">2</div><div class="sl2">Breached</div></div><div class="sc"><div class="sv" style="color:var(--teal)">1</div><div class="sl2">Completed</div></div><div class="sc"><div class="sv" style="color:var(--orange)">3</div><div class="sl2">Nudges Sent</div></div></div>
   <div id="sla-list"><div class="sla-card sb" data-status="breach">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="va va-md v1">TG</div>
-    <div class="sla-vendor-col">
-      <div class="sla-vname">TechGate Staffing</div>
-      <div class="sla-jdname">DevOps Engineer JD</div>
-      <div style="margin-top:6px"><span class="pill pr">⚠ Breached</span></div>
-    </div>
-  </div>
-  <div class="sla-prog-col">
-    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="98.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">25%</span><span class="arc-sub">done</span></div></div>
-    <div class="sla-bar-wrap">
-      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">1 <span style="color:var(--muted);font-weight:400">/ 4</span></span></div>
-      <div class="bar"><div class="bar-fill" style="width:25%;background:var(--red)"></div></div>
-    </div>
-  </div>
-  <div class="sla-dl-col">
-    <div class="sla-dl-lbl">Deadline passed</div>
-    <div class="sla-dl-date" style="color:var(--red)">Mar 19</div>
-    <div class="sla-dl-rel" style="color:var(--red)">Today</div>
-  </div>
-  <div class="sla-setby-col">
-    <div class="sla-setby-lbl">Set by</div>
-    <div class="sla-setby-name">Riya Kapoor</div>
-    <div class="sla-setby-date">Mar 12</div>
-  </div>
-  <div class="sla-actions-col">
-    <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button>
-    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
-    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
-  </div>
-</div>
-<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 4 profiles · 1 submitted · Set by Riya Kapoor on Mar 12 · Status: ⚠ Breached</span></div>
-</div>
-
-<div class="sla-card sb" data-status="breach">
+<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v1">TG</div><div><div style="font-size:12px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)">DevOps Engineer JD</div><div style="margin-top:4px"><span class="pill pr">&#9888; Breached</span></div></div></div>
+<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="98.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">25%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>1</strong><span style="color:var(--muted)"> / 4</span></span></div><div class="bar"><div class="bar-fill" style="width:25%;background:var(--red)"></div></div></div></div>
+<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline passed</div><div class="cd-seg" style="color:var(--red);">Mar 19</div><div style="font-size:10px;color:var(--red);margin-top:5px;font-family:var(--mono)">Today</div></div>
+<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 12</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
+</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 4 profiles &middot; 1 submitted &middot; Set by Riya Kapoor on Mar 12 &middot; Status: &#9888; Breached</div></div></div><div class="sla-card sb" data-status="breach">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="va va-md v3">RH</div>
-    <div class="sla-vendor-col">
-      <div class="sla-vname">RapidHire India</div>
-      <div class="sla-jdname">Data Analyst JD</div>
-      <div style="margin-top:6px"><span class="pill pr">⚠ Breached</span></div>
-    </div>
-  </div>
-  <div class="sla-prog-col">
-    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="65.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">50%</span><span class="arc-sub">done</span></div></div>
-    <div class="sla-bar-wrap">
-      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--red)">2 <span style="color:var(--muted);font-weight:400">/ 4</span></span></div>
-      <div class="bar"><div class="bar-fill" style="width:50%;background:var(--red)"></div></div>
-    </div>
-  </div>
-  <div class="sla-dl-col">
-    <div class="sla-dl-lbl">Deadline passed</div>
-    <div class="sla-dl-date" style="color:var(--red)">Mar 15</div>
-    <div class="sla-dl-rel" style="color:var(--red)">4 days ago</div>
-  </div>
-  <div class="sla-setby-col">
-    <div class="sla-setby-lbl">Set by</div>
-    <div class="sla-setby-name">Riya Kapoor</div>
-    <div class="sla-setby-date">Mar 8</div>
-  </div>
-  <div class="sla-actions-col">
-    <button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button>
-    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
-    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
-  </div>
-</div>
-<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 4 profiles · 2 submitted · Set by Riya Kapoor on Mar 8 · Status: ⚠ Breached</span></div>
-</div>
-
-<div class="sla-card sr" data-status="risk">
+<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v3">RH</div><div><div style="font-size:12px;font-weight:600">RapidHire India</div><div style="font-size:10px;color:var(--muted)">Data Analyst JD</div><div style="margin-top:4px"><span class="pill pr">&#9888; Breached</span></div></div></div>
+<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--red)" stroke-dasharray="125.7" stroke-dashoffset="65.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--red)">50%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>2</strong><span style="color:var(--muted)"> / 4</span></span></div><div class="bar"><div class="bar-fill" style="width:50%;background:var(--red)"></div></div></div></div>
+<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline passed</div><div class="cd-seg" style="color:var(--red);">Mar 15</div><div style="font-size:10px;color:var(--red);margin-top:5px;font-family:var(--mono)">4 days ago</div></div>
+<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 8</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-danger btn-xs" onclick="event.stopPropagation();openOv('ov-escalate')">Escalate</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
+</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 4 profiles &middot; 2 submitted &middot; Set by Riya Kapoor on Mar 8 &middot; Status: &#9888; Breached</div></div></div><div class="sla-card sr" data-status="risk">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="va va-md v1">TG</div>
-    <div class="sla-vendor-col">
-      <div class="sla-vname">TechGate Staffing</div>
-      <div class="sla-jdname">Senior React Dev JD</div>
-      <div style="margin-top:6px"><span class="pill pa">⚡ At Risk</span></div>
-    </div>
-  </div>
-  <div class="sla-prog-col">
-    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--amber)" stroke-dasharray="125.7" stroke-dashoffset="52.8"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--amber)">60%</span><span class="arc-sub">done</span></div></div>
-    <div class="sla-bar-wrap">
-      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--amber)">3 <span style="color:var(--muted);font-weight:400">/ 5</span></span></div>
-      <div class="bar"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div>
-    </div>
-  </div>
-  <div class="sla-dl-col">
-    <div class="sla-dl-lbl">Deadline</div>
-    <div class="sla-dl-date" style="color:var(--amber)">Mar 22</div>
-    <div class="sla-dl-rel" style="color:var(--amber)">2d 14h left</div>
-  </div>
-  <div class="sla-setby-col">
-    <div class="sla-setby-lbl">Set by</div>
-    <div class="sla-setby-name">Riya Kapoor</div>
-    <div class="sla-setby-date">Mar 15</div>
-  </div>
-  <div class="sla-actions-col">
-    <button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button>
-    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
-    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
-  </div>
-</div>
-<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 5 profiles · 3 submitted · Set by Riya Kapoor on Mar 15 · Status: ⚡ At Risk</span></div>
-</div>
-
-<div class="sla-card so" data-status="ok">
+<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v1">TG</div><div><div style="font-size:12px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)">Senior React Dev JD</div><div style="margin-top:4px"><span class="pill pa">&#9889; At Risk</span></div></div></div>
+<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--amber)" stroke-dasharray="125.7" stroke-dashoffset="52.8"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--amber)">60%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>3</strong><span style="color:var(--muted)"> / 5</span></span></div><div class="bar"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div></div></div>
+<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline</div><div class="cd-seg" style="color:var(--amber);">Mar 22</div><div style="font-size:10px;color:var(--amber);margin-top:5px;font-family:var(--mono)">2d 14h</div></div>
+<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 15</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
+</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 5 profiles &middot; 3 submitted &middot; Set by Riya Kapoor on Mar 15 &middot; Status: &#9889; At Risk</div></div></div><div class="sla-card so" data-status="ok">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="va va-md v2">NS</div>
-    <div class="sla-vendor-col">
-      <div class="sla-vname">NextStep Solutions</div>
-      <div class="sla-jdname">Product Manager JD</div>
-      <div style="margin-top:6px"><span class="pill pg">✓ On Track</span></div>
-    </div>
-  </div>
-  <div class="sla-prog-col">
-    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--green)" stroke-dasharray="125.7" stroke-dashoffset="43.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--green)">67%</span><span class="arc-sub">done</span></div></div>
-    <div class="sla-bar-wrap">
-      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--green)">2 <span style="color:var(--muted);font-weight:400">/ 3</span></span></div>
-      <div class="bar"><div class="bar-fill" style="width:67%;background:var(--green)"></div></div>
-    </div>
-  </div>
-  <div class="sla-dl-col">
-    <div class="sla-dl-lbl">Deadline</div>
-    <div class="sla-dl-date">Apr 5</div>
-    <div class="sla-dl-rel" style="color:var(--muted)">5d 8h left</div>
-  </div>
-  <div class="sla-setby-col">
-    <div class="sla-setby-lbl">Set by</div>
-    <div class="sla-setby-name">Riya Kapoor</div>
-    <div class="sla-setby-date">Mar 14</div>
-  </div>
-  <div class="sla-actions-col">
-    <button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button>
-    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
-    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
-  </div>
-</div>
-<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 3 profiles · 2 submitted · Set by Riya Kapoor on Mar 14 · Status: ✓ On Track</span></div>
-</div>
-
-<div class="sla-card sd" data-status="done">
+<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v2">NS</div><div><div style="font-size:12px;font-weight:600">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)">Product Manager JD</div><div style="margin-top:4px"><span class="pill pg">&#10003; On Track</span></div></div></div>
+<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--green)" stroke-dasharray="125.7" stroke-dashoffset="43.9"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--green)">67%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>2</strong><span style="color:var(--muted)"> / 3</span></span></div><div class="bar"><div class="bar-fill" style="width:67%;background:var(--green)"></div></div></div></div>
+<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Deadline</div><div class="cd-seg" style="">Apr 5</div><div style="font-size:10px;margin-top:5px;font-family:var(--mono)">5d 8h</div></div>
+<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 14</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-warn btn-xs" onclick="event.stopPropagation();showToast('Nudge sent','o')">Nudge Now</button><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
+</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 3 profiles &middot; 2 submitted &middot; Set by Riya Kapoor on Mar 14 &middot; Status: &#10003; On Track</div></div></div><div class="sla-card sd" data-status="done">
 <div class="sla-main" onclick="toggleSLA(this.parentElement)">
-  <div style="display:flex;align-items:center;gap:10px">
-    <div class="va va-md v4">BT</div>
-    <div class="sla-vendor-col">
-      <div class="sla-vname">BridgeTalent Co.</div>
-      <div class="sla-jdname">UI/UX Designer JD</div>
-      <div style="margin-top:6px"><span class="pill pt2">✓ Completed</span></div>
-    </div>
-  </div>
-  <div class="sla-prog-col">
-    <div class="sla-arc"><svg width="52" height="52" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--teal)" stroke-dasharray="125.7" stroke-dashoffset="0"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--teal)">100%</span><span class="arc-sub">done</span></div></div>
-    <div class="sla-bar-wrap">
-      <div class="sla-bar-label"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:12px;font-family:var(--mono);font-weight:600;color:var(--teal)">3 <span style="color:var(--muted);font-weight:400">/ 3</span></span></div>
-      <div class="bar"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div>
-    </div>
-  </div>
-  <div class="sla-dl-col">
-    <div class="sla-dl-lbl">Completed</div>
-    <div class="sla-dl-date" style="color:var(--teal)">Mar 18</div>
-    <div class="sla-dl-rel" style="color:var(--teal)">2 days early</div>
-  </div>
-  <div class="sla-setby-col">
-    <div class="sla-setby-lbl">Set by</div>
-    <div class="sla-setby-name">Riya Kapoor</div>
-    <div class="sla-setby-date">Mar 10</div>
-  </div>
-  <div class="sla-actions-col">
-    <button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button>
-    <button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details ▾</button>
-  </div>
-</div>
-<div class="sla-expand"><span style="font-size:11px;color:var(--muted)">SLA: 3 profiles · 3 submitted · Set by Riya Kapoor on Mar 10 · Status: ✓ Completed</span></div>
-</div></div>
+<div style="display:flex;align-items:center;gap:9px"><div class="va va-md v4">BT</div><div><div style="font-size:12px;font-weight:600">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)">UI/UX Designer JD</div><div style="margin-top:4px"><span class="pill pt2">&#10003; Completed</span></div></div></div>
+<div style="display:flex;align-items:center;gap:10px"><div class="arc-wrap"><svg width="50" height="50" viewBox="0 0 50 50"><circle class="arc-bg" cx="25" cy="25" r="20"/><circle class="arc-fill" cx="25" cy="25" r="20" stroke="var(--teal)" stroke-dasharray="125.7" stroke-dashoffset="0"/></svg><div class="arc-label"><span class="arc-pct" style="color:var(--teal)">100%</span><span class="arc-sub">done</span></div></div><div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--muted)">Submitted</span><span style="font-size:11px;font-family:var(--mono)"><strong>3</strong><span style="color:var(--muted)"> / 3</span></span></div><div class="bar"><div class="bar-fill" style="width:100%;background:var(--teal)"></div></div></div></div>
+<div style="text-align:center"><div style="font-size:10px;color:var(--muted);margin-bottom:5px;text-transform:uppercase">Completed</div><div class="cd-seg" style="color:var(--teal);">Mar 18</div><div style="font-size:10px;color:var(--teal);margin-top:5px;font-family:var(--mono)">2 days early</div></div>
+<div style="text-align:right"><div style="font-size:10px;color:var(--muted)">Set by</div><div style="font-size:11px;font-weight:500;margin-top:2px">Riya Kapoor</div><div style="font-size:10px;color:var(--muted)">Mar 10</div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><button class="btn btn-o btn-xs" onclick="event.stopPropagation();openOv('ov-new-sla')">Edit SLA</button><button class="btn btn-g btn-xs" onclick="event.stopPropagation();toggleSLA(this.closest('.sla-card'))">Details &#9660;</button></div>
+</div><div class="sla-expand"><div style="padding:14px 16px;font-size:11px;color:var(--muted)">SLA: 3 profiles &middot; 3 submitted &middot; Set by Riya Kapoor on Mar 10 &middot; Status: &#10003; Completed</div></div></div></div>
 </div>
 
           <div class="view" id="v-ratings"><div class="ph"><div><div class="ptitle">Vendor Ratings</div><div class="psub">Score vendors on 5 dimensions after each placement</div></div><div class="ph-r"><button class="btn btn-p btn-sm" onclick="ztxOpenOv('ov-rate')">+ Add Rating</button></div></div><div class="g2"><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v1">TG</div><div><div style="font-weight:600;font-size:13px">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)">12 placements &middot; 4 ratings</div></div></div><div class="ring ring-md" style="background:var(--gdim);border:2px solid var(--green);color:var(--green)">4.2</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:90%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.5</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:80%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:84%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:92%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.6</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v2">NS</div><div><div style="font-weight:600;font-size:13px">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)">8 placements &middot; 3 ratings</div></div></div><div class="ring ring-md" style="background:var(--gdim);border:2px solid var(--green);color:var(--green)">3.9</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:82%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.1</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:72%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.6</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:84%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">4.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v3">RH</div><div><div style="font-weight:600;font-size:13px">RapidHire India</div><div style="font-size:10px;color:var(--muted)">5 placements &middot; 2 ratings</div></div></div><div class="ring ring-md" style="background:var(--adim);border:2px solid var(--amber);color:var(--amber)">3.3</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:70%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.5</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:60%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:64%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:76%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.8</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div><div class="rcard"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="display:flex;align-items:center;gap:10px"><div class="va va-md v4">BT</div><div><div style="font-weight:600;font-size:13px">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)">3 placements &middot; 1 rating</div></div></div><div class="ring ring-md" style="background:var(--rdim);border:2px solid var(--red);color:var(--red)">3.1</div></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Speed of Submission</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:64%;background:var(--orange)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.2</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Profile Quality</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:56%;background:var(--teal)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">2.8</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Communication</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:70%;background:var(--purple)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.5</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Backout Rate</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:60%;background:var(--amber)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.0</span></div><div style="display:flex;align-items:center;gap:10px;margin-bottom:7px"><span style="font-size:11px;color:var(--muted);width:150px;flex-shrink:0">Compliance</span><div class="bar" style="flex:1"><div class="bar-fill" style="width:64%;background:var(--green)"></div></div><span style="font-size:11px;font-family:var(--mono);width:20px;text-align:right">3.2</span></div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"><span style="font-size:10px;color:var(--muted)">Last rated Mar 15</span><button class="btn btn-g btn-xs" onclick="ztxOpenOv('ov-rate')">Rate again</button></div></div></div></div>
@@ -8060,6 +8092,10 @@ ${text.substring(0, 4000)}`
             </div>
 
             <!-- Modals / overlays -->
+            
+<div class="toast" id="toast"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span id="toast-msg">Done</span></div>
+
+            <!-- Toast notification -->
             <div class="ov" id="ov-notif"><div class="modal" style="width:380px"><div class="mh"><div><div class="mt">Notifications</div></div><button class="cx" onclick="ztxCloseOv('ov-notif')">&#10005;</button></div><div><div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)"><span style="font-size:15px">&#128308;</span><div><div style="font-size:12px">DevOps JD SLA breached &mdash; TechGate</div><div style="font-size:10px;color:var(--muted)">Today</div></div></div><div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)"><span style="font-size:15px">&#128993;</span><div><div style="font-size:12px">React Dev SLA at risk &mdash; 2 profiles remaining</div><div style="font-size:10px;color:var(--muted)">4h ago</div></div></div><div style="display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)"><span style="font-size:15px">&#9989;</span><div><div style="font-size:12px">Approval needed: Rahul Verma offer letter</div><div style="font-size:10px;color:var(--muted)">5h ago</div></div></div><div style="display:flex;gap:10px;padding:12px 16px"><span style="font-size:15px">&#128233;</span><div><div style="font-size:12px">3 new profiles from NextStep Solutions</div><div style="font-size:10px;color:var(--muted)">Yesterday</div></div></div></div><div class="mf"><button class="btn btn-g btn-sm" onclick="ztxCloseOv('ov-notif')">Mark all read</button></div></div></div>
 
 <div class="ov" id="ov-new-sla"><div class="modal modal-lg"><div class="mh"><div><div class="mt">Set SLA Target</div><div class="ms">Define expectations per vendor per JD &mdash; private to you</div></div><button class="cx" onclick="ztxCloseOv('ov-new-sla')">&#10005;</button></div><div class="mb"><div class="fr"><div class="fg"><label class="fl">Vendor *</label><select class="fs" id="sl-vendor" onchange="updateSLAPreview()"><option value="">&#8212; Select vendor &#8212;</option><option>TechGate Staffing</option><option>NextStep Solutions</option><option>RapidHire India</option><option>BridgeTalent Co.</option></select></div><div class="fg"><label class="fl">Job Description *</label><select class="fs" id="sl-jd" onchange="updateSLAPreview()"><option value="">&#8212; Select JD &#8212;</option><option>Senior React Developer</option><option>DevOps Engineer</option><option>Product Manager</option><option>Data Analyst</option></select></div></div><div class="fg"><label class="fl">Profile Target</label><div class="rw"><input type="range" min="1" max="20" value="5" id="sl-prof" step="1" oninput="document.getElementById('rv-prof').textContent=this.value;updateSLAPreview()"/><span class="rv" id="rv-prof">5</span><span style="font-size:11px;color:var(--muted)">profiles</span></div></div><div class="fg"><label class="fl">Submission Window (days)</label><div class="rw"><input type="range" min="1" max="30" value="7" id="sl-days" step="1" oninput="document.getElementById('rv-days').textContent=this.value;updateSLADeadline();updateSLAPreview()"/><span class="rv" id="rv-days">7</span><span style="font-size:11px;color:var(--muted)">days</span></div></div><div style="background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:13px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:var(--muted)">Calculated deadline</span><span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--orange)" id="sla-deadline">Mar 26, 2026</span></div><div class="fg"><label class="fl">At-Risk Threshold (days before deadline)</label><div class="rw"><input type="range" min="1" max="7" value="2" id="sl-risk" step="1" oninput="document.getElementById('rv-risk').textContent=this.value;updateSLAPreview()"/><span class="rv" id="rv-risk">2</span><span style="font-size:11px;color:var(--muted)">days before deadline</span></div></div><div class="fg"><label class="fl">Auto-Nudge</label><div style="display:flex;gap:8px;flex-wrap:wrap"><label class="rl"><input type="radio" name="nudge" value="0"/>No nudge</label><label class="rl"><input type="radio" name="nudge" value="1"/>WhatsApp</label><label class="rl"><input type="radio" name="nudge" value="2"/>Email</label><label class="rl"><input type="radio" name="nudge" value="3" checked/>WhatsApp + Email</label></div></div><div class="fg"><label class="fl">Private Note</label><textarea class="fta" placeholder="Notes not shared with vendor..."></textarea></div><div class="preview-box"><div class="pb-lbl">SLA Preview</div><p id="sla-preview"><em style="color:var(--muted)">Select a vendor and JD to see the preview&#8230;</em></p></div></div><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-new-sla')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-new-sla');showToast('SLA target saved','o')">Save SLA Target &#8594;</button></div></div></div>
@@ -8078,7 +8114,7 @@ ${text.substring(0, 4000)}`
 
 <div class="ov" id="ov-submit-profile"><div class="modal"><div class="mh"><div><div class="mt">Submit Candidate Profile</div><div class="ms">For: Senior React Developer &middot; TechGate Staffing</div></div><button class="cx" onclick="ztxCloseOv('ov-submit-profile')">&#10005;</button></div><div class="mb"><div class="fr"><div class="fg"><label class="fl">First Name *</label><input class="fi" placeholder="e.g. Rohit"/></div><div class="fg"><label class="fl">Last Name</label><input class="fi" placeholder="e.g. Sharma"/></div></div><div class="fr"><div class="fg"><label class="fl">Email *</label><input class="fi" type="email" placeholder="candidate@email.com"/></div><div class="fg"><label class="fl">Phone</label><input class="fi" placeholder="+91 98765 43210"/></div></div><div class="fr"><div class="fg"><label class="fl">Experience (years)</label><input class="fi" type="number" placeholder="6"/></div><div class="fg"><label class="fl">Current CTC (LPA)</label><input class="fi" placeholder="e.g. 18"/></div></div><div class="fg"><label class="fl">Resume / CV *</label><div class="fdrop" onclick="this.querySelector('input').click()"><input type="file" style="display:none"/>&#128206; Click to upload PDF or Word document</div></div></div><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-submit-profile')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-submit-profile');showToast('Profile submitted','o')">Submit Profile &#8594;</button></div></div></div>
 
-<div class="ov" id="ov-add-vendor"><div class="modal"><div class="mh"><div><div class="mt">Add New Vendor</div></div><button class="cx" onclick="ztxCloseOv('ov-add-vendor')">&#10005;</button></div><div class="mb"><div class="fg"><label class="fl">Company Name *</label><input class="fi" placeholder="e.g. TechGate Staffing"/></div><div class="fr"><div class="fg"><label class="fl">Contact Person</label><input class="fi" placeholder="e.g. Anil Mehta"/></div><div class="fg"><label class="fl">Contact Email *</label><input class="fi" type="email" placeholder="vendor@company.com"/></div></div><div class="fr"><div class="fg"><label class="fl">Phone</label><input class="fi" placeholder="+91 98765 43210"/></div><div class="fg"><label class="fl">Status</label><select class="fs"><option>Active</option><option>On Hold</option></select></div></div></div><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-add-vendor')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-add-vendor');showToast('Vendor created','o')">Create Vendor &#8594;</button></div></div></div>
+<!-- ov-add-vendor redirected to addVendorModal --><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-add-vendor')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-add-vendor');showToast('Vendor created','o')">Create Vendor &#8594;</button></div></div></div>
 
 <div class="ov" id="ov-assign-jd"><div class="modal"><div class="mh"><div><div class="mt">Assign JD to Vendor</div></div><button class="cx" onclick="ztxCloseOv('ov-assign-jd')">&#10005;</button></div><div class="mb"><div class="fg"><label class="fl">Vendor *</label><select class="fs"><option>&#8212; Choose vendor &#8212;</option><option>TechGate Staffing</option><option>NextStep Solutions</option><option>RapidHire India</option><option>BridgeTalent Co.</option></select></div><div class="fg"><label class="fl">Job Description *</label><select class="fs"><option>&#8212; Choose JD &#8212;</option><option>Senior React Developer</option><option>DevOps Engineer</option><option>Product Manager</option></select></div><div class="fr"><div class="fg"><label class="fl">Submission Deadline</label><input class="fi" type="date"/></div><div class="fg"><label class="fl">Max Profiles</label><input class="fi" type="number" placeholder="5"/></div></div></div><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-assign-jd')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-assign-jd');showToast('JD assigned','o')">Assign JD &#8594;</button></div></div></div>
 
@@ -8097,11 +8133,7 @@ ${text.substring(0, 4000)}`
 <div class="ov" id="ov-cph"><div class="modal"><div class="mh"><div><div class="mt">Edit CPH Assumptions</div></div><button class="cx" onclick="ztxCloseOv('ov-cph')">&#10005;</button></div><div class="mb"><div class="fg"><label class="fl">Vendor Fee % of CTC</label><input class="fi" type="number" value="8.33" step="0.01"/></div><div class="fr"><div class="fg"><label class="fl">Recruiter Hourly Rate (&#8377;)</label><input class="fi" type="number" value="1200"/></div><div class="fg"><label class="fl">Avg Hours / Hire</label><input class="fi" type="number" value="7"/></div></div><div class="fr"><div class="fg"><label class="fl">Platform Overhead (&#8377;)</label><input class="fi" type="number" value="5000"/></div><div class="fg"><label class="fl">BGC Cost (&#8377;)</label><input class="fi" type="number" value="2500"/></div></div></div><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-cph')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-cph');showToast('Assumptions saved','o')">Save &#8594;</button></div></div></div>
 
 <div class="ov" id="ov-hc"><div class="modal"><div class="mh"><div><div class="mt">Add Role to Headcount Plan</div></div><button class="cx" onclick="ztxCloseOv('ov-hc')">&#10005;</button></div><div class="mb"><div class="fg"><label class="fl">Role Title *</label><input class="fi" placeholder="e.g. Senior Backend Engineer"/></div><div class="fr"><div class="fg"><label class="fl">Department</label><input class="fi" placeholder="Engineering"/></div><div class="fg"><label class="fl">Priority</label><select class="fs"><option>High</option><option>Medium</option><option>Low</option></select></div></div><div class="fr"><div class="fg"><label class="fl">Assign Vendor</label><select class="fs"><option>TechGate Staffing</option><option>NextStep Solutions</option></select></div><div class="fg"><label class="fl">Target Join Date</label><input class="fi" type="date"/></div></div></div><div class="mf"><button class="btn btn-o" onclick="ztxCloseOv('ov-hc')">Cancel</button><button class="btn btn-p" onclick="ztxCloseOv('ov-hc');showToast('Role added','o')">Add Role &#8594;</button></div></div></div>
-
-<div class="toast" id="toast"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><span id="toast-msg">Done</span></div>
-
-            <!-- Toast notification -->
-            <div id="ztx-toast"><span id="ztx-toast-msg"></span></div>
+<div id="ztx-toast"><span id="ztx-toast-msg"></span></div>
           </div>
 
           <
@@ -8737,11 +8769,11 @@ ${text.substring(0, 4000)}`
       /* ═══ VENDOR PORTAL MISSING FUNCTIONS ═══ */
       window.openAddVendor = function() {
         var m = document.getElementById('addVendorModal');
-        if (m) { m.style.display = 'flex'; }
+        if (m) { m.style.display = ''; m.classList.add('open'); }
       };
       window.openAssignJD = function() {
         var m = document.getElementById('assignJDModal');
-        if (m) { m.style.display = 'flex'; m.classList.add('open'); }
+        if (m) { m.style.display = ''; m.classList.add('open'); }
       };
       window.switchView = function(viewType) {
         // Toggle between recruiter view and vendor view inside view-vendor
@@ -8754,6 +8786,29 @@ ${text.substring(0, 4000)}`
           if (vv) vv.style.display = 'none';
           if (rv) rv.style.display = '';
         }
+      };
+
+
+      /* ═══ VENDOR FORM SAVE ═══ */
+      window.saveNewVendor = function() {
+        const company = (document.getElementById('av-company')?.value || '').trim();
+        const email   = (document.getElementById('av-email')?.value  || '').trim();
+        if (!company) { showToast('Company name is required', 'error'); return; }
+        if (!email)   { showToast('Contact email is required', 'error'); return; }
+        const btn = document.getElementById('create-vendor-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+        // Reset form and close
+        setTimeout(function() {
+          ['av-company','av-contact','av-email','av-phone','av-spec','av-login','av-notes'].forEach(function(id) {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+          });
+          const statusEl = document.getElementById('av-status');
+          if (statusEl) statusEl.value = 'Active';
+          if (btn) { btn.disabled = false; btn.textContent = 'Create Vendor →'; }
+          closeModal('addVendorModal');
+          showToast('✅ Vendor "' + company + '" created successfully', 'success');
+        }, 600);
       };
 
       window.goToDashboard = function() {
@@ -9566,319 +9621,119 @@ function showView(id, el) {
 
     </script>
 
-<div class="pvw-overlay" id="pvw-cand" onclick="if(event.target===this)closeCandPvw()">
-  <div class="pvw-sheet">
-    <div class="pvw-head">
-      <div class="pvw-av pvw-av-cand" id="pvw-c-av">?</div>
-      <div style="flex:1;min-width:0">
-        <div class="pvw-head-title" id="pvw-c-name">—</div>
-        <div class="pvw-head-sub" id="pvw-c-sub">—</div>
-      </div>
-      <span id="pvw-c-stage" style="margin-top:2px"></span>
-      <button class="pvw-close" onclick="closeCandPvw()">✕</button>
+
+<!-- VENDOR MODALS (global - accessible from all views) -->
+<!-- MODAL: ADD VENDOR -->
+<div class="modal-overlay" id="addVendorModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add New Vendor</div>
+      <button class="modal-close" onclick="closeModal('addVendorModal')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </div>
-    <div class="pvw-body">
-      <div class="pvw-section">
-        <div class="pvw-section-lbl">Contact &amp; Details</div>
-        <div class="pvw-grid2">
-          <div><div class="pvw-field-lbl">Email</div><div class="pvw-field-val" id="pvw-c-email">—</div></div>
-          <div><div class="pvw-field-lbl">Phone</div><div class="pvw-field-val" id="pvw-c-phone">—</div></div>
-          <div><div class="pvw-field-lbl">Experience</div><div class="pvw-field-val" id="pvw-c-exp">—</div></div>
-          <div><div class="pvw-field-lbl">Vendor / Agency</div><div class="pvw-field-val" id="pvw-c-vendor">—</div></div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Company Name *</label>
+        <input class="form-input" id="av-company" placeholder="e.g. TechGate Staffing" style="width:100%;" />
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px;">
+        <div class="form-group">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Contact Person</label>
+          <input class="form-input" id="av-contact" placeholder="e.g. Anil Mehta" style="width:100%;" />
+        </div>
+        <div class="form-group">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Contact Email *</label>
+          <input class="form-input" id="av-email" type="email" placeholder="vendor@company.com" style="width:100%;" />
         </div>
       </div>
-      <div class="pvw-section">
-        <div class="pvw-section-lbl">Applied For</div>
-        <div class="pvw-field-val" id="pvw-c-job">—</div>
-      </div>
-      <div class="pvw-section" id="pvw-c-skills-sec">
-        <div class="pvw-section-lbl">Skills</div>
-        <div class="pvw-tags" id="pvw-c-skills"></div>
-      </div>
-      <div class="pvw-section" id="pvw-c-notes-sec" style="display:none">
-        <div class="pvw-section-lbl">Notes</div>
-        <div class="pvw-note" id="pvw-c-notes"></div>
-      </div>
-      <div class="pvw-section" id="pvw-c-iv-sec" style="display:none">
-        <div class="pvw-section-lbl">Interview Scheduled</div>
-        <div class="pvw-grid2">
-          <div><div class="pvw-field-lbl">Date</div><div class="pvw-field-val" id="pvw-c-idate">—</div></div>
-          <div><div class="pvw-field-lbl">Time</div><div class="pvw-field-val" id="pvw-c-itime">—</div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px;">
+        <div class="form-group">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Phone</label>
+          <input class="form-input" id="av-phone" placeholder="+91 98765 43210" style="width:100%;" />
+        </div>
+        <div class="form-group">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Specialisation</label>
+          <input class="form-input" id="av-spec" placeholder="e.g. IT, Finance, Healthcare" style="width:100%;" />
         </div>
       </div>
-      <div class="pvw-section">
-        <div class="pvw-section-lbl">Resume</div>
-        <div id="pvw-c-resume-slot"></div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Portal Login Email</label>
+        <input class="form-input" id="av-login" type="email" placeholder="Portal login credential" style="width:100%;" />
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Initial Status</label>
+        <select class="form-select" id="av-status" style="width:100%;">
+          <option value="Active">Active</option>
+          <option value="On Hold">On Hold</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Notes</label>
+        <textarea class="form-input" id="av-notes" placeholder="Any additional notes about this vendor..." style="width:100%;height:70px;resize:vertical;"></textarea>
+      </div>
+      <div style="background:var(--surface);border:1px dashed var(--border);border-radius:9px;padding:13px 16px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;">
+        🔐 An invite email with portal access link will be sent to the vendor upon saving.
       </div>
     </div>
-    <div class="pvw-foot">
-      <div style="display:flex;gap:8px">
-        <button class="pvw-btn pvw-btn-primary" onclick="pvwCandEdit()">✏️ Edit</button>
-        <button class="pvw-btn pvw-btn-ghost" id="pvw-c-dl-btn" onclick="pvwCandDownload()">⬇️ Resume</button>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="pvw-btn pvw-btn-blue"  onclick="pvwCandInvite()">✉️ Invite</button>
-        <button class="pvw-btn pvw-btn-green"  onclick="pvwCandOffer()">📄 Offer</button>
-      </div>
+    <div class="modal-footer">
+      <button class="btn" style="background:var(--card);border:1px solid var(--border);color:var(--text);" onclick="closeModal('addVendorModal')">Cancel</button>
+      <button class="btn btn-primary" id="create-vendor-btn" onclick="saveNewVendor()">Create Vendor →</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════
-     JOB PROFILE PREVIEW MODAL
-════════════════════════════════════════════════════ -->
-<div class="pvw-overlay" id="pvw-job" onclick="if(event.target===this)closeJobPvw()">
-  <div class="pvw-sheet">
-    <div class="pvw-head">
-      <div class="pvw-av pvw-av-job">💼</div>
-      <div style="flex:1;min-width:0">
-        <div class="pvw-head-title" id="pvw-j-title">—</div>
-        <div class="pvw-head-sub"   id="pvw-j-sub">—</div>
-      </div>
-      <span id="pvw-j-status" style="margin-top:2px"></span>
-      <button class="pvw-close" onclick="closeJobPvw()">✕</button>
+<!-- MODAL: ASSIGN JD -->
+<div class="modal-overlay" id="assignJDModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Assign JD to Vendor</div>
+      <button class="modal-close" onclick="closeModal('assignJDModal')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
     </div>
-    <div class="pvw-body">
-      <div class="pvw-section">
-        <div class="pvw-section-lbl">Overview</div>
-        <div class="pvw-grid2">
-          <div><div class="pvw-field-lbl">Department</div><div class="pvw-field-val" id="pvw-j-dept">—</div></div>
-          <div><div class="pvw-field-lbl">Type</div><div class="pvw-field-val" id="pvw-j-type">—</div></div>
-          <div><div class="pvw-field-lbl">Location</div><div class="pvw-field-val" id="pvw-j-loc">—</div></div>
-          <div>
-            <div class="pvw-field-lbl">Applicants</div>
-            <div class="pvw-field-val" id="pvw-j-count" style="font-size:22px;font-weight:700;color:var(--orange-light)">0</div>
-          </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Select Vendor *</label>
+        <select class="form-select" id="ajd-vendor" style="width:100%;">
+          <option value="">— Choose vendor —</option>
+          <option>TechGate Staffing</option>
+          <option>NextStep Solutions</option>
+          <option>RapidHire India</option>
+          <option>BridgeTalent Co.</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Select Job Description *</label>
+        <select class="form-select" id="ajd-jd" style="width:100%;">
+          <option value="">— Choose JD —</option>
+          <option>Senior React Developer</option>
+          <option>DevOps Engineer</option>
+          <option>Product Manager</option>
+          <option>Data Analyst</option>
+          <option>UI/UX Designer</option>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px;">
+        <div class="form-group">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Submission Deadline</label>
+          <input class="form-input" id="ajd-deadline" type="date" style="width:100%;" />
+        </div>
+        <div class="form-group">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Max Profiles Allowed</label>
+          <input class="form-input" id="ajd-max" type="number" placeholder="e.g. 5" style="width:100%;" />
         </div>
       </div>
-      <div class="pvw-section" id="pvw-j-desc-sec">
-        <div class="pvw-section-lbl">Job Description</div>
-        <div class="pvw-note" id="pvw-j-desc"></div>
-      </div>
-      <div class="pvw-section" id="pvw-j-boards-sec" style="display:none">
-        <div class="pvw-section-lbl">Posted On</div>
-        <div class="pvw-tags" id="pvw-j-boards"></div>
-      </div>
-      <div class="pvw-section">
-        <div class="pvw-section-lbl">Applicants</div>
-        <div id="pvw-j-applist"><div style="color:var(--muted);font-size:12px">No applicants yet</div></div>
+      <div class="form-group" style="margin-bottom:4px;">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Note to Vendor (optional)</label>
+        <textarea class="form-input" id="ajd-note" placeholder="Any specific instructions for this vendor…" style="width:100%;height:80px;resize:vertical;"></textarea>
       </div>
     </div>
-    <div class="pvw-foot">
-      <div style="display:flex;gap:8px">
-        <button class="pvw-btn pvw-btn-primary" onclick="pvwJobEdit()">✏️ Edit Job</button>
-        <button class="pvw-btn pvw-btn-ghost" id="pvw-j-dl-btn" onclick="pvwJobDownload()">⬇️ JD</button>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="pvw-btn pvw-btn-green"  onclick="pvwJobStatus('Open')">▶ Open</button>
-        <button class="pvw-btn pvw-btn-amber"  onclick="pvwJobStatus('Paused')">⏸ Pause</button>
-        <button class="pvw-btn pvw-btn-red"    onclick="pvwJobStatus('Closed')">✕ Close</button>
-      </div>
+    <div class="modal-footer">
+      <button class="btn" style="background:var(--card);border:1px solid var(--border);color:var(--text);" onclick="closeModal('assignJDModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('assignJDModal');showToast('JD assigned successfully','success')">Assign JD →</button>
     </div>
   </div>
-</div>
-
-<script>
-/* ═══ CANDIDATE PREVIEW ══════════════════════════════ */
-var _pvwCandId = null;
-
-window.openCandPreview = function(id) {
-  var cand = (window.candidates||[]).find(function(x){return x.id===id;});
-  if (!cand) return;
-  _pvwCandId = id;
-  var job = (window.jobs||[]).find(function(j){return j.id===cand.jobId;});
-
-  // Avatar
-  var av = ((cand.firstName||'')[0]||'').toUpperCase() + ((cand.lastName||'')[0]||'').toUpperCase();
-  document.getElementById('pvw-c-av').textContent = av || '?';
-  document.getElementById('pvw-c-name').textContent = ((cand.firstName||'')+' '+(cand.lastName||'')).trim() || '—';
-  document.getElementById('pvw-c-sub').textContent = job ? job.title : 'No job assigned';
-  document.getElementById('pvw-c-stage').innerHTML = typeof stageBadge==='function' ? stageBadge(cand.stage) : (cand.stage||'');
-
-  // Contact
-  document.getElementById('pvw-c-email').textContent  = cand.email  || '—';
-  document.getElementById('pvw-c-phone').textContent  = cand.phone  || '—';
-  document.getElementById('pvw-c-exp').textContent    = cand.experience ? cand.experience+' yrs' : '—';
-  document.getElementById('pvw-c-vendor').textContent = cand.vendor || '—';
-  document.getElementById('pvw-c-job').textContent    = job ? job.title : '—';
-
-  // Skills
-  var skillsSec = document.getElementById('pvw-c-skills-sec');
-  var skillsEl  = document.getElementById('pvw-c-skills');
-  if (cand.skills) {
-    skillsEl.innerHTML = cand.skills.split(',').map(function(s){
-      s=s.trim(); if(!s)return'';
-      return '<span class="pvw-tag">'+s.replace(/</g,'&lt;')+'</span>';
-    }).join('');
-    skillsSec.style.display='';
-  } else { skillsSec.style.display='none'; }
-
-  // Notes
-  var notesSec = document.getElementById('pvw-c-notes-sec');
-  if (cand.notes) {
-    document.getElementById('pvw-c-notes').textContent = cand.notes;
-    notesSec.style.display='';
-  } else { notesSec.style.display='none'; }
-
-  // Interview
-  var ivSec = document.getElementById('pvw-c-iv-sec');
-  if (cand.interviewDate) {
-    document.getElementById('pvw-c-idate').textContent = cand.interviewDate;
-    document.getElementById('pvw-c-itime').textContent = cand.interviewTime||'—';
-    ivSec.style.display='';
-  } else { ivSec.style.display='none'; }
-
-  // Resume
-  var slot  = document.getElementById('pvw-c-resume-slot');
-  var dlBtn = document.getElementById('pvw-c-dl-btn');
-  if (cand.resumeUrl) {
-    var rname = (cand.resumeName||'Resume').replace(/</g,'&lt;');
-    slot.innerHTML = '<a href="'+cand.resumeUrl+'" target="_blank" class="file-chip" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px">📄 '+rname+' &nbsp;— click to view</a>';
-    dlBtn.disabled = false; dlBtn.style.opacity='1';
-  } else {
-    slot.innerHTML = '<span style="color:var(--muted);font-size:12px">No resume uploaded</span>';
-    dlBtn.disabled = true; dlBtn.style.opacity='0.4';
-  }
-
-  document.getElementById('pvw-cand').classList.add('open');
-};
-
-window.closeCandPvw = function() {
-  document.getElementById('pvw-cand').classList.remove('open');
-  _pvwCandId = null;
-};
-
-window.pvwCandEdit = function() {
-  var id = _pvwCandId; closeCandPvw();
-  if (id && typeof openCandModal==='function') openCandModal(id);
-};
-
-window.pvwCandDownload = function() {
-  if (!_pvwCandId) return;
-  var cand = (window.candidates||[]).find(function(x){return x.id===_pvwCandId;});
-  if (!cand||!cand.resumeUrl) { if(typeof showToast==='function') showToast('No resume uploaded','error'); return; }
-  var a=document.createElement('a'); a.href=cand.resumeUrl;
-  a.download=cand.resumeName||'resume.pdf'; a.target='_blank'; a.click();
-};
-
-window.pvwCandInvite = function() {
-  var id=_pvwCandId; closeCandPvw();
-  if (id&&typeof sendInterviewInvite==='function') sendInterviewInvite(id);
-};
-
-window.pvwCandOffer = function() {
-  var id=_pvwCandId; closeCandPvw();
-  if (id&&typeof sendOfferLetter==='function') sendOfferLetter(id);
-};
-
-/* ═══ JOB PREVIEW ════════════════════════════════════ */
-var _pvwJobId = null;
-
-window.openJobPreview = function(id) {
-  var job = (window.jobs||[]).find(function(j){return j.id===id;});
-  if (!job) return;
-  _pvwJobId = id;
-
-  var cands = (window.candidates||[]).filter(function(c){return c.jobId===id;});
-  var posted = Object.keys(job.boardPostings||{});
-  var sc  = {Open:'var(--green)', Paused:'#f59e0b', Closed:'var(--red)'};
-  var sbg = {Open:'#1A3A2D', Paused:'#3D3A00', Closed:'#3D1A1A'};
-
-  document.getElementById('pvw-j-title').textContent = job.title||'—';
-  document.getElementById('pvw-j-sub').textContent   = (job.department||'') + (job.location?' · '+job.location:'');
-  document.getElementById('pvw-j-status').innerHTML  =
-    '<span class="badge" style="background:'+sbg[job.status]+';color:'+sc[job.status]+'">'+job.status+'</span>';
-  document.getElementById('pvw-j-dept').textContent  = job.department||'—';
-  document.getElementById('pvw-j-type').textContent  = job.type||'—';
-  document.getElementById('pvw-j-loc').textContent   = job.location||'—';
-  document.getElementById('pvw-j-count').textContent = cands.length;
-
-  // Description
-  var descSec = document.getElementById('pvw-j-desc-sec');
-  if (job.description) {
-    document.getElementById('pvw-j-desc').textContent = job.description;
-    descSec.style.display='';
-  } else { descSec.style.display='none'; }
-
-  // Boards posted
-  var boardsSec = document.getElementById('pvw-j-boards-sec');
-  if (posted.length) {
-    document.getElementById('pvw-j-boards').innerHTML = posted.map(function(b){
-      var bc = typeof boardColor==='function'?boardColor(b):'#aaa';
-      var bn = typeof boardName==='function'?boardName(b):b;
-      return '<span class="pvw-tag" style="background:'+bc+'22;color:'+bc+'">'+bn+'</span>';
-    }).join('');
-    boardsSec.style.display='';
-  } else { boardsSec.style.display='none'; }
-
-  // Applicants list
-  var listEl = document.getElementById('pvw-j-applist');
-  if (cands.length) {
-    listEl.innerHTML = cands.map(function(cand){
-      var av = ((cand.firstName||'')[0]||'').toUpperCase()+((cand.lastName||'')[0]||'').toUpperCase();
-      var badge = typeof stageBadge==='function'?stageBadge(cand.stage):'';
-      var fname = (cand.firstName||'').replace(/</g,'&lt;');
-      var lname = (cand.lastName||'').replace(/</g,'&lt;');
-      var email = (cand.email||'—').replace(/</g,'&lt;');
-      return '<div class="pvw-applicant-row">'
-        +'<div style="display:flex;align-items:center;gap:10px">'
-        +'<div style="width:34px;height:34px;border-radius:50%;background:var(--orange-dim);color:var(--orange-light);display:grid;place-items:center;font-size:11px;font-weight:700;flex-shrink:0">'+av+'</div>'
-        +'<div><div style="font-size:13px;font-weight:600">'+fname+' '+lname+'</div>'
-        +'<div style="font-size:11px;color:var(--muted)">'+email+'</div></div></div>'
-        +'<div style="display:flex;align-items:center;gap:8px">'+badge
-        +'<button onclick="closeJobPvw();openCandPreview(\\"'+cand.id+'\\")" style="padding:3px 10px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">View</button>'
-        +'</div></div>';
-    }).join('');
-  } else {
-    listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px 0">No applicants yet</div>';
-  }
-
-  // JD download btn
-  var dlBtn = document.getElementById('pvw-j-dl-btn');
-  dlBtn.disabled = !job.jdUrl; dlBtn.style.opacity = job.jdUrl?'1':'0.4';
-
-  document.getElementById('pvw-job').classList.add('open');
-};
-
-window.closeJobPvw = function() {
-  document.getElementById('pvw-job').classList.remove('open');
-  _pvwJobId = null;
-};
-
-window.pvwJobEdit = function() {
-  var id=_pvwJobId; closeJobPvw();
-  if (id&&typeof openJobModal==='function') openJobModal(id);
-};
-
-window.pvwJobDownload = function() {
-  if (!_pvwJobId) return;
-  var job = (window.jobs||[]).find(function(j){return j.id===_pvwJobId;});
-  if (!job||!job.jdUrl) { if(typeof showToast==='function') showToast('No JD file uploaded','error'); return; }
-  var a=document.createElement('a'); a.href=job.jdUrl;
-  a.download=(job.title||'job-description')+'.pdf'; a.target='_blank'; a.click();
-};
-
-window.pvwJobStatus = function(status) {
-  if (!_pvwJobId) return;
-  var _updateDoc = window.updateDoc, _doc = window.doc, _db = window.db;
-  if (typeof _updateDoc==='function' && typeof _doc==='function' && _db) {
-    _updateDoc(_doc(_db,'jobs',_pvwJobId),{status:status})
-      .then(function(){ if(typeof showToast==='function') showToast('Job set to '+status); closeJobPvw(); })
-      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
-  } else {
-    if(typeof showToast==='function') showToast('Status update requires Firebase connection','error');
-  }
-};
-
-/* ═══ JOB CARD QUICK STATUS (from card buttons) ══════ */
-window.setJobStatus = function(jobId, status) {
-  var _updateDoc = window.updateDoc, _doc = window.doc, _db = window.db;
-  if (typeof _updateDoc==='function' && typeof _doc==='function' && _db) {
-    _updateDoc(_doc(_db,'jobs',jobId),{status:status})
-      .then(function(){ if(typeof showToast==='function') showToast('Job '+status.toLowerCase()); })
-      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
-  }
-};
-</script>
-</body>
+</div></body>
 </html>
