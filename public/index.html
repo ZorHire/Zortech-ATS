@@ -7376,53 +7376,56 @@ ${text.substring(0, 4000)}`
 </div>
 
 <!-- MODAL: ADD VENDOR -->
-<div class="panel-overlay" id="addVendorModal">
-  <div class="panel">
-    <div class="panel-header">
+<div class="ov" id="addVendorModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;align-items:center;justify-content:center;">
+  <div class="modal" style="background:var(--card);border:1px solid var(--border);border-radius:16px;width:560px;max-width:95vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5);">
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:24px 28px 20px;border-bottom:1px solid var(--border);">
       <div>
-        <div class="panel-title">Add New Vendor</div>
-        <div class="panel-sub">Set up portal access for a new sourcing partner</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text);">Add New Vendor</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px;">Set up portal access for a new sourcing partner</div>
       </div>
-      <button class="close-btn" onclick="closeModal('addVendorModal')">✕</button>
+      <button onclick="var e=document.getElementById('addVendorModal');e.style.display='none';" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">✕</button>
     </div>
-    <div class="panel-body">
-      <div class="form-group">
-        <label class="form-label">Company Name *</label>
-        <input class="form-input" placeholder="e.g. TechGate Staffing" />
+    <!-- Body -->
+    <div style="padding:24px 28px;overflow-y:auto;display:flex;flex-direction:column;gap:18px;">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Company Name *</label>
+        <input style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="e.g. TechGate Staffing" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">Contact Person</label>
-          <input class="form-input" placeholder="e.g. Anil Mehta" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Contact Person</label>
+          <input style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="e.g. Anil Mehta" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
         </div>
-        <div class="form-group">
-          <label class="form-label">Contact Email *</label>
-          <input class="form-input" type="email" placeholder="vendor@company.com" />
+        <div>
+          <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Contact Email *</label>
+          <input type="email" style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="vendor@company.com" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Phone</label>
-        <input class="form-input" placeholder="+91 98765 43210" />
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Phone</label>
+        <input style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="+91 98765 43210" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
       </div>
-      <div class="form-group">
-        <label class="form-label">Portal Login Email</label>
-        <input class="form-input" type="email" placeholder="Portal login credential" />
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Portal Login Email</label>
+        <input type="email" style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;" placeholder="Portal login credential" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'" />
       </div>
-      <div class="form-group">
-        <label class="form-label">Initial Status</label>
-        <select class="form-select">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:8px;">Initial Status</label>
+        <select style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;cursor:pointer;" onfocus="this.style.borderColor='var(--orange)'" onblur="this.style.borderColor='var(--border)'">
           <option>Active</option>
           <option>On Hold</option>
           <option>Inactive</option>
         </select>
       </div>
-      <div style="background:var(--surface);border:1px dashed var(--border);border-radius:8px;padding:14px;font-size:12px;color:var(--muted);">
+      <div style="background:rgba(232,135,10,.06);border:1px dashed rgba(232,135,10,.3);border-radius:10px;padding:13px 16px;font-size:12px;color:var(--muted);">
         🔐 An invite email with portal access link will be sent to the vendor upon saving.
       </div>
     </div>
-    <div class="panel-footer">
-      <button class="btn btn-outline" onclick="closeModal('addVendorModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('addVendorModal')">Create Vendor →</button>
+    <!-- Footer -->
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:16px 28px;border-top:1px solid var(--border);background:var(--darker);">
+      <button onclick="var e=document.getElementById('addVendorModal');e.style.display='none';" style="padding:10px 20px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;">Cancel</button>
+      <button onclick="var e=document.getElementById('addVendorModal');e.style.display='none';if(typeof showToast==='function')showToast('Vendor created ✓');" style="padding:10px 22px;border-radius:10px;border:none;background:var(--orange);color:#fff;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;">Create Vendor →</button>
     </div>
   </div>
 </div>
@@ -8734,7 +8737,7 @@ ${text.substring(0, 4000)}`
       /* ═══ VENDOR PORTAL MISSING FUNCTIONS ═══ */
       window.openAddVendor = function() {
         var m = document.getElementById('addVendorModal');
-        if (m) { m.style.display = 'flex'; m.classList.add('open'); }
+        if (m) { m.style.display = 'flex'; }
       };
       window.openAssignJD = function() {
         var m = document.getElementById('assignJDModal');
