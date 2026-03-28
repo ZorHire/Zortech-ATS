@@ -1,3 +1,4 @@
+FULL FIXED index.html (Production Ready)
 <!doctype html>
 <html lang="en">
   <head>
@@ -76,6 +77,15 @@
       const db = getFirestore(app);
       const storage = getStorage(app);
       const auth = getAuth(app);
+
+// ---- GLOBAL SAFE ASYNC WRAPPER ----
+function safeAsync(fn){
+  return (...args)=>fn(...args).catch(e=>{
+    console.error(e);
+    showToast(e.message || "Unexpected error","error");
+  });
+}
+
 
 
       // ── REQUIRED FIRESTORE SECURITY RULES ──────────────────────
@@ -224,6 +234,8 @@
       let currentUser = null;
       let unsubCandidates = null;
       let unsubJobs = null;
+      let vendors = [];
+      let unsubVendors = null;
 
       onAuthStateChanged(auth, (user) => {
         currentUser = user;
@@ -271,12 +283,26 @@
               showToast("DB error: " + err.message, "error");
             }
           );
+          unsubVendors = onSnapshot(
+            collection(db, "vendors"),
+            (snap) => {
+              vendors = snap.docs.map(d => ({ id : d.id, ...d.data()}));
+              window.vendors = vendors;
+
+              if (typeof renderVendors === "function") renderVendors();
+            },
+            (err) => {
+              console.error("Vendor listener error:", err);
+            }
+          );
         } else {
           // Unsubscribe listeners on logout
           if (unsubCandidates) unsubCandidates();
           if (unsubJobs) unsubJobs();
+          if (unsubVendors) unsubVendors();
           candidates = [];
           jobs = [];
+          vendors = [];
           showLogin();
         }
       });
@@ -645,7 +671,7 @@ ${text.substring(0, 4000)}`
       }
 
       // ── SAVE CANDIDATE ────────────────────────────────────────
-      window.saveCandidate = async function () {
+      window.saveCandidate = safeAsync(async function () {
         const data = {
           firstName: v("cf-first"),
           lastName: v("cf-last"),
@@ -739,10 +765,87 @@ ${text.substring(0, 4000)}`
           showToast(msg, "error");
           if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save Candidate"; saveBtn.style.background = ""; }
         }
-      };
+      });
+      // ── SAVE VENDOR ────────────────────────────────────────
+      window.saveVendor = safeAsync(async function () {
+        const data = {
+          name: v("vf-name"),
+          email: v("vf-email"),
+          phone: v("vf-phone"),
+          company: v("vf-company"),
+          createdBy: currentUser?.email || "",
+          createdByName:
+            currentUser?.displayName ||
+            currentUser?.email?.split("@")[0] ||
+            "Unknown",
+        };
 
+        if (!data.name || !data.email) {
+          showToast("Please enter vendor name and email", "error");
+          return;
+        }
+
+        const saveBtn = gel("vendor-save-btn");
+        if (saveBtn) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = "Saving…";
+        }
+
+        try {
+          // ── STEP 1: Save to Firestore ──
+          let docRef = await withTimeout(
+            addDoc(collection(db, "vendors"), {
+              ...data,
+              createdAt: serverTimestamp(),
+            }),
+            10000,
+            "Firestore write"
+          );
+
+          const savedVendorId = docRef.id;
+          console.log("Vendor saved:", savedVendorId);
+
+          // ── STEP 2: Success UI ──
+          if (saveBtn) {
+            saveBtn.textContent = "Saved ✓";
+            saveBtn.style.background = "var(--green)";
+          }
+
+          showToast("Vendor added successfully ✓");
+
+          // Close modal
+          setTimeout(() => closeModal("vendor-modal"), 800);
+
+          // ── STEP 3: Send credentials email (non-blocking) ──
+          (async () => {
+            try {
+              await sendVendorCredentialEmail(data);
+            } catch (e) {
+              console.warn("Vendor email failed:", e.message);
+            }
+          })();
+
+        } catch (e) {
+          console.error("saveVendor error:", e.code || "", e.message);
+
+          const msg =
+            e.code === "permission-denied"
+              ? "❌ Permission denied — update Firestore Rules"
+              : e.message.includes("timed out")
+              ? "❌ Connection timed out — check internet"
+              : "❌ Error: " + e.message;
+
+          showToast(msg, "error");
+
+          if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.textContent = "Save Vendor";
+            saveBtn.style.background = "";
+          }
+        }
+      });
       // ── SAVE JOB ──────────────────────────────────────────────
-      window.saveJob = async function () {
+      window.saveJob = safeAsync(async function () {
         const data = {
           title: v("jf-title"),
           department: v("jf-dept"),
@@ -823,7 +926,7 @@ ${text.substring(0, 4000)}`
           showToast(msg, "error");
           if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Save Job"; saveBtn.style.background = ""; }
         }
-      };
+      });
 
       function getCheckedBoards() {
         return [
@@ -986,6 +1089,15 @@ ${text.substring(0, 4000)}`
         }
         await deleteDoc(doc(db, "jobs", id));
         showToast("Job deleted");
+      };
+      window.deleteVendor = async function(id) {
+        if (!confirm("Delete this vendor?")) return;
+        try {
+          await deleteDoc(doc(db, "vendors", id));
+          showToast("Vendor Deleted");
+        } catch (e) {
+          showToast("Error deleting Vendor: " + e.message, "error");
+        }
       };
 
       // ── EMAIL ─────────────────────────────────────────────────
@@ -1243,6 +1355,43 @@ window.setJobStatus = function(jobId, status) {
           showToast("Email error: " + e.message, "error");
           return false;
         }
+      }
+      function generateTempPassword() {
+        return Math.random().toString(36).slice(-8);
+      }
+
+      async function sendVendorCredentialEmail(vendor) {
+        const password = generateTempPassword();
+        const html = emailTpl(
+          "Vendor Portal Access",
+          `<p class="p"> Hello <strong>${vendor.name}</strong>,</p>
+           <p class="p"> You have been added as a Vendor in Zortech ATS.</P>
+           <dic class="box">
+            <strong> Login Credentials</strong></br></br>
+            Email: ${vendor.email}</br>
+            Password: ${password}
+           </div>
+           <p class="p"> Please login and chnage your password after first login.</p>
+          `
+        );
+        const ok = await sendEmail(
+          vendor.email,
+          vendor.name,
+          "Your Vendor Access - ZorteCh ATS",
+          html
+        );
+        if (ok) {
+          showToast("Vendor credentials sent");
+        }
+        await setDoc(
+          doc(db, "users", vendor.email.replace(/[^a-zA-Z0-9]/g, "_")),
+          {
+            email: vendor.email,
+            role: "vendor",
+            name: vendor.name,
+            createdAt: serverTimestamp()
+          }
+        );
       }
 
       window.sendInterviewInvite = async function (id) {
@@ -9778,3 +9927,4 @@ if(typeof window.stageBadge === "undefined"){
   window.stageBadge = function(s){ return s || ""; };
 }
 </script>
+
