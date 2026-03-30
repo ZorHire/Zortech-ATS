@@ -2280,8 +2280,8 @@ window.setJobStatus = function(jobId, status) {
           ? filtered
               .map((c) => {
                 const j = jobs.find((x) => x.id === c.jobId);
-                return `<tr>
-      <td class="cname-link" onclick="openCandPreview('${c.id}')" title="Click to view full profile">
+                return `<tr class="hoverable-row" style="cursor:pointer" onclick="openCandPreview('${c.id}')">
+      <td class="cname-link" title="Click to view full profile">
         <div style="display:flex;align-items:center;gap:7px;">
           <div class="cname">${esc(c.firstName)} ${esc(c.lastName)}</div>
           <span class="pvw-chip">👁 Preview</span>
@@ -2294,10 +2294,10 @@ window.setJobStatus = function(jobId, status) {
       <td>${c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank" class="file-chip">📄 ${c.resumeName || "Resume"}</a>` : '<span class="csub">—</span>'}</td>
       <td class="muted">${fmtDate(c.createdAt)}</td>
       <td><div class="actions">
-        <button class="icon-btn" title="Edit" onclick="openCandModal('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
-        <button class="icon-btn email-btn" title="Interview Invite" onclick="sendInterviewInvite('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></button>
-        <button class="icon-btn offer-btn" title="Send Offer" onclick="sendOfferLetter('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></button>
-        <button class="icon-btn del-btn" title="Delete" onclick="deleteCandidate('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+        <button class="icon-btn" title="Edit" onclick="event.stopPropagation();openCandModal('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>
+        <button class="icon-btn email-btn" title="Interview Invite" onclick="event.stopPropagation();sendInterviewInvite('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></button>
+        <button class="icon-btn offer-btn" title="Send Offer" onclick="event.stopPropagation();sendOfferLetter('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></button>
+        <button class="icon-btn del-btn" title="Delete" onclick="event.stopPropagation();deleteCandidate('${c.id}')"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
       </div></td>
     </tr>`;
               })
@@ -2327,7 +2327,7 @@ window.setJobStatus = function(jobId, status) {
           sc
             .map((c) => {
               const j = jobs.find((x) => x.id === c.jobId);
-              return `<div class="kanban-card" onclick="openCandPreview('${c.id}')">
+              return `<div class="kanban-card" style="cursor:pointer; transition:transform 0.1s" onclick="openCandPreview('${c.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
             <div class="kanban-card-name">${c.firstName} ${c.lastName}</div>
             <div class="kanban-card-role">${esc(j?.title || "No job")}</div>
             ${c.resumeUrl ? `<div style="margin-top:6px"><span class="file-chip" style="font-size:10px">📄 Resume</span></div>` : ""}
@@ -9678,7 +9678,7 @@ function renderVendorTable(vendors) {
       ${vendors.map(v => {
         const conv = v.submitted > 0 ? Math.round((v.onboarded/v.submitted)*100) : 0;
         const bar = Math.round((v.submitted/maxSub)*100);
-        return `<tr>
+        return `<tr style="cursor:pointer" onclick="openVendorPreview('${v.id}')">
           <td><div style="display:flex;align-items:center;gap:10px;"><div class="vav ${v.cls}">${v.id}</div><div><div class="vname">${v.name}</div><div class="vmeta">${v.contact}</div></div></div></td>
           <td>
             <div style="font-family:var(--mono);font-size:13px;font-weight:600;">${v.submitted}</div>
@@ -9706,7 +9706,7 @@ function renderVendorDetailCards(vendors, jds) {
     const sl_rate = v.submitted > 0 ? Math.round((v.shortlisted/v.submitted)*100) : 0;
     const vJDs = jds.filter(j => j.vendor.toLowerCase().includes(v.id.toLowerCase()));
     return `
-    <div class="sc2">
+    <div class="sc2" style="cursor:pointer; transition:transform 0.1s" onclick="openVendorPreview('${v.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
       <div class="sch">
         <div style="display:flex;align-items:center;gap:12px;">
           <div class="vav ${v.cls}">${v.id}</div>
@@ -10952,7 +10952,7 @@ function renderVendorTable(vendors) {
       ${vendors.map(v => {
         const conv = v.submitted > 0 ? Math.round((v.onboarded/v.submitted)*100) : 0;
         const bar = Math.round((v.submitted/maxSub)*100);
-        return `<tr>
+        return `<tr style="cursor:pointer" onclick="openVendorPreview('${v.id}')">
           <td><div style="display:flex;align-items:center;gap:10px;"><div class="vav ${v.cls}">${v.id}</div><div><div class="vname">${v.name}</div><div class="vmeta">${v.contact}</div></div></div></td>
           <td>
             <div style="font-family:var(--mono);font-size:13px;font-weight:600;">${v.submitted}</div>
@@ -10980,7 +10980,7 @@ function renderVendorDetailCards(vendors, jds) {
     const sl_rate = v.submitted > 0 ? Math.round((v.shortlisted/v.submitted)*100) : 0;
     const vJDs = jds.filter(j => j.vendor.toLowerCase().includes(v.id.toLowerCase()));
     return `
-    <div class="sc2">
+    <div class="sc2" style="cursor:pointer; transition:transform 0.1s" onclick="openVendorPreview('${v.id}')" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
       <div class="sch">
         <div style="display:flex;align-items:center;gap:12px;">
           <div class="vav ${v.cls}">${v.id}</div>
@@ -11149,6 +11149,110 @@ function renderJDRows(jds) {
 function showView(id, el) {
   ['overview','vendor-perf','recruiter-perf','jd-breakdown'].forEach(v => {
     document.getElementById('view-'+v).style.display = v===id ? 'block' : 'none';
+  });
+  document.querySelectorAll('.sl').forEach(s => s.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  if (id === 'recruiter-perf') {
+    setTimeout(() => renderRecruiterChart(DATA[currentPeriod].recruiters), 50);
+  }
+}
+
+/* ══════ INIT ════════════════════════════════════════════════ */
+      // Expose Performance functions to window so onclick= works
+      window.switchPeriod           = switchPeriod;
+      window.renderFunnel           = renderFunnel;
+      window.renderTrendChart       = renderTrendChart;
+      window.renderVendorTable      = renderVendorTable;
+      window.renderVendorDetailCards= renderVendorDetailCards;
+      window.renderRecruiterCards   = renderRecruiterCards;
+      window.renderRecruiterChart   = renderRecruiterChart;
+      window.renderJDRows           = renderJDRows;
+      window.showView               = showView;
+      // Don't init on load (view is hidden) — init when view is opened instead
+      })();
+      /* Fallback stubs removed — module always loads before standalone */
+
+      /* ═══ VENDOR-EXT (ZTX) INTERACTIVE FUNCTIONS ═══ */
+      (function() {
+        // Tab → sidebar map
+        var tabSBMap = {
+          'vendor-portal': 'ztx-sb-vendor-portal',
+          'vendor-mgmt':   'ztx-sb-vendor-mgmt',
+          recruiter:       'ztx-sb-recruiter',
+          reporting:       'ztx-sb-reporting',
+          compliance:      'ztx-sb-compliance',
+        };
+        // Tab → first view map
+        var tabDefaultView = {
+          'vendor-portal': 'v-vp-vendors',
+          'vendor-mgmt':   'v-sla',
+          recruiter:       'v-tasks',
+          reporting:       'v-rpt-overview',
+          compliance:      'v-docs'        };
+
+        /* ── view list for vendor-ext ── */
+        var ztxViews = [
+          'v-vp-vendors','v-vp-jds','v-vp-profiles','v-vp-access','v-vp-vendor-view',
+          'v-sla','v-ratings','v-billing','v-blacklist',
+          'v-tasks','v-feedback','v-templates','v-bulk',
+          'v-rpt-overview','v-rpt-ttf','v-rpt-quality','v-rpt-headcount','v-rpt-cph','v-rpt-vendor','v-rpt-recruiter',
+          'v-docs','v-gdpr','v-approvals','v-onboard',
+        ];
+
+        /* ── Show a single view, hide all others ── */
+        window.ztxShowView = function(id) {
+          ztxViews.forEach(function(vid) {
+            var el = document.getElementById(vid);
+            if (el) el.style.display = vid === id ? 'block' : 'none';
+          });
+          // Update sidebar active state
+          document.querySelectorAll('#view-vendor-ext .tool-sidebar-link, #view-vendor-ext .si').forEach(function(l) {
+            l.classList.remove('active','on');
+          });
+          // Activate matching sidebar link
+          document.querySelectorAll('#view-vendor-ext .tool-sidebar-link, #view-vendor-ext .si').forEach(function(l) {
+            var oc = l.getAttribute('onclick') || '';
+            if (oc.indexOf("'" + id + "'") !== -1 || oc.indexOf('"' + id + '"') !== -1) {
+              l.classList.add('active');
+            }
+          });
+        };
+
+        /* ── Sub-view switcher within a tab ── */
+        window.ztxSwitchView = function(id, btn) {
+          window.ztxShowView(id);
+          // Update sidebar button active state
+          var parent = btn ? btn.closest('.sb-group') : null;
+          if (parent) {
+            parent.querySelectorAll('.tool-sidebar-link, .si').forEach(function(l) {
+              l.classList.remove('active','on');
+            });
+          }
+          if (btn) btn.classList.add('active');
+        };
+
+        /* ── Init on load: show default tab's first view ── */
+        document.addEventListener('DOMContentLoaded', function() {
+          // Init first active tab
+          var activeTab = document.querySelector('#ztx-tab-bar .ztx-tab.active, #ztx-tab-bar .tab.active');
+          if (activeTab) {
+            var tabId = activeTab.dataset.tab || activeTab.getAttribute('data-tab');
+            if (tabId) {
+              var defView = tabDefaultView[tabId] || tabDefaultView['vendor-portal'];
+              window.ztxShowView(defView);
+            }
+          } else {
+            // Default to vendor-portal
+            window.ztxShowView('v-vp-vendors');
+          }
+        });
+
+      })();
+
+</script>
+</body>
+</html>ew-'+v).style.display = v===id ? 'block' : 'none';
   });
   document.querySelectorAll('.sl').forEach(s => s.classList.remove('active'));
   if (el) el.classList.add('active');
