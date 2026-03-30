@@ -1361,206 +1361,7 @@ ${text.substring(0, 4000)}`
   </div>
 
 
-<script>
-/* ═══ CANDIDATE PREVIEW ══════════════════════════════ */
-var _pvwCandId = null;
 
-window.openCandPreview = function(id) {
-  var cand = (window.candidates||[]).find(function(x){return x.id===id;});
-  if (!cand) return;
-  _pvwCandId = id;
-  var job = (window.jobs||[]).find(function(j){return j.id===cand.jobId;});
-
-  // Avatar
-  var av = ((cand.firstName||'')[0]||'').toUpperCase() + ((cand.lastName||'')[0]||'').toUpperCase();
-  document.getElementById('pvw-c-av').textContent = av || '?';
-  document.getElementById('pvw-c-name').textContent = ((cand.firstName||'')+' '+(cand.lastName||'')).trim() || '—';
-  document.getElementById('pvw-c-sub').textContent = job ? job.title : 'No job assigned';
-  document.getElementById('pvw-c-stage').innerHTML = typeof stageBadge==='function' ? stageBadge(cand.stage) : (cand.stage||'');
-
-  // Contact
-  document.getElementById('pvw-c-email').textContent  = cand.email  || '—';
-  document.getElementById('pvw-c-phone').textContent  = cand.phone  || '—';
-  document.getElementById('pvw-c-exp').textContent    = cand.experience ? cand.experience+' yrs' : '—';
-  document.getElementById('pvw-c-vendor').textContent = cand.vendor || '—';
-  document.getElementById('pvw-c-job').textContent    = job ? job.title : '—';
-
-  // Skills
-  var skillsSec = document.getElementById('pvw-c-skills-sec');
-  var skillsEl  = document.getElementById('pvw-c-skills');
-  if (cand.skills) {
-    skillsEl.innerHTML = cand.skills.split(',').map(function(s){
-      s=s.trim(); if(!s)return'';
-      return '<span class="pvw-tag">'+s.replace(/</g,'&lt;')+'</span>';
-    }).join('');
-    skillsSec.style.display='';
-  } else { skillsSec.style.display='none'; }
-
-  // Notes
-  var notesSec = document.getElementById('pvw-c-notes-sec');
-  if (cand.notes) {
-    document.getElementById('pvw-c-notes').textContent = cand.notes;
-    notesSec.style.display='';
-  } else { notesSec.style.display='none'; }
-
-  // Interview
-  var ivSec = document.getElementById('pvw-c-iv-sec');
-  if (cand.interviewDate) {
-    document.getElementById('pvw-c-idate').textContent = cand.interviewDate;
-    document.getElementById('pvw-c-itime').textContent = cand.interviewTime||'—';
-    ivSec.style.display='';
-  } else { ivSec.style.display='none'; }
-
-  // Resume
-  var slot  = document.getElementById('pvw-c-resume-slot');
-  var dlBtn = document.getElementById('pvw-c-dl-btn');
-  if (cand.resumeUrl) {
-    var rname = (cand.resumeName||'Resume').replace(/</g,'&lt;');
-    slot.innerHTML = '<a href="'+cand.resumeUrl+'" target="_blank" class="file-chip" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px">📄 '+rname+' &nbsp;— click to view</a>';
-    dlBtn.disabled = false; dlBtn.style.opacity='1';
-  } else {
-    slot.innerHTML = '<span style="color:var(--muted);font-size:12px">No resume uploaded</span>';
-    dlBtn.disabled = true; dlBtn.style.opacity='0.4';
-  }
-
-  document.getElementById('pvw-cand').classList.add('open');
-};
-
-window.closeCandPvw = function() {
-  document.getElementById('pvw-cand').classList.remove('open');
-  _pvwCandId = null;
-};
-
-window.pvwCandEdit = function() {
-  var id = _pvwCandId; closeCandPvw();
-  if (id && typeof openCandModal==='function') openCandModal(id);
-};
-
-window.pvwCandDownload = function() {
-  if (!_pvwCandId) return;
-  var cand = (window.candidates||[]).find(function(x){return x.id===_pvwCandId;});
-  if (!cand||!cand.resumeUrl) { if(typeof showToast==='function') showToast('No resume uploaded','error'); return; }
-  var a=document.createElement('a'); a.href=cand.resumeUrl;
-  a.download=cand.resumeName||'resume.pdf'; a.target='_blank'; a.click();
-};
-
-window.pvwCandInvite = function() {
-  var id=_pvwCandId; closeCandPvw();
-  if (id&&typeof sendInterviewInvite==='function') sendInterviewInvite(id);
-};
-
-window.pvwCandOffer = function() {
-  var id=_pvwCandId; closeCandPvw();
-  if (id&&typeof sendOfferLetter==='function') sendOfferLetter(id);
-};
-
-/* ═══ JOB PREVIEW ════════════════════════════════════ */
-var _pvwJobId = null;
-
-window.openJobPreview = function(id) {
-  var job = (window.jobs||[]).find(function(j){return j.id===id;});
-  if (!job) return;
-  _pvwJobId = id;
-
-  var cands = (window.candidates||[]).filter(function(c){return c.jobId===id;});
-  var posted = Object.keys(job.boardPostings||{});
-  var sc  = {Open:'var(--green)', Paused:'#f59e0b', Closed:'var(--red)'};
-  var sbg = {Open:'#1A3A2D', Paused:'#3D3A00', Closed:'#3D1A1A'};
-
-  document.getElementById('pvw-j-title').textContent = job.title||'—';
-  document.getElementById('pvw-j-sub').textContent   = (job.department||'') + (job.location?' · '+job.location:'');
-  document.getElementById('pvw-j-status').innerHTML  =
-    '<span class="badge" style="background:'+sbg[job.status]+';color:'+sc[job.status]+'">'+job.status+'</span>';
-  document.getElementById('pvw-j-dept').textContent  = job.department||'—';
-  document.getElementById('pvw-j-type').textContent  = job.type||'—';
-  document.getElementById('pvw-j-loc').textContent   = job.location||'—';
-  document.getElementById('pvw-j-count').textContent = cands.length;
-
-  // Description
-  var descSec = document.getElementById('pvw-j-desc-sec');
-  if (job.description) {
-    document.getElementById('pvw-j-desc').textContent = job.description;
-    descSec.style.display='';
-  } else { descSec.style.display='none'; }
-
-  // Boards posted
-  var boardsSec = document.getElementById('pvw-j-boards-sec');
-  if (posted.length) {
-    document.getElementById('pvw-j-boards').innerHTML = posted.map(function(b){
-      var bc = typeof boardColor==='function'?boardColor(b):'#aaa';
-      var bn = typeof boardName==='function'?boardName(b):b;
-      return '<span class="pvw-tag" style="background:'+bc+'22;color:'+bc+'">'+bn+'</span>';
-    }).join('');
-    boardsSec.style.display='';
-  } else { boardsSec.style.display='none'; }
-
-  // Applicants list
-  var listEl = document.getElementById('pvw-j-applist');
-  if (cands.length) {
-    listEl.innerHTML = cands.map(function(cand){
-      var av = ((cand.firstName||'')[0]||'').toUpperCase()+((cand.lastName||'')[0]||'').toUpperCase();
-      var badge = typeof stageBadge==='function'?stageBadge(cand.stage):'';
-      var fname = (cand.firstName||'').replace(/</g,'&lt;');
-      var lname = (cand.lastName||'').replace(/</g,'&lt;');
-      var email = (cand.email||'—').replace(/</g,'&lt;');
-      return '<div class="pvw-applicant-row">'
-        +'<div style="display:flex;align-items:center;gap:10px">'
-        +'<div style="width:34px;height:34px;border-radius:50%;background:var(--orange-dim);color:var(--orange-light);display:grid;place-items:center;font-size:11px;font-weight:700;flex-shrink:0">'+av+'</div>'
-        +'<div><div style="font-size:13px;font-weight:600">'+fname+' '+lname+'</div>'
-        +'<div style="font-size:11px;color:var(--muted)">'+email+'</div></div></div>'
-        +'<div style="display:flex;align-items:center;gap:8px">'+badge
-        +'<button onclick="closeJobPvw();openCandPreview(''+cand.id+'')" style="padding:3px 10px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">View</button>'
-        +'</div></div>';
-    }).join('');
-  } else {
-    listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px 0">No applicants yet</div>';
-  }
-
-  // JD download btn
-  var dlBtn = document.getElementById('pvw-j-dl-btn');
-  dlBtn.disabled = !job.jdUrl; dlBtn.style.opacity = job.jdUrl?'1':'0.4';
-
-  document.getElementById('pvw-job').classList.add('open');
-};
-
-window.closeJobPvw = function() {
-  document.getElementById('pvw-job').classList.remove('open');
-  _pvwJobId = null;
-};
-
-window.pvwJobEdit = function() {
-  var id=_pvwJobId; closeJobPvw();
-  if (id&&typeof openJobModal==='function') openJobModal(id);
-};
-
-window.pvwJobDownload = function() {
-  if (!_pvwJobId) return;
-  var job = (window.jobs||[]).find(function(j){return j.id===_pvwJobId;});
-  if (!job||!job.jdUrl) { if(typeof showToast==='function') showToast('No JD file uploaded','error'); return; }
-  var a=document.createElement('a'); a.href=job.jdUrl;
-  a.download=(job.title||'job-description')+'.pdf'; a.target='_blank'; a.click();
-};
-
-window.pvwJobStatus = function(status) {
-  if (!_pvwJobId) return;
-  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
-    updateDoc(doc(db,'jobs',_pvwJobId),{status:status})
-      .then(function(){ if(typeof showToast==='function') showToast('Job set to '+status); closeJobPvw(); })
-      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
-  } else {
-    if(typeof showToast==='function') showToast('Status update requires Firebase connection','error');
-  }
-};
-
-/* ═══ JOB CARD QUICK STATUS (from card buttons) ══════ */
-window.setJobStatus = function(jobId, status) {
-  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
-    updateDoc(doc(db,'jobs',jobId),{status:status})
-      .then(function(){ if(typeof showToast==='function') showToast('Job '+status.toLowerCase()); })
-      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
-  }
-};
-<\/script>
 </body></html>`;
       }
 
@@ -2979,6 +2780,207 @@ ${text.substring(0, 4000)}`
       populateJobDropdowns();
     </script>
 
+
+<script>
+/* ═══ CANDIDATE PREVIEW ══════════════════════════════ */
+var _pvwCandId = null;
+
+window.openCandPreview = function(id) {
+  var cand = (window.candidates||[]).find(function(x){return x.id===id;});
+  if (!cand) return;
+  _pvwCandId = id;
+  var job = (window.jobs||[]).find(function(j){return j.id===cand.jobId;});
+
+  // Avatar
+  var av = ((cand.firstName||'')[0]||'').toUpperCase() + ((cand.lastName||'')[0]||'').toUpperCase();
+  document.getElementById('pvw-c-av').textContent = av || '?';
+  document.getElementById('pvw-c-name').textContent = ((cand.firstName||'')+' '+(cand.lastName||'')).trim() || '—';
+  document.getElementById('pvw-c-sub').textContent = job ? job.title : 'No job assigned';
+  document.getElementById('pvw-c-stage').innerHTML = typeof stageBadge==='function' ? stageBadge(cand.stage) : (cand.stage||'');
+
+  // Contact
+  document.getElementById('pvw-c-email').textContent  = cand.email  || '—';
+  document.getElementById('pvw-c-phone').textContent  = cand.phone  || '—';
+  document.getElementById('pvw-c-exp').textContent    = cand.experience ? cand.experience+' yrs' : '—';
+  document.getElementById('pvw-c-vendor').textContent = cand.vendor || '—';
+  document.getElementById('pvw-c-job').textContent    = job ? job.title : '—';
+
+  // Skills
+  var skillsSec = document.getElementById('pvw-c-skills-sec');
+  var skillsEl  = document.getElementById('pvw-c-skills');
+  if (cand.skills) {
+    skillsEl.innerHTML = cand.skills.split(',').map(function(s){
+      s=s.trim(); if(!s)return'';
+      return '<span class="pvw-tag">'+s.replace(/</g,'&lt;')+'</span>';
+    }).join('');
+    skillsSec.style.display='';
+  } else { skillsSec.style.display='none'; }
+
+  // Notes
+  var notesSec = document.getElementById('pvw-c-notes-sec');
+  if (cand.notes) {
+    document.getElementById('pvw-c-notes').textContent = cand.notes;
+    notesSec.style.display='';
+  } else { notesSec.style.display='none'; }
+
+  // Interview
+  var ivSec = document.getElementById('pvw-c-iv-sec');
+  if (cand.interviewDate) {
+    document.getElementById('pvw-c-idate').textContent = cand.interviewDate;
+    document.getElementById('pvw-c-itime').textContent = cand.interviewTime||'—';
+    ivSec.style.display='';
+  } else { ivSec.style.display='none'; }
+
+  // Resume
+  var slot  = document.getElementById('pvw-c-resume-slot');
+  var dlBtn = document.getElementById('pvw-c-dl-btn');
+  if (cand.resumeUrl) {
+    var rname = (cand.resumeName||'Resume').replace(/</g,'&lt;');
+    slot.innerHTML = '<a href="'+cand.resumeUrl+'" target="_blank" class="file-chip" style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px">📄 '+rname+' &nbsp;— click to view</a>';
+    dlBtn.disabled = false; dlBtn.style.opacity='1';
+  } else {
+    slot.innerHTML = '<span style="color:var(--muted);font-size:12px">No resume uploaded</span>';
+    dlBtn.disabled = true; dlBtn.style.opacity='0.4';
+  }
+
+  document.getElementById('pvw-cand').classList.add('open');
+};
+
+window.closeCandPvw = function() {
+  document.getElementById('pvw-cand').classList.remove('open');
+  _pvwCandId = null;
+};
+
+window.pvwCandEdit = function() {
+  var id = _pvwCandId; closeCandPvw();
+  if (id && typeof openCandModal==='function') openCandModal(id);
+};
+
+window.pvwCandDownload = function() {
+  if (!_pvwCandId) return;
+  var cand = (window.candidates||[]).find(function(x){return x.id===_pvwCandId;});
+  if (!cand||!cand.resumeUrl) { if(typeof showToast==='function') showToast('No resume uploaded','error'); return; }
+  var a=document.createElement('a'); a.href=cand.resumeUrl;
+  a.download=cand.resumeName||'resume.pdf'; a.target='_blank'; a.click();
+};
+
+window.pvwCandInvite = function() {
+  var id=_pvwCandId; closeCandPvw();
+  if (id&&typeof sendInterviewInvite==='function') sendInterviewInvite(id);
+};
+
+window.pvwCandOffer = function() {
+  var id=_pvwCandId; closeCandPvw();
+  if (id&&typeof sendOfferLetter==='function') sendOfferLetter(id);
+};
+
+/* ═══ JOB PREVIEW ════════════════════════════════════ */
+var _pvwJobId = null;
+
+window.openJobPreview = function(id) {
+  var job = (window.jobs||[]).find(function(j){return j.id===id;});
+  if (!job) return;
+  _pvwJobId = id;
+
+  var cands = (window.candidates||[]).filter(function(c){return c.jobId===id;});
+  var posted = Object.keys(job.boardPostings||{});
+  var sc  = {Open:'var(--green)', Paused:'#f59e0b', Closed:'var(--red)'};
+  var sbg = {Open:'#1A3A2D', Paused:'#3D3A00', Closed:'#3D1A1A'};
+
+  document.getElementById('pvw-j-title').textContent = job.title||'—';
+  document.getElementById('pvw-j-sub').textContent   = (job.department||'') + (job.location?' · '+job.location:'');
+  document.getElementById('pvw-j-status').innerHTML  =
+    '<span class="badge" style="background:'+sbg[job.status]+';color:'+sc[job.status]+'">'+job.status+'</span>';
+  document.getElementById('pvw-j-dept').textContent  = job.department||'—';
+  document.getElementById('pvw-j-type').textContent  = job.type||'—';
+  document.getElementById('pvw-j-loc').textContent   = job.location||'—';
+  document.getElementById('pvw-j-count').textContent = cands.length;
+
+  // Description
+  var descSec = document.getElementById('pvw-j-desc-sec');
+  if (job.description) {
+    document.getElementById('pvw-j-desc').textContent = job.description;
+    descSec.style.display='';
+  } else { descSec.style.display='none'; }
+
+  // Boards posted
+  var boardsSec = document.getElementById('pvw-j-boards-sec');
+  if (posted.length) {
+    document.getElementById('pvw-j-boards').innerHTML = posted.map(function(b){
+      var bc = typeof boardColor==='function'?boardColor(b):'#aaa';
+      var bn = typeof boardName==='function'?boardName(b):b;
+      return '<span class="pvw-tag" style="background:'+bc+'22;color:'+bc+'">'+bn+'</span>';
+    }).join('');
+    boardsSec.style.display='';
+  } else { boardsSec.style.display='none'; }
+
+  // Applicants list
+  var listEl = document.getElementById('pvw-j-applist');
+  if (cands.length) {
+    listEl.innerHTML = cands.map(function(cand){
+      var av = ((cand.firstName||'')[0]||'').toUpperCase()+((cand.lastName||'')[0]||'').toUpperCase();
+      var badge = typeof stageBadge==='function'?stageBadge(cand.stage):'';
+      var fname = (cand.firstName||'').replace(/</g,'&lt;');
+      var lname = (cand.lastName||'').replace(/</g,'&lt;');
+      var email = (cand.email||'—').replace(/</g,'&lt;');
+      return '<div class="pvw-applicant-row">'
+        +'<div style="display:flex;align-items:center;gap:10px">'
+        +'<div style="width:34px;height:34px;border-radius:50%;background:var(--orange-dim);color:var(--orange-light);display:grid;place-items:center;font-size:11px;font-weight:700;flex-shrink:0">'+av+'</div>'
+        +'<div><div style="font-size:13px;font-weight:600">'+fname+' '+lname+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+email+'</div></div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px">'+badge
+        +'<button onclick="closeJobPvw();openCandPreview(\"'+cand.id+'\");" style="padding:3px 10px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:inherit">View</button>'
+        +'</div></div>';
+    }).join('');
+  } else {
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px 0">No applicants yet</div>';
+  }
+
+  // JD download btn
+  var dlBtn = document.getElementById('pvw-j-dl-btn');
+  dlBtn.disabled = !job.jdUrl; dlBtn.style.opacity = job.jdUrl?'1':'0.4';
+
+  document.getElementById('pvw-job').classList.add('open');
+};
+
+window.closeJobPvw = function() {
+  document.getElementById('pvw-job').classList.remove('open');
+  _pvwJobId = null;
+};
+
+window.pvwJobEdit = function() {
+  var id=_pvwJobId; closeJobPvw();
+  if (id&&typeof openJobModal==='function') openJobModal(id);
+};
+
+window.pvwJobDownload = function() {
+  if (!_pvwJobId) return;
+  var job = (window.jobs||[]).find(function(j){return j.id===_pvwJobId;});
+  if (!job||!job.jdUrl) { if(typeof showToast==='function') showToast('No JD file uploaded','error'); return; }
+  var a=document.createElement('a'); a.href=job.jdUrl;
+  a.download=(job.title||'job-description')+'.pdf'; a.target='_blank'; a.click();
+};
+
+window.pvwJobStatus = function(status) {
+  if (!_pvwJobId) return;
+  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
+    updateDoc(doc(db,'jobs',_pvwJobId),{status:status})
+      .then(function(){ if(typeof showToast==='function') showToast('Job set to '+status); closeJobPvw(); })
+      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
+  } else {
+    if(typeof showToast==='function') showToast('Status update requires Firebase connection','error');
+  }
+};
+
+/* ═══ JOB CARD QUICK STATUS (from card buttons) ══════ */
+window.setJobStatus = function(jobId, status) {
+  if (typeof updateDoc==='function'&&typeof doc==='function'&&typeof db!=='undefined') {
+    updateDoc(doc(db,'jobs',jobId),{status:status})
+      .then(function(){ if(typeof showToast==='function') showToast('Job '+status.toLowerCase()); })
+      .catch(function(e){ if(typeof showToast==='function') showToast('Error: '+e.message,'error'); });
+  }
+};
+</script>
 <!-- ═══════════════════════════════════════════════════
      CANDIDATE PROFILE PREVIEW MODAL
 ════════════════════════════════════════════════════ -->
