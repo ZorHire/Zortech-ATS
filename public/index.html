@@ -1100,6 +1100,114 @@ ${text.substring(0, 4000)}`
         }
       };
 
+      // ── Expose stageBadge globally for inline onclick handlers ───────────
+      window.stageBadge = stageBadge;
+
+      // ── SAVE VENDOR FROM ADD MODAL ───────────────────────────────────────
+      // Reads addVendorModal form fields (av-*) and persists to Firestore,
+      // then sends the credential e-mail non-blocking.
+      window.saveVendorFromAddModal = safeAsync(async function () {
+        const name  = (document.getElementById('av-company')?.value || '').trim();
+        const email = (document.getElementById('av-email')?.value  || '').trim();
+        if (!name)  { showToast('Company name is required', 'error'); return; }
+        if (!email) { showToast('Contact email is required', 'error'); return; }
+
+        const data = {
+          name,
+          email,
+          company:        name,
+          contact:        (document.getElementById('av-contact')?.value || '').trim(),
+          phone:          (document.getElementById('av-phone')?.value   || '').trim(),
+          specialisation: (document.getElementById('av-spec')?.value    || '').trim(),
+          loginEmail:     (document.getElementById('av-login')?.value   || '').trim(),
+          status:         (document.getElementById('av-status')?.value  || 'Active'),
+          notes:          (document.getElementById('av-notes')?.value   || '').trim(),
+          createdBy:      currentUser?.email || '',
+          createdByName:  currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Unknown',
+        };
+
+        const btn = document.getElementById('create-vendor-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+
+        try {
+          await withTimeout(
+            addDoc(collection(db, 'vendors'), { ...data, createdAt: serverTimestamp() }),
+            10000,
+            'Firestore write'
+          );
+
+          if (btn) { btn.textContent = 'Saved \u2713'; btn.style.background = 'var(--green)'; }
+          showToast('Vendor added successfully \u2713');
+
+          // Reset form fields
+          ['av-company','av-contact','av-email','av-phone','av-spec','av-login','av-notes']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+          const statusEl = document.getElementById('av-status');
+          if (statusEl) statusEl.value = 'Active';
+
+          setTimeout(() => {
+            closeModal('addVendorModal');
+            if (btn) { btn.disabled = false; btn.textContent = 'Create Vendor \u2192'; btn.style.background = ''; }
+          }, 800);
+
+          // Send credential e-mail non-blocking (missing key just logs a warning)
+          (async () => {
+            try { await sendVendorCredentialEmail(data); }
+            catch (e) { console.warn('Vendor credential email failed:', e.message); }
+          })();
+
+        } catch (e) {
+          const msg = e.code === 'permission-denied'
+            ? '\u274c Permission denied \u2014 update Firestore Security Rules'
+            : e.message && e.message.includes('timed out')
+            ? '\u274c Connection timed out \u2014 check internet'
+            : '\u274c Error: ' + (e.message || e);
+          showToast(msg, 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Create Vendor \u2192'; btn.style.background = ''; }
+        }
+      });
+
+      // ── RENDER VENDORS LIST ──────────────────────────────────────────────
+      // Called by the Firestore onSnapshot whenever the vendors collection changes.
+      // Targets #vendors-section-body in view-vendor and re-renders the list.
+      window.renderVendors = function () {
+        const body = document.getElementById('vendors-section-body');
+        if (!body) return;
+
+        if (!vendors || vendors.length === 0) {
+          body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">'
+            + 'No vendors yet. Click <strong style="color:var(--text);">+ Add Vendor</strong> to get started.</div>';
+          return;
+        }
+
+        const colors  = ['v1','v2','v3','v4','v5'];
+        const pillCls = s => s === 'Active' ? 'pill-green' : s === 'On Hold' ? 'pill-amber' : 'pill-gray';
+
+        body.innerHTML = vendors.map((vdr, i) => {
+          const label    = (vdr.name || vdr.company || 'Unknown Vendor').trim();
+          const initials = label.split(/[\s\-]+/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('') || '??';
+          const color    = colors[i % colors.length];
+          const status   = vdr.status || 'Active';
+          const meta     = [vdr.email, vdr.contact ? 'Contact: ' + vdr.contact : ''].filter(Boolean).join(' \u00b7 ');
+          return `<div class="vendor-row">
+            <div class="vendor-avatar ${color}">${initials}</div>
+            <div class="vendor-info">
+              <div class="vendor-name">${label.replace(/</g, '&lt;')}</div>
+              <div class="vendor-meta">${meta.replace(/</g, '&lt;')}</div>
+            </div>
+            <span class="pill ${pillCls(status)}">${status}</span>
+            <button class="btn btn-ghost btn-sm" style="margin-left:8px"
+              onclick="event.stopPropagation();openAssignJD()">+ Assign JD</button>
+            <button class="btn btn-ghost btn-sm"
+              style="margin-left:4px;color:var(--red);border-color:var(--red);"
+              title="Delete vendor"
+              onclick="event.stopPropagation();deleteVendor('${vdr.id}')">&#x1f5d1;</button>
+          </div>`;
+        }).join('');
+      };
+
+
+
       // ── EMAIL ─────────────────────────────────────────────────
       function emailTpl(title, body) {
         return `<!DOCTYPE html><html><head><style>
@@ -1365,13 +1473,13 @@ window.setJobStatus = function(jobId, status) {
         const html = emailTpl(
           "Vendor Portal Access",
           `<p class="p"> Hello <strong>${vendor.name}</strong>,</p>
-           <p class="p"> You have been added as a Vendor in Zortech ATS.</P>
-           <dic class="box">
-            <strong> Login Credentials</strong></br></br>
-            Email: ${vendor.email}</br>
+           <p class="p"> You have been added as a Vendor in Zortech ATS.</p>
+           <div class="box">
+            <strong>Login Credentials</strong><br/><br/>
+            Email: ${vendor.email}<br/>
             Password: ${password}
            </div>
-           <p class="p"> Please login and chnage your password after first login.</p>
+           <p class="p"> Please login and change your password after first login.</p>
           `
         );
         const ok = await sendEmail(
@@ -4623,6 +4731,8 @@ ${text.substring(0, 4000)}`
   
       /* ── MAIN CONTENT ────────────────────────────────────────── */
   .main { flex: 1; overflow-y: auto; padding: 24px 28px; }
+  /* Prevent global margin-left:236px leaking into nested tool .main containers */
+  #view-vendor .main, #view-vendor .layout > .main { margin-left: 0; }
 
 
   
@@ -5081,7 +5191,7 @@ ${text.substring(0, 4000)}`
       #view-performance .sdiv {border:none;border-top:1px solid var(--border);margin:10px 16px;}
 
 
-      #view-performance .main {flex:1;overflow-y:auto;padding:24px 28px;}
+      #view-performance .main {flex:1;overflow-y:auto;padding:24px 28px;margin-left:0;}
 
 
 
@@ -7305,7 +7415,7 @@ ${text.substring(0, 4000)}`
             </span>
             <span class="recruiter-chip">🔒 Visible only to you — Riya Kapoor</span>
           </div>
-          <div class="section-body">
+          <div class="section-body" id="vendors-section-body">
 
             <div class="vendor-row" onclick="showSection('jd-assignments')">
               <div class="vendor-avatar v1">TG</div>
@@ -8940,24 +9050,12 @@ ${text.substring(0, 4000)}`
 
       /* ═══ VENDOR FORM SAVE ═══ */
       window.saveNewVendor = function() {
-        const company = (document.getElementById('av-company')?.value || '').trim();
-        const email   = (document.getElementById('av-email')?.value  || '').trim();
-        if (!company) { showToast('Company name is required', 'error'); return; }
-        if (!email)   { showToast('Contact email is required', 'error'); return; }
-        const btn = document.getElementById('create-vendor-btn');
-        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-        // Reset form and close
-        setTimeout(function() {
-          ['av-company','av-contact','av-email','av-phone','av-spec','av-login','av-notes'].forEach(function(id) {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-          });
-          const statusEl = document.getElementById('av-status');
-          if (statusEl) statusEl.value = 'Active';
-          if (btn) { btn.disabled = false; btn.textContent = 'Create Vendor →'; }
-          closeModal('addVendorModal');
-          showToast('✅ Vendor "' + company + '" created successfully', 'success');
-        }, 600);
+        // Delegate to module-level saveVendorFromAddModal (writes to Firestore + sends email)
+        if (typeof window.saveVendorFromAddModal === 'function') {
+          window.saveVendorFromAddModal();
+        } else {
+          showToast('Save function not ready — please try again', 'error');
+        }
       };
 
       window.goToDashboard = function() {
@@ -9890,32 +9988,90 @@ function showView(id, el) {
 // ===== SAFE GLOBAL FIXES =====
 
 // Ensure candidates/jobs accessible
-window.openCandPreview = function(id){
-  if(!window.candidates || !window.candidates.length){
-    alert("Candidates still loading...");
-    return;
+window.openCandPreview = function(id) {
+  var cand = (window.candidates||[]).find(function(x){ return x.id===id; });
+  if (!cand) { console.warn('openCandPreview: candidate not found', id); return; }
+  window._pvwCandId = id;
+  var job = (window.jobs||[]).find(function(j){ return j.id===cand.jobId; });
+
+  // Avatar initials
+  var av = ((cand.firstName||'')[0]||'').toUpperCase() + ((cand.lastName||'')[0]||'').toUpperCase();
+  var avEl = document.getElementById('pvw-c-av');
+  if (avEl) avEl.textContent = av || '?';
+
+  // Header
+  var nameEl = document.getElementById('pvw-c-name');
+  if (nameEl) nameEl.textContent = ((cand.firstName||'')+' '+(cand.lastName||'')).trim() || '\u2014';
+  var subEl = document.getElementById('pvw-c-sub');
+  if (subEl) subEl.textContent = job ? job.title : 'No job assigned';
+  var stageEl = document.getElementById('pvw-c-stage');
+  if (stageEl) stageEl.innerHTML = (typeof window.stageBadge === 'function')
+    ? window.stageBadge(cand.stage)
+    : (cand.stage ? '<span class="badge">' + cand.stage + '</span>' : '');
+
+  // Contact details
+  var emailEl = document.getElementById('pvw-c-email');
+  if (emailEl) emailEl.textContent = cand.email || '\u2014';
+  var phoneEl = document.getElementById('pvw-c-phone');
+  if (phoneEl) phoneEl.textContent = cand.phone || '\u2014';
+  var expEl = document.getElementById('pvw-c-exp');
+  if (expEl) expEl.textContent = cand.experience ? cand.experience + ' yrs' : '\u2014';
+  var vendorEl = document.getElementById('pvw-c-vendor');
+  if (vendorEl) vendorEl.textContent = cand.vendor || '\u2014';
+  var jobEl = document.getElementById('pvw-c-job');
+  if (jobEl) jobEl.textContent = job ? job.title : '\u2014';
+
+  // Skills
+  var skillsSec = document.getElementById('pvw-c-skills-sec');
+  var skillsEl  = document.getElementById('pvw-c-skills');
+  if (skillsSec && skillsEl) {
+    if (cand.skills) {
+      skillsEl.innerHTML = cand.skills.split(',').map(function(s){
+        s = s.trim();
+        return s ? '<span class="pvw-tag">' + s.replace(/</g,'&lt;') + '</span>' : '';
+      }).join('');
+      skillsSec.style.display = '';
+    } else { skillsSec.style.display = 'none'; }
   }
 
-  const c = window.candidates.find(x=>x.id===id);
-  if(!c){
-    alert("Candidate not found");
-    return;
+  // Notes
+  var notesSec = document.getElementById('pvw-c-notes-sec');
+  var notesEl  = document.getElementById('pvw-c-notes');
+  if (notesSec) {
+    if (cand.notes && notesEl) { notesEl.textContent = cand.notes; notesSec.style.display = ''; }
+    else { notesSec.style.display = 'none'; }
   }
 
-  const job = (window.jobs||[]).find(j=>j.id===c.jobId);
-
-  document.getElementById('pvw-c-name') && (document.getElementById('pvw-c-name').textContent = (c.firstName||'') + ' ' + (c.lastName||''));
-  document.getElementById('pvw-c-email') && (document.getElementById('pvw-c-email').textContent = c.email||'-');
-  document.getElementById('pvw-c-phone') && (document.getElementById('pvw-c-phone').textContent = c.phone||'-');
-  document.getElementById('pvw-c-exp') && (document.getElementById('pvw-c-exp').textContent = c.experience ? c.experience + ' yrs' : '-');
-  document.getElementById('pvw-c-job') && (document.getElementById('pvw-c-job').textContent = job ? job.title : '-');
-
-  const slot = document.getElementById('pvw-c-resume-slot');
-  if(slot){
-    slot.innerHTML = c.resumeUrl ? `<a href="${c.resumeUrl}" target="_blank">📄 Download Resume</a>` : "No resume";
+  // Interview
+  var ivSec = document.getElementById('pvw-c-iv-sec');
+  if (ivSec) {
+    if (cand.interviewDate) {
+      var idEl = document.getElementById('pvw-c-idate');
+      var itEl = document.getElementById('pvw-c-itime');
+      if (idEl) idEl.textContent = cand.interviewDate;
+      if (itEl) itEl.textContent = cand.interviewTime || '\u2014';
+      ivSec.style.display = '';
+    } else { ivSec.style.display = 'none'; }
   }
 
-  document.getElementById('pvw-cand')?.classList.add('open');
+  // Resume slot + download button
+  var slot  = document.getElementById('pvw-c-resume-slot');
+  var dlBtn = document.getElementById('pvw-c-dl-btn');
+  if (slot) {
+    if (cand.resumeUrl) {
+      var rname = (cand.resumeName || 'Resume').replace(/</g, '&lt;');
+      slot.innerHTML = '<a href="' + cand.resumeUrl + '" target="_blank" class="file-chip"'
+        + ' style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px">'
+        + '\ud83d\udcc4 ' + rname + ' \u00a0\u2014 click to view</a>';
+      if (dlBtn) { dlBtn.disabled = false; dlBtn.style.opacity = '1'; }
+    } else {
+      slot.innerHTML = '<span style="color:var(--muted);font-size:12px">No resume uploaded</span>';
+      if (dlBtn) { dlBtn.disabled = true; dlBtn.style.opacity = '0.4'; }
+    }
+  }
+
+  var panel = document.getElementById('pvw-cand');
+  if (panel) panel.classList.add('open');
 };
 
 window.closeCandPvw = function(){
@@ -9927,4 +10083,3 @@ if(typeof window.stageBadge === "undefined"){
   window.stageBadge = function(s){ return s || ""; };
 }
 </script>
-
