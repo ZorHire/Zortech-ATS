@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="en">
   <head>
@@ -1189,7 +1188,7 @@ ${text.substring(0, 4000)}`
           const color    = colors[i % colors.length];
           const status   = vdr.status || 'Active';
           const meta     = [vdr.email, vdr.contact ? 'Contact: ' + vdr.contact : ''].filter(Boolean).join(' \u00b7 ');
-          return `<div class="vendor-row">
+          return `<div class="vendor-row" style="cursor:pointer" onclick="openVendorPreview('${vdr.id}')">
             <div class="vendor-avatar ${color}">${initials}</div>
             <div class="vendor-info">
               <div class="vendor-name">${label.replace(/</g, '&lt;')}</div>
@@ -1204,6 +1203,137 @@ ${text.substring(0, 4000)}`
               onclick="event.stopPropagation();deleteVendor('${vdr.id}')">&#x1f5d1;</button>
           </div>`;
         }).join('');
+      };
+
+
+
+      // ── Expose stageBadge globally for inline onclick handlers ───────────
+      window.stageBadge = stageBadge;
+
+      // ── SAVE VENDOR FROM ADD MODAL ───────────────────────────────────────
+      // Reads addVendorModal form fields (av-*) and persists to Firestore,
+      // then sends the credential e-mail non-blocking.
+      window.saveVendorFromAddModal = safeAsync(async function () {
+        const name  = (document.getElementById('av-company')?.value || '').trim();
+        const email = (document.getElementById('av-email')?.value  || '').trim();
+        if (!name)  { showToast('Company name is required', 'error'); return; }
+        if (!email) { showToast('Contact email is required', 'error'); return; }
+
+        const data = {
+          name,
+          email,
+          company:        name,
+          contact:        (document.getElementById('av-contact')?.value || '').trim(),
+          phone:          (document.getElementById('av-phone')?.value   || '').trim(),
+          specialisation: (document.getElementById('av-spec')?.value    || '').trim(),
+          loginEmail:     (document.getElementById('av-login')?.value   || '').trim(),
+          status:         (document.getElementById('av-status')?.value  || 'Active'),
+          notes:          (document.getElementById('av-notes')?.value   || '').trim(),
+          createdBy:      currentUser?.email || '',
+          createdByName:  currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Unknown',
+        };
+
+        const btn = document.getElementById('create-vendor-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+
+        try {
+          await withTimeout(
+            addDoc(collection(db, 'vendors'), { ...data, createdAt: serverTimestamp() }),
+            10000,
+            'Firestore write'
+          );
+
+          if (btn) { btn.textContent = 'Saved \u2713'; btn.style.background = 'var(--green)'; }
+          showToast('Vendor added successfully \u2713');
+
+          // Reset form fields
+          ['av-company','av-contact','av-email','av-phone','av-spec','av-login','av-notes']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+          const statusEl = document.getElementById('av-status');
+          if (statusEl) statusEl.value = 'Active';
+
+          setTimeout(() => {
+            closeModal('addVendorModal');
+            if (btn) { btn.disabled = false; btn.textContent = 'Create Vendor \u2192'; btn.style.background = ''; }
+          }, 800);
+
+          // Send credential e-mail non-blocking (missing key just logs a warning)
+          (async () => {
+            try { await sendVendorCredentialEmail(data); }
+            catch (e) { console.warn('Vendor credential email failed:', e.message); }
+          })();
+
+        } catch (e) {
+          const msg = e.code === 'permission-denied'
+            ? '\u274c Permission denied \u2014 update Firestore Security Rules'
+            : e.message && e.message.includes('timed out')
+            ? '\u274c Connection timed out \u2014 check internet'
+            : '\u274c Error: ' + (e.message || e);
+          showToast(msg, 'error');
+          if (btn) { btn.disabled = false; btn.textContent = 'Create Vendor \u2192'; btn.style.background = ''; }
+        }
+      });
+
+      // ── RENDER VENDORS LIST ──────────────────────────────────────────────
+      // Called by the Firestore onSnapshot whenever the vendors collection changes.
+      // Targets #vendors-section-body in view-vendor and re-renders the list.
+      window.renderVendors = function () {
+        const body = document.getElementById('vendors-section-body');
+        if (!body) return;
+
+        if (!vendors || vendors.length === 0) {
+          body.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">'
+            + 'No vendors yet. Click <strong style="color:var(--text);">+ Add Vendor</strong> to get started.</div>';
+          return;
+        }
+
+        const colors  = ['v1','v2','v3','v4','v5'];
+        const pillCls = s => s === 'Active' ? 'pill-green' : s === 'On Hold' ? 'pill-amber' : 'pill-gray';
+
+        body.innerHTML = vendors.map((vdr, i) => {
+          const label    = (vdr.name || vdr.company || 'Unknown Vendor').trim();
+          const initials = label.split(/[\s\-]+/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('') || '??';
+          const color    = colors[i % colors.length];
+          const status   = vdr.status || 'Active';
+          const meta     = [vdr.email, vdr.contact ? 'Contact: ' + vdr.contact : ''].filter(Boolean).join(' \u00b7 ');
+          return `<div class="vendor-row" style="cursor:pointer" onclick="openVendorPreview('${vdr.id}')">
+            <div class="vendor-avatar ${color}">${initials}</div>
+            <div class="vendor-info">
+              <div class="vendor-name">${label.replace(/</g, '&lt;')}</div>
+              <div class="vendor-meta">${meta.replace(/</g, '&lt;')}</div>
+            </div>
+            <span class="pill ${pillCls(status)}">${status}</span>
+            <button class="btn btn-ghost btn-sm" style="margin-left:8px"
+              onclick="event.stopPropagation();openAssignJD()">+ Assign JD</button>
+            <button class="btn btn-ghost btn-sm"
+              style="margin-left:4px;color:var(--red);border-color:var(--red);"
+              title="Delete vendor"
+              onclick="event.stopPropagation();deleteVendor('${vdr.id}')">&#x1f5d1;</button>
+          </div>`;
+        }).join('');
+
+        // Also sync the Vendor Management (view-vendor-ext) list
+        const ztxBody = document.getElementById('ztx-vendors-list');
+        if (ztxBody) {
+          ztxBody.innerHTML = vendors.length ? vendors.map((vdr, i) => {
+            const label    = (vdr.name || vdr.company || 'Unknown Vendor').trim();
+            const initials = label.split(/[\s\-]+/).slice(0,2).map(w=>(w[0]||'').toUpperCase()).join('') || '??';
+            const color    = colors[i % colors.length];
+            const status   = vdr.status || 'Active';
+            const pillC    = pillCls(status);
+            const meta     = [vdr.email, vdr.contact || ''].filter(Boolean).join(' &middot; ');
+            return `<div class="ti" style="padding:13px 16px;cursor:pointer" onclick="openVendorPreview('${vdr.id}')">
+              <div class="va va-md ${color}">${initials}</div>
+              <div style="flex:1;margin-left:8px">
+                <div style="font-size:13px;font-weight:600">${label.replace(/</g,'&lt;')}</div>
+                <div style="font-size:10px;color:var(--muted)">${meta.replace(/</g,'&lt;')}</div>
+              </div>
+              <span class="pill ${pillC}">${status}</span>
+              <button class="btn btn-g btn-xs" onclick="event.stopPropagation();openAssignJD()">+ Assign JD</button>
+              <button class="btn btn-g btn-xs" style="color:var(--red)" onclick="event.stopPropagation();deleteVendor('${vdr.id}')">&#x1f5d1;</button>
+            </div>`;
+          }).join('') : '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px">No vendors yet. Click + Add Vendor.</div>';
+        }
       };
 
 
@@ -2963,6 +3093,71 @@ ${text.substring(0, 4000)}`
     </div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════
+     VENDOR PROFILE PREVIEW MODAL
+════════════════════════════════════════════════════ -->
+<div class="pvw-overlay" id="pvw-vendor" onclick="if(event.target===this)closeVendorPvw()">
+  <div class="pvw-sheet">
+    <div class="pvw-head">
+      <div class="pvw-av pvw-av-vendor" id="pvw-v-av">??</div>
+      <div style="flex:1;min-width:0">
+        <div class="pvw-head-title" id="pvw-v-name">—</div>
+        <div class="pvw-head-sub"   id="pvw-v-spec">—</div>
+      </div>
+      <span id="pvw-v-status" style="margin-top:2px"></span>
+      <button class="pvw-close" onclick="closeVendorPvw()">✕</button>
+    </div>
+    <div class="pvw-body">
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Contact Details</div>
+        <div class="pvw-grid2">
+          <div>
+            <div class="pvw-field-lbl">Email</div>
+            <div class="pvw-field-val" id="pvw-v-email">—</div>
+          </div>
+          <div>
+            <div class="pvw-field-lbl">Phone</div>
+            <div class="pvw-field-val" id="pvw-v-phone">—</div>
+          </div>
+          <div>
+            <div class="pvw-field-lbl">Contact Person</div>
+            <div class="pvw-field-val" id="pvw-v-contact">—</div>
+          </div>
+          <div>
+            <div class="pvw-field-lbl">Portal Login</div>
+            <div class="pvw-field-val" id="pvw-v-login">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="pvw-section" id="pvw-v-spec-sec" style="display:none">
+        <div class="pvw-section-lbl">Specialisation</div>
+        <div class="pvw-field-val" id="pvw-v-spec-val">—</div>
+      </div>
+      <div class="pvw-section">
+        <div class="pvw-section-lbl">Assigned Job Descriptions</div>
+        <div id="pvw-v-jds">
+          <span style="color:var(--muted);font-size:12px">No JDs assigned yet</span>
+        </div>
+      </div>
+      <div class="pvw-section" id="pvw-v-notes-sec" style="display:none">
+        <div class="pvw-section-lbl">Notes</div>
+        <div class="pvw-note" id="pvw-v-notes"></div>
+      </div>
+    </div>
+    <div class="pvw-foot">
+      <div style="display:flex;gap:8px">
+        <button class="pvw-btn pvw-btn-blue" onclick="pvwVendorEmail()">✉️ Email Vendor</button>
+        <button class="pvw-btn pvw-btn-ghost" id="pvw-v-dl-btn" onclick="pvwVendorDownloadJD()" title="Download Job Description">⬇️ Download JD</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="pvw-btn pvw-btn-ghost" style="color:var(--red);border-color:var(--red);" onclick="pvwVendorDelete()">Ὕ1; Delete</button>
+        <button class="pvw-btn pvw-btn-ghost" onclick="closeVendorPvw()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 
     <style>
@@ -6471,7 +6666,8 @@ ${text.substring(0, 4000)}`
         font-size: 17px; font-weight: 700; flex-shrink: 0;
         font-family: 'Syne', sans-serif;
       }
-      .pvw-av-cand { background: var(--orange-dim); color: var(--orange-light); }
+      .pvw-av-cand   { background: var(--orange-dim); color: var(--orange-light); }
+      .pvw-av-vendor { background: #1A2D3D; color: #60a5fa; }
       .pvw-av-job  { background: #1A2A3D; color: #60a5fa; font-size: 22px; }
       .pvw-head-title { font-size: 17px; font-weight: 700; color: var(--text); }
       .pvw-head-sub   { font-size: 12px; color: var(--muted); margin-top: 3px; }
@@ -8235,7 +8431,7 @@ ${text.substring(0, 4000)}`
 
     <!-- Main content area -->
     <div class="tool-main" id="ztx-main">
-<div class="view" id="v-vp-vendors"><div class="ph"><div><div class="ptitle">Vendor Management</div><div class="psub">Manage your sourcing partners</div></div><div class="ph-r"><button class="btn btn-o btn-sm" onclick="ztxNavTo('v-vp-vendor-view',null)">&#128065; Preview Vendor View</button><button class="btn btn-p btn-sm" onclick="openAddVendor()">+ Add Vendor</button></div></div><div class="sgrid sg4"><div class="sc"><div class="sv" style="color:var(--orange)">4</div><div class="sl2">Active Vendors</div><div class="sd up">&#8593; 1 this month</div></div><div class="sc"><div class="sv" style="color:var(--amber)">11</div><div class="sl2">JDs Assigned</div></div><div class="sc"><div class="sv" style="color:var(--green)">12</div><div class="sl2">Profiles Submitted</div></div><div class="sc"><div class="sv" style="color:var(--purple)">3</div><div class="sl2">Under Review</div></div></div><div class="scard"><div class="sch"><span class="scht">All Vendors</span><span style="font-size:10px;color:var(--muted)">&#128274; Visible only to you</span></div><div class="ti" style="padding:13px 16px"><div class="va va-md v1">TG</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7f0b1a1c17181e0b1a3f0c0b1e1919161118511c1012">[email&#160;protected]</a> &middot; Anil Mehta</div></div><span class="pill pg">Active</span><span class="pill pb">4 JDs</span><span class="pill pn">5 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v2">NS</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2c445e6c424954585f58495c024542">[email&#160;protected]</a> &middot; Priya Sharma</div></div><span class="pill pg">Active</span><span class="pill pb">3 JDs</span><span class="pill pn">4 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v3">RH</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">RapidHire India</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7d0f1c0d14193d15140f18531e12">[email&#160;protected]</a> &middot; Kiran Das</div></div><span class="pill pa">On Hold</span><span class="pill pb">2 JDs</span><span class="pill pn">2 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v4">BT</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6d0f1f04090a082d190c01080319430402">[email&#160;protected]</a> &middot; Sneha Raju</div></div><span class="pill pg">Active</span><span class="pill pb">2 JDs</span><span class="pill pn">1 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div></div></div>
+<div class="view" id="v-vp-vendors"><div class="ph"><div><div class="ptitle">Vendor Management</div><div class="psub">Manage your sourcing partners</div></div><div class="ph-r"><button class="btn btn-o btn-sm" onclick="ztxNavTo('v-vp-vendor-view',null)">&#128065; Preview Vendor View</button><button class="btn btn-p btn-sm" onclick="openAddVendor()">+ Add Vendor</button></div></div><div class="sgrid sg4"><div class="sc"><div class="sv" style="color:var(--orange)">4</div><div class="sl2">Active Vendors</div><div class="sd up">&#8593; 1 this month</div></div><div class="sc"><div class="sv" style="color:var(--amber)">11</div><div class="sl2">JDs Assigned</div></div><div class="sc"><div class="sv" style="color:var(--green)">12</div><div class="sl2">Profiles Submitted</div></div><div class="sc"><div class="sv" style="color:var(--purple)">3</div><div class="sl2">Under Review</div></div></div><div class="scard"><div class="sch"><span class="scht">All Vendors</span><span style="font-size:10px;color:var(--muted)">&#128274; Visible only to you</span></div><div id="ztx-vendors-list"><div class="ti" style="padding:13px 16px"><div class="va va-md v1">TG</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">TechGate Staffing</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7f0b1a1c17181e0b1a3f0c0b1e1919161118511c1012">[email&#160;protected]</a> &middot; Anil Mehta</div></div><span class="pill pg">Active</span><span class="pill pb">4 JDs</span><span class="pill pn">5 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v2">NS</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">NextStep Solutions</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="2c445e6c424954585f58495c024542">[email&#160;protected]</a> &middot; Priya Sharma</div></div><span class="pill pg">Active</span><span class="pill pb">3 JDs</span><span class="pill pn">4 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v3">RH</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">RapidHire India</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7d0f1c0d14193d15140f18531e12">[email&#160;protected]</a> &middot; Kiran Das</div></div><span class="pill pa">On Hold</span><span class="pill pb">2 JDs</span><span class="pill pn">2 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div><div class="ti" style="padding:13px 16px"><div class="va va-md v4">BT</div><div style="flex:1;margin-left:8px"><div style="font-size:13px;font-weight:600">BridgeTalent Co.</div><div style="font-size:10px;color:var(--muted)"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="6d0f1f04090a082d190c01080319430402">[email&#160;protected]</a> &middot; Sneha Raju</div></div><span class="pill pg">Active</span><span class="pill pb">2 JDs</span><span class="pill pn">1 profiles</span><button class="btn btn-g btn-xs" onclick="openAssignJD()">+ Assign JD</button></div></div></div></div>
 
           <div class="view" id="v-vp-jds"><div class="ph"><div><div class="ptitle">JD Assignments</div><div class="psub">Control which vendor sees which job description</div></div><div class="ph-r"><button class="btn btn-p btn-sm" onclick="openAssignJD()">+ Assign JD</button></div></div><div class="scard"><div class="sch"><span class="scht">Active JD Assignments</span></div><table class="tbl"><thead><tr><th>Job Description</th><th>Assigned Vendor</th><th>Deadline</th><th>Profiles</th><th>Status</th><th>Actions</th></tr></thead><tbody><tr><td style="font-weight:500">Senior React Dev</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v1">TG</div><span style="font-size:11px">TechGate Staffing</span></div></td><td style="font-family:var(--mono);font-size:10px">28 Mar</td><td><span class="pill pb">3 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">DevOps Engineer</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v1">TG</div><span style="font-size:11px">TechGate Staffing</span></div></td><td style="font-family:var(--mono);font-size:10px">01 Apr</td><td><span class="pill pa">1 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">Product Manager</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v2">NS</div><span style="font-size:11px">NextStep Solutions</span></div></td><td style="font-family:var(--mono);font-size:10px">05 Apr</td><td><span class="pill pn">0 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">Data Analyst</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v3">RH</div><span style="font-size:11px">RapidHire India</span></div></td><td style="font-family:var(--mono);font-size:10px">15 Mar</td><td><span class="pill pb">2 submitted</span></td><td><span class="pill pr">Closed</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr><tr><td style="font-weight:500">UI/UX Designer</td><td><div style="display:flex;align-items:center;gap:6px"><div class="va va-sm v4">BT</div><span style="font-size:11px">BridgeTalent Co.</span></div></td><td style="font-family:var(--mono);font-size:10px">10 Apr</td><td><span class="pill pn">1 submitted</span></td><td><span class="pill pg">Open</span></td><td><button class="btn btn-g btn-xs">View Profiles</button></td></tr></tbody></table></div></div>
 
@@ -9871,6 +10067,217 @@ function showView(id, el) {
 
 <!-- VENDOR MODALS (global - accessible from all views) -->
 <!-- MODAL: ADD VENDOR -->
+<script>
+/* ═══════════════════════════════════════════════════════════
+   CANDIDATE PREVIEW ACTION BUTTONS
+   (pvwCandDownload / Edit / Invite / Offer were only defined
+   inside emailTpl HTML string — never on the page itself)
+════════════════════════════════════════════════════════════ */
+if (typeof window.pvwCandDownload === 'undefined') {
+  window.pvwCandDownload = function() {
+    var id   = window._pvwCandId;
+    if (!id) return;
+    var cand = (window.candidates||[]).find(function(x){ return x.id===id; });
+    if (!cand || !cand.resumeUrl) {
+      if (typeof showToast==='function') showToast('No resume uploaded','error');
+      return;
+    }
+    var a = document.createElement('a');
+    a.href     = cand.resumeUrl;
+    a.download = cand.resumeName || 'resume.pdf';
+    a.target   = '_blank';
+    a.click();
+  };
+}
+
+if (typeof window.pvwCandEdit === 'undefined') {
+  window.pvwCandEdit = function() {
+    var id = window._pvwCandId;
+    if (typeof window.closeCandPvw==='function') window.closeCandPvw();
+    if (id && typeof openCandModal==='function') openCandModal(id);
+  };
+}
+
+if (typeof window.pvwCandInvite === 'undefined') {
+  window.pvwCandInvite = function() {
+    var id = window._pvwCandId;
+    if (typeof window.closeCandPvw==='function') window.closeCandPvw();
+    if (id && typeof sendInterviewInvite==='function') sendInterviewInvite(id);
+  };
+}
+
+if (typeof window.pvwCandOffer === 'undefined') {
+  window.pvwCandOffer = function() {
+    var id = window._pvwCandId;
+    if (typeof window.closeCandPvw==='function') window.closeCandPvw();
+    if (id && typeof sendOfferLetter==='function') sendOfferLetter(id);
+  };
+}
+
+if (typeof window.closeCandPvw === 'undefined') {
+  window.closeCandPvw = function() {
+    var p = document.getElementById('pvw-cand');
+    if (p) p.classList.remove('open');
+    window._pvwCandId = null;
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VENDOR PREVIEW POPUP
+════════════════════════════════════════════════════════════ */
+window._pvwVendorId = null;
+
+window.openVendorPreview = function(id) {
+  var vendors = window.vendors || [];
+  var vdr = vendors.find(function(x){ return x.id===id; });
+  if (!vdr) {
+    /* Vendor might not be loaded yet — show toast */
+    if (typeof showToast==='function') showToast('Vendor data not loaded yet','error');
+    return;
+  }
+  window._pvwVendorId = id;
+
+  /* ── Avatar initials ── */
+  var label = (vdr.name || vdr.company || 'Unknown').trim();
+  var initials = label.split(/[\s\-]+/).slice(0,2).map(function(w){ return (w[0]||'').toUpperCase(); }).join('') || '??';
+  var avEl = document.getElementById('pvw-v-av');
+  if (avEl) avEl.textContent = initials;
+
+  /* ── Header ── */
+  var nameEl = document.getElementById('pvw-v-name');
+  if (nameEl) nameEl.textContent = label;
+
+  var subEl = document.getElementById('pvw-v-spec');
+  if (subEl) subEl.textContent = vdr.specialisation || 'Vendor / Sourcing Partner';
+
+  var statusEl = document.getElementById('pvw-v-status');
+  if (statusEl) {
+    var s = vdr.status || 'Active';
+    var sc = s==='Active'
+      ? 'background:#1A3A2D;color:#4ADE80'
+      : s==='On Hold' ? 'background:#3D3000;color:#f59e0b'
+      : 'background:#3D1A1A;color:#f87171';
+    statusEl.innerHTML = '<span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;'+sc+'">'+s+'</span>';
+  }
+
+  /* ── Contact details ── */
+  var fv = function(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val || '—';
+  };
+  fv('pvw-v-email',   vdr.email);
+  fv('pvw-v-phone',   vdr.phone);
+  fv('pvw-v-contact', vdr.contact);
+  fv('pvw-v-login',   vdr.loginEmail || vdr.email);
+
+  /* ── Specialisation ── */
+  var specSec = document.getElementById('pvw-v-spec-sec');
+  var specVal = document.getElementById('pvw-v-spec-val');
+  if (specSec) {
+    if (vdr.specialisation && specVal) {
+      specVal.textContent = vdr.specialisation;
+      specSec.style.display = '';
+    } else {
+      specSec.style.display = 'none';
+    }
+  }
+
+  /* ── Assigned JDs (look in jobs collection) ── */
+  var jdEl = document.getElementById('pvw-v-jds');
+  if (jdEl) {
+    var jobs = window.jobs || [];
+    var matched = jobs.filter(function(j){
+      return (j.assignedVendors && j.assignedVendors[id])
+          || j.vendorId === id;
+    });
+    if (matched.length) {
+      jdEl.innerHTML = matched.map(function(j){
+        var dlPart = j.jdUrl
+          ? '<a href="'+j.jdUrl+'" target="_blank" style="display:inline-flex;align-items:center;gap:4px;'
+            +'padding:4px 10px;border-radius:7px;border:1px solid var(--border);background:none;'
+            +'color:var(--muted);font-size:11px;text-decoration:none;cursor:pointer">⬇️ JD</a>'
+          : '';
+        var st = j.status || 'Open';
+        var sc2 = st==='Open' ? 'color:var(--green)' : st==='Paused' ? 'color:#f59e0b' : 'color:var(--red)';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;'
+          +'padding:9px 0;border-bottom:1px solid var(--border)">'
+          +'<div>'
+          +'<div style="font-size:13px;font-weight:500">'+j.title+'</div>'
+          +'<div style="font-size:11px;'+sc2+'">'+st+'</div>'
+          +'</div>'
+          +dlPart
+          +'</div>';
+      }).join('');
+    } else {
+      jdEl.innerHTML = '<span style="color:var(--muted);font-size:12px">No JDs assigned yet</span>';
+    }
+  }
+
+  /* ── Notes ── */
+  var notesSec = document.getElementById('pvw-v-notes-sec');
+  var notesEl  = document.getElementById('pvw-v-notes');
+  if (notesSec) {
+    if (vdr.notes && notesEl) {
+      notesEl.textContent = vdr.notes;
+      notesSec.style.display = '';
+    } else {
+      notesSec.style.display = 'none';
+    }
+  }
+
+  /* ── Download JD button state ── */
+  var dlBtn = document.getElementById('pvw-v-dl-btn');
+  if (dlBtn) {
+    var jobs2 = window.jobs || [];
+    var hasJD = !!vdr.jdUrl || jobs2.some(function(j){
+      return ((j.assignedVendors&&j.assignedVendors[id]) || j.vendorId===id) && j.jdUrl;
+    });
+    dlBtn.disabled = !hasJD;
+    dlBtn.style.opacity = hasJD ? '1' : '0.4';
+  }
+
+  var panel = document.getElementById('pvw-vendor');
+  if (panel) panel.classList.add('open');
+};
+
+window.closeVendorPvw = function() {
+  var panel = document.getElementById('pvw-vendor');
+  if (panel) panel.classList.remove('open');
+  window._pvwVendorId = null;
+};
+
+window.pvwVendorDownloadJD = function() {
+  var id = window._pvwVendorId;
+  if (!id) return;
+  var vdr    = (window.vendors||[]).find(function(x){ return x.id===id; });
+  var url    = vdr && vdr.jdUrl ? vdr.jdUrl : null;
+  if (!url) {
+    var job = (window.jobs||[]).find(function(j){
+      return ((j.assignedVendors&&j.assignedVendors[id]) || j.vendorId===id) && j.jdUrl;
+    });
+    url = job ? job.jdUrl : null;
+  }
+  if (!url) { if(typeof showToast==='function') showToast('No JD file available','error'); return; }
+  var a = document.createElement('a');
+  a.href = url; a.target = '_blank'; a.click();
+};
+
+window.pvwVendorEmail = function() {
+  var id = window._pvwVendorId;
+  if (!id) return;
+  var vdr = (window.vendors||[]).find(function(x){ return x.id===id; });
+  if (!vdr || !vdr.email) { if(typeof showToast==='function') showToast('No email on file','error'); return; }
+  window.location.href = 'mailto:' + vdr.email;
+};
+
+window.pvwVendorDelete = function() {
+  var id = window._pvwVendorId;
+  if (!id) return;
+  window.closeVendorPvw();
+  if (typeof deleteVendor==='function') deleteVendor(id);
+};
+</script>
+
 <div class="modal-overlay" id="addVendorModal">
   <div class="modal">
     <div class="modal-header">
@@ -9924,162 +10331,925 @@ function showView(id, el) {
         🔐 An invite email with portal access link will be sent to the vendor upon saving.
       </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn" style="background:var(--card);border:1px solid var(--border);color:var(--text);" onclick="closeModal('addVendorModal')">Cancel</button>
-      <button class="btn btn-primary" id="create-vendor-btn" onclick="saveNewVendor()">Create Vendor →</button>
+          <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('addVendorModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveVendorFromAddModal()">Save Vendor</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- MODAL: ASSIGN JD -->
-<div class="modal-overlay" id="assignJDModal">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title">Assign JD to Vendor</div>
-      <button class="modal-close" onclick="closeModal('assignJDModal')">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group" style="margin-bottom:14px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Select Vendor *</label>
-        <select class="form-select" id="ajd-vendor" style="width:100%;">
-          <option value="">— Choose vendor —</option>
-          <option>TechGate Staffing</option>
-          <option>NextStep Solutions</option>
-          <option>RapidHire India</option>
-          <option>BridgeTalent Co.</option>
-        </select>
-      </div>
-      <div class="form-group" style="margin-bottom:14px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Select Job Description *</label>
-        <select class="form-select" id="ajd-jd" style="width:100%;">
-          <option value="">— Choose JD —</option>
-          <option>Senior React Developer</option>
-          <option>DevOps Engineer</option>
-          <option>Product Manager</option>
-          <option>Data Analyst</option>
-          <option>UI/UX Designer</option>
-        </select>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:14px;">
-        <div class="form-group">
-          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Submission Deadline</label>
-          <input class="form-input" id="ajd-deadline" type="date" style="width:100%;" />
-        </div>
-        <div class="form-group">
-          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Max Profiles Allowed</label>
-          <input class="form-input" id="ajd-max" type="number" placeholder="e.g. 5" style="width:100%;" />
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom:4px;">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px;">Note to Vendor (optional)</label>
-        <textarea class="form-input" id="ajd-note" placeholder="Any specific instructions for this vendor…" style="width:100%;height:80px;resize:vertical;"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn" style="background:var(--card);border:1px solid var(--border);color:var(--text);" onclick="closeModal('assignJDModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="closeModal('assignJDModal');showToast('JD assigned successfully','success')">Assign JD →</button>
-    </div>
-  </div>
-</div></body>
-</html>
 <script>
-// ===== SAFE GLOBAL FIXES =====
 
-// Ensure candidates/jobs accessible
-window.openCandPreview = function(id) {
-  var cand = (window.candidates||[]).find(function(x){ return x.id===id; });
-  if (!cand) { console.warn('openCandPreview: candidate not found', id); return; }
-  window._pvwCandId = id;
-  var job = (window.jobs||[]).find(function(j){ return j.id===cand.jobId; });
+      /* ═══ VENDOR PORTAL (old embedded) SECTION SWITCHER ═══ */
+      window.showSection = function(sectionId) {
+        // Hide all sections inside view-vendor
+        var sections = document.querySelectorAll('#view-vendor section[id^="section-"]');
+        sections.forEach(function(s) { s.style.display = 'none'; });
+        // Show target section
+        var target = document.getElementById('section-' + sectionId);
+        if (target) target.style.display = 'block';
+        // Update sidebar active state
+        document.querySelectorAll('#view-vendor .sidebar-link').forEach(function(l) {
+          l.classList.remove('active');
+        });
+        // Find the sidebar link that matches and activate it
+        document.querySelectorAll('#view-vendor .sidebar-link').forEach(function(l) {
+          if (l.getAttribute('onclick') && l.getAttribute('onclick').includes("'" + sectionId + "'")) {
+            l.classList.add('active');
+          }
+        });
+      };
 
-  // Avatar initials
-  var av = ((cand.firstName||'')[0]||'').toUpperCase() + ((cand.lastName||'')[0]||'').toUpperCase();
-  var avEl = document.getElementById('pvw-c-av');
-  if (avEl) avEl.textContent = av || '?';
+      window.toggleVendorView = function() {
+        var vv = document.getElementById('vendorView');
+        if (vv) vv.style.display = vv.style.display === 'none' ? 'block' : 'none';
+      };
 
-  // Header
-  var nameEl = document.getElementById('pvw-c-name');
-  if (nameEl) nameEl.textContent = ((cand.firstName||'')+' '+(cand.lastName||'')).trim() || '\u2014';
-  var subEl = document.getElementById('pvw-c-sub');
-  if (subEl) subEl.textContent = job ? job.title : 'No job assigned';
-  var stageEl = document.getElementById('pvw-c-stage');
-  if (stageEl) stageEl.innerHTML = (typeof window.stageBadge === 'function')
-    ? window.stageBadge(cand.stage)
-    : (cand.stage ? '<span class="badge">' + cand.stage + '</span>' : '');
 
-  // Contact details
-  var emailEl = document.getElementById('pvw-c-email');
-  if (emailEl) emailEl.textContent = cand.email || '\u2014';
-  var phoneEl = document.getElementById('pvw-c-phone');
-  if (phoneEl) phoneEl.textContent = cand.phone || '\u2014';
-  var expEl = document.getElementById('pvw-c-exp');
-  if (expEl) expEl.textContent = cand.experience ? cand.experience + ' yrs' : '\u2014';
-  var vendorEl = document.getElementById('pvw-c-vendor');
-  if (vendorEl) vendorEl.textContent = cand.vendor || '\u2014';
-  var jobEl = document.getElementById('pvw-c-job');
-  if (jobEl) jobEl.textContent = job ? job.title : '\u2014';
+      /* ═══ HIRECALC TAB SWITCHER (new design) ═══ */
+      window.hcGo = function(n) {
+        for (var i = 0; i < 4; i++) {
+          var tab   = document.getElementById('hc-t' + i);
+          var panel = document.getElementById('hc-p' + i);
+          if (tab) {
+            tab.classList.toggle('hc-tab-active', i === n);
+          }
+          if (panel) panel.style.display = i === n ? 'block' : 'none';
+        }
+        if (n === 3 && typeof renderHist === 'function') renderHist();
+      };
 
-  // Skills
-  var skillsSec = document.getElementById('pvw-c-skills-sec');
-  var skillsEl  = document.getElementById('pvw-c-skills');
-  if (skillsSec && skillsEl) {
-    if (cand.skills) {
-      skillsEl.innerHTML = cand.skills.split(',').map(function(s){
-        s = s.trim();
-        return s ? '<span class="pvw-tag">' + s.replace(/</g,'&lt;') + '</span>' : '';
-      }).join('');
-      skillsSec.style.display = '';
-    } else { skillsSec.style.display = 'none'; }
-  }
+      /* ═══ HIRECALC setMode (daily/monthly) ═══ */
+      window.setMode = function(m) {
+        window._hcMode = m;
+        var tmM = document.getElementById('tmM');
+        var tmD = document.getElementById('tmD');
+        var wM  = document.getElementById('wM');
+        var wD  = document.getElementById('wD');
+        var wD2 = document.getElementById('wD2');
+        if (tmM) tmM.classList.toggle('hc-mode-active', m === 'monthly');
+        if (tmD) tmD.classList.toggle('hc-mode-active', m === 'daily');
+        if (wM)  wM.style.display  = m === 'monthly' ? '' : 'none';
+        if (wD)  wD.style.display  = m === 'daily'   ? '' : 'none';
+        if (wD2) wD2.style.display = m === 'daily'   ? '' : 'none';
+        if (typeof calcMargin === 'function') calcMargin();
+      };
 
-  // Notes
-  var notesSec = document.getElementById('pvw-c-notes-sec');
-  var notesEl  = document.getElementById('pvw-c-notes');
-  if (notesSec) {
-    if (cand.notes && notesEl) { notesEl.textContent = cand.notes; notesSec.style.display = ''; }
-    else { notesSec.style.display = 'none'; }
-  }
 
-  // Interview
-  var ivSec = document.getElementById('pvw-c-iv-sec');
-  if (ivSec) {
-    if (cand.interviewDate) {
-      var idEl = document.getElementById('pvw-c-idate');
-      var itEl = document.getElementById('pvw-c-itime');
-      if (idEl) idEl.textContent = cand.interviewDate;
-      if (itEl) itEl.textContent = cand.interviewTime || '\u2014';
-      ivSec.style.display = '';
-    } else { ivSec.style.display = 'none'; }
-  }
+      /* ═══ TOOL VIEW NAVIGATION HELPERS ═══ */
+      window.hcNav = function(n, btn) {
+        // Switch HireCalc sections (hc-s0 through hc-s3) and sidebar links
+        for (var i = 0; i < 4; i++) {
+          var s = document.getElementById('hc-s' + i);
+          var b = document.getElementById('hc-nav-' + i);
+          if (s) s.classList.toggle('active', i === n);
+          if (b) b.classList.toggle('active', i === n);
+        }
+        if (n === 3 && typeof renderHist === 'function') renderHist();
+        // Also sync old IDs in case old IIFE checks them
+        if (typeof go === 'function') go(n);
+      };
 
-  // Resume slot + download button
-  var slot  = document.getElementById('pvw-c-resume-slot');
-  var dlBtn = document.getElementById('pvw-c-dl-btn');
-  if (slot) {
-    if (cand.resumeUrl) {
-      var rname = (cand.resumeName || 'Resume').replace(/</g, '&lt;');
-      slot.innerHTML = '<a href="' + cand.resumeUrl + '" target="_blank" class="file-chip"'
-        + ' style="font-size:13px;padding:8px 14px;display:inline-flex;align-items:center;gap:6px">'
-        + '\ud83d\udcc4 ' + rname + ' \u00a0\u2014 click to view</a>';
-      if (dlBtn) { dlBtn.disabled = false; dlBtn.style.opacity = '1'; }
-    } else {
-      slot.innerHTML = '<span style="color:var(--muted);font-size:12px">No resume uploaded</span>';
-      if (dlBtn) { dlBtn.disabled = true; dlBtn.style.opacity = '0.4'; }
-    }
-  }
+      window.vpNav = function(section, btn) {
+        // Switch Vendor Portal sections and sidebar active state
+        var sections = ['vendors', 'jd-assignments', 'profiles', 'access'];
+        sections.forEach(function(s) {
+          var el = document.getElementById('section-' + s);
+          if (el) el.style.display = s === section ? '' : 'none';
+        });
+        // Update sidebar active
+        document.querySelectorAll('#view-vendor .tool-sidebar-link').forEach(function(l) {
+          l.classList.remove('active');
+        });
+        if (btn) btn.classList.add('active');
+        // Also call old showSection for any remaining logic
+        if (typeof window.showSection === 'function') window.showSection(section);
+      };
 
-  var panel = document.getElementById('pvw-cand');
-  if (panel) panel.classList.add('open');
-};
+      window.psNav = function(viewId, btn) {
+        // Switch Performance sections by id (view-overview, view-vendor-perf, etc.)
+        var sections = ['overview','vendor-perf','recruiter-perf','jd-breakdown'];
+        sections.forEach(function(id) {
+          var el = document.getElementById('view-' + id);
+          if (el) el.style.display = id === viewId ? '' : 'none';
+        });
+        // Update sidebar active
+        document.querySelectorAll('#view-performance .tool-sidebar-link').forEach(function(l) {
+          l.classList.remove('active');
+        });
+        if (btn) btn.classList.add('active');
+        // Trigger chart init if overview
+        if (viewId === 'overview' && typeof switchPeriod === 'function') {
+          setTimeout(function() { switchPeriod('monthly'); }, 50);
+        }
+      };
 
-window.closeCandPvw = function(){
-  document.getElementById('pvw-cand')?.classList.remove('open');
-};
+      /* ztxSwitchTab — full replacement for both old IIFE + new tab bar */
+      window.ztxSwitchTab = function(id, btn) {
+        // RBAC check
+        if (typeof canAccessZtxTab === 'function' && !canAccessZtxTab(id)) {
+          if (typeof showToast === 'function') showToast('🚫 Access denied', 'error');
+          return;
+        }
+        // 1. Update .ztx-tab buttons in topbar
+        document.querySelectorAll('.ztx-tab').forEach(function(t) {
+          t.classList.remove('ztx-tab-active');
+        });
+        if (btn) btn.classList.add('ztx-tab-active');
 
-// Force expose helpers if missing
-if(typeof window.stageBadge === "undefined"){
-  window.stageBadge = function(s){ return s || ""; };
+        // 2. Show correct sb-group in sidebar
+        var tabSBMap = {
+          'vendor-portal': 'ztx-sb-vendor-portal',
+          'vendor-mgmt':   'ztx-sb-vendor-mgmt',
+          'recruiter':     'ztx-sb-recruiter',
+          'reporting':     'ztx-sb-reporting',
+          'compliance':    'ztx-sb-compliance',
+        };
+        var tabDefaultView = {
+          'vendor-portal': 'v-vp-vendors',
+          'vendor-mgmt':   'v-sla',
+          'recruiter':     'v-tasks',
+          'reporting':     'v-rpt-overview',
+          'compliance':    'v-docs',
+        };
+        document.querySelectorAll('#view-vendor-ext .sb-group').forEach(function(g) {
+          g.style.display = 'none';
+        });
+        var sbId = tabSBMap[id];
+        if (sbId) {
+          var sb = document.getElementById(sbId);
+          if (sb) {
+            sb.style.display = 'block';
+            // Set first item active
+            var links = sb.querySelectorAll('.tool-sidebar-link, .si');
+            links.forEach(function(l) { l.classList.remove('active','on'); });
+            if (links[0]) links[0].classList.add('active');
+          }
+        }
+        // 3. Show default view for this tab
+        var defaultView = tabDefaultView[id];
+        if (defaultView && typeof window.ztxShowView === 'function') {
+          window.ztxShowView(defaultView);
+        }
+      };
+
+
+      /* ═══ VENDOR PORTAL MISSING FUNCTIONS ═══ */
+      window.openAddVendor = function() {
+        var m = document.getElementById('addVendorModal');
+        if (m) { m.style.display = ''; m.classList.add('open'); }
+      };
+      window.openAssignJD = function() {
+        var m = document.getElementById('assignJDModal');
+        if (m) { m.style.display = ''; m.classList.add('open'); }
+      };
+      window.switchView = function(viewType) {
+        // Toggle between recruiter view and vendor view inside view-vendor
+        var rv = document.getElementById('recruiterView');
+        var vv = document.getElementById('vendorView');
+        if (viewType === 'vendor') {
+          if (rv) rv.style.display = 'none';
+          if (vv) { vv.style.display = 'block'; vv.style.opacity = '1'; }
+        } else {
+          if (vv) vv.style.display = 'none';
+          if (rv) rv.style.display = '';
+        }
+      };
+
+
+      /* ═══ VENDOR FORM SAVE ═══ */
+      window.saveNewVendor = function() {
+        // Delegate to module-level saveVendorFromAddModal (writes to Firestore + sends email)
+        if (typeof window.saveVendorFromAddModal === 'function') {
+          window.saveVendorFromAddModal();
+        } else {
+          showToast('Save function not ready — please try again', 'error');
+        }
+      };
+
+      window.goToDashboard = function() {
+        var dashBtn = document.getElementById('nav-dashboard');
+        // Clear any inline display set by setView for tool views
+        ['view-vendor-ext','view-hirecalc','view-vendor','view-performance'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.style.display = '';
+        });
+        setView('dashboard', dashBtn);
+      };
+      window.handleToolNav = function(view, btn) {
+        if (!canAccess(view)) {
+          // Already shown via CSS tooltip — do nothing on click
+          return;
+        }
+        setView(view, btn);
+      };
+      /* ═══ RESPONSIVE SIDEBAR TOGGLE ═══ */
+      /* Hamburger open/close paths */
+      var MENU_ICON  = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>';
+      var CLOSE_ICON = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>';
+
+      window.toggleSidebar = function() {
+        var sidebar = document.getElementById('main-sidebar');
+        var overlay = document.getElementById('sidebar-overlay');
+        var icon    = document.getElementById('hamburger-icon');
+        if (!sidebar) return;
+        var willOpen = !sidebar.classList.contains('open');
+        sidebar.classList.toggle('open', willOpen);
+        if (overlay) overlay.classList.toggle('active', willOpen);
+        if (icon) icon.innerHTML = willOpen ? CLOSE_ICON : MENU_ICON;
+      };
+
+      window.closeSidebar = function() {
+        var sidebar = document.getElementById('main-sidebar');
+        var overlay = document.getElementById('sidebar-overlay');
+        var icon    = document.getElementById('hamburger-icon');
+        if (sidebar) sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('active');
+        if (icon) icon.innerHTML = MENU_ICON;
+      };
+
+      /* Auto-close on nav click on mobile */
+      document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.nav-item').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            if (window.innerWidth <= 900) window.closeSidebar();
+          });
+        });
+      });
+
+      /* ── RESIZE HANDLER: clear mobile state when going to desktop ── */
+      window.addEventListener('resize', function() {
+        if (window.innerWidth > 900) {
+          // Desktop: force-close sidebar overlay (remove haze)
+          var sidebar = document.getElementById('main-sidebar');
+          var overlay = document.getElementById('sidebar-overlay');
+          var icon    = document.getElementById('hamburger-icon');
+          if (sidebar) sidebar.classList.remove('open');
+          if (overlay) overlay.classList.remove('active');
+          if (icon) icon.innerHTML = MENU_ICON;
+        }
+      });
+
+
+
+      /* ═══ ADMIN FUNCTIONS ═══ */
+      window.openAdminPanel = function() {
+        if (userRole !== 'admin') { showToast('Access denied', 'error'); return; }
+        document.getElementById('admin-modal').classList.add('open');
+      };
+
+      window.adminAssignRole = async function() {
+        const email = document.getElementById('admin-user-email').value.trim();
+        const role  = document.getElementById('admin-user-role').value;
+        const res   = document.getElementById('admin-result');
+        if (!email) { showToast('Enter a user email', 'error'); return; }
+        res.style.display = 'block';
+        res.style.background = '#3D2800'; res.style.color = 'var(--orange-light)';
+        res.textContent = 'Looking up user…';
+        try {
+          // Query Firestore for the user by email field, or create/update by email as doc ID
+          // setDoc + doc imported at top-level in module, available on window via module scope
+          // Use email as the document ID (safe approach without Admin SDK)
+          const safeId = email.replace(/[^a-zA-Z0-9]/g, '_');
+          await setDoc(doc(db, 'users', safeId), { email, role, updatedAt: new Date().toISOString() }, { merge: true });
+          res.style.background = '#1A3A2D'; res.style.color = 'var(--green)';
+          res.textContent = `✅ Role "${role}" assigned to ${email}`;
+          showToast(`Role updated for ${email}`);
+        } catch(e) {
+          res.style.background = '#3D1A1A'; res.style.color = 'var(--red)';
+          res.textContent = '❌ Error: ' + e.message;
+        }
+      };
+
+      /* ═══ HIRECALC SCRIPT ═══ */
+      (function(){
+var mMode='monthly', hist=[];
+try{hist=JSON.parse(localStorage.getItem('zt-hc3')||'[]');}catch(e){hist=[];}
+if(localStorage.getItem('zt-tip')){var tb=document.getElementById('tipBanner');if(tb)tb.style.display='none';}
+
+function dismissTip(){localStorage.setItem('zt-tip','1');var tb=document.getElementById('tipBanner');if(tb)tb.style.display='none';}
+
+function openFloat(){
+  var w=500,h=680,l=screen.width-w-20,t=40;
+  var p=window.open(window.location.href,'HireCalc','width='+w+',height='+h+',left='+l+',top='+t+',resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no');
+  if(p){p.focus();var btn=document.getElementById('pinBtn');btn.classList.add('active');btn.innerHTML='<span class="pdot"></span> Floating Open';}
 }
+
+function go(n){
+  for(var i=0;i<4;i++){document.getElementById('t'+i).className=i===n?'ntab on':'ntab';document.getElementById('p'+i).className=i===n?'panel on':'panel';}
+  if(n===3)renderHist();
+}
+
+function inr(n){return '\u20B9\u202F'+Math.round(n).toLocaleString('en-IN');}
+function showEl(id){var e=document.getElementById(id);if(e)e.style.display='';}
+function hideEl(id){var e=document.getElementById(id);if(e)e.style.display='none';}
+
+function setFlag(id,cls,icon,msg){
+  var el=document.getElementById(id);
+  if(!el)return;
+  el.className='flag on '+cls;
+  el.innerHTML='<span style="font-size:16px">'+icon+'</span><span>'+msg+'</span>';
+  el.style.display='flex';
+}
+function offFlag(id){
+  var el=document.getElementById(id);
+  if(!el)return;
+  el.className='flag';
+  el.innerHTML='';
+  el.style.display='none';
+}
+
+function saveHist(type,txt){
+  var d=new Date(),t=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  hist.unshift({type:type,txt:txt,time:t});
+  if(hist.length>20)hist.pop();
+  try{localStorage.setItem('zt-hc3',JSON.stringify(hist));}catch(e){}
+}
+function renderHist(){
+  var el=document.getElementById('histList');
+  if(!el)return;
+  if(!hist.length){el.innerHTML='<div class="hempty">No calculations yet</div>';return;}
+  var h='';
+  for(var i=0;i<hist.length;i++){
+    var r=hist[i];
+    h+='<div class="hrow"><div class="hbadge '+r.type+'" style="flex-shrink:0">'+r.type+'</div><div class="hval" style="flex:1;margin:0 8px">'+r.txt+'</div><div class="htime">'+r.time+'</div></div>';
+  }
+  el.innerHTML=h;
+}
+function clearHist(){hist=[];try{localStorage.removeItem('zt-hc3');}catch(e){}renderHist();}
+
+function doCopy(w){
+  var map={hike:['hPct','hDiff','hMo'],margin:['mPct','mProfit','mBill'],builder:['bMonthly','bDaily','bCost','bProfit']};
+  var parts=map[w].map(function(id){return document.getElementById(id).textContent;});
+  try{navigator.clipboard.writeText(parts.join(' | '));}catch(e){}
+  var bm={hike:'hCopy',margin:'mCopy',builder:'bCopy'};
+  var btn=document.getElementById(bm[w]);btn.textContent='Copied!';setTimeout(function(){btn.textContent='Copy';},1500);
+}
+
+function calcHike(){
+  var cur=parseFloat(document.getElementById('hCur').value),exp=parseFloat(document.getElementById('hExp').value);
+  if(!cur||!exp||isNaN(cur)||isNaN(exp)||cur<=0||exp<=0){hideEl('hRes');offFlag('hFlag');return;}
+  var p=((exp-cur)/cur)*100,diff=exp-cur,s=p>=0?'+':'';
+  var pe=document.getElementById('hPct');pe.textContent=s+p.toFixed(1)+'%';pe.className='rv '+(p>30?'bad':p>=10?'ok':'warn');
+  document.getElementById('hDiff').textContent=inr(diff)+' / yr';
+  document.getElementById('hMo').textContent=inr(exp/12)+' / mo';
+  showEl('hRes');
+  if(p<0)setFlag('hFlag','red','&#x26D4;','Negative hike &#x2014; candidate takes a pay cut. Confirm before proceeding.');
+  else if(p<10)setFlag('hFlag','amber','&#x26A0;','Low hike (below 10%) &#x2014; candidate likely to decline. Re-discuss expectations.');
+  else if(p<=30)setFlag('hFlag','green','&#x2705;','Standard hike (10&#x2013;30%). Within market norms. Good to proceed.');
+  else if(p<=50)setFlag('hFlag','amber','&#x1F6A9;','Above market norm (above 30%) &#x2014; verify client budget approval before making this offer.');
+  else setFlag('hFlag','red','&#x1F6A9;','Very high hike (above 50%) &#x2014; escalate to manager immediately before confirming.');
+  saveHist('hike',s+p.toFixed(1)+'% | '+inr(cur)+' to '+inr(exp));
+}
+
+function setMode(m){
+  mMode=m;
+  document.getElementById('tmM').className=m==='monthly'?'tbtn on':'tbtn';
+  document.getElementById('tmD').className=m==='daily'?'tbtn on':'tbtn';
+  document.getElementById('wM').style.display=m==='monthly'?'':'none';
+  document.getElementById('wD').style.display=m==='daily'?'':'none';
+  calcMargin();
+}
+
+function calcMargin(){
+  var cost=parseFloat(document.getElementById('mCost').value),billing=NaN;
+  if(mMode==='monthly'){billing=parseFloat(document.getElementById('mBillM').value);}
+  else{var d=parseFloat(document.getElementById('mBillD').value),days=parseFloat(document.getElementById('mDays').value)||22;billing=d*days;}
+  if(!cost||!billing||isNaN(cost)||isNaN(billing)||cost<=0||billing<=0){hideEl('mRes');offFlag('mFlag');return;}
+  var profit=billing-cost,mp=(profit/billing)*100;
+  var pe=document.getElementById('mPct');pe.textContent=mp.toFixed(1)+'%';pe.className='rv '+(mp>=30?'ok':mp>=20?'warn':'bad');
+  document.getElementById('mProfit').textContent=inr(profit)+' / mo';
+  document.getElementById('mBill').textContent=inr(billing)+' / mo';
+  showEl('mRes');
+  if(mp<0)setFlag('mFlag','red','&#x26D4;','Loss-making deal &#x2014; do not proceed without management approval.');
+  else if(mp<20)setFlag('mFlag','red','&#x1F6A9;','Critically low margin (below 20%) &#x2014; escalate immediately.');
+  else if(mp<30)setFlag('mFlag','amber','&#x26A0;','Below 30% policy &#x2014; needs manager sign-off before confirming.');
+  else if(mp<40)setFlag('mFlag','green','&#x2705;','Within policy (30%+). Good to proceed.');
+  else setFlag('mFlag','green','&#x2705;','Strong margin (40%+) &#x2014; excellent deal.');
+  saveHist('margin',mp.toFixed(1)+'% | Billing: '+inr(billing)+' | Cost: '+inr(cost));
+}
+
+function calcBuilder(){
+  var ctc=parseFloat(document.getElementById('bCtc').value),mp=parseFloat(document.getElementById('bMargin').value),days=parseFloat(document.getElementById('bDays').value)||22;
+  if(!ctc||isNaN(ctc)||ctc<=0||isNaN(mp)||mp<=0||mp>=100){offFlag('bFlag');return;}
+  var cost=ctc/12,billing=cost/(1-mp/100),daily=billing/days,profit=billing-cost;
+  document.getElementById('bMonthly').textContent=inr(billing);
+  document.getElementById('bDaily').textContent=inr(daily)+' / day';
+  document.getElementById('bCost').textContent=inr(cost)+' / mo';
+  document.getElementById('bProfit').textContent=inr(profit)+' / mo';
+  document.getElementById('bMout').textContent=mp.toFixed(1)+'%';
+  document.getElementById('bNote').textContent='Quote these rates to achieve '+mp.toFixed(1)+'% margin on this placement.';
+  if(mp<30)setFlag('bFlag','amber','&#x26A0;','Target margin below 30% policy &#x2014; adjust or get manager approval.');
+  else setFlag('bFlag','green','&#x2705;',mp.toFixed(1)+'% margin &#x2014; within policy. Ready to quote.');
+  saveHist('builder',mp.toFixed(1)+'% | '+inr(billing)+'/mo | '+inr(daily)+'/day');
+}
+
+calcBuilder();
+
+      // Expose HireCalc functions to window so onclick= works
+      window.go          = go;
+      window.calcHike    = calcHike;
+      window.setMode     = setMode;
+      window.calcMargin  = calcMargin;
+      window.calcBuilder = calcBuilder;
+      window.doCopy      = doCopy;
+      window.dismissTip  = dismissTip;
+      window.clearHist   = clearHist;
+      window.renderHist  = renderHist;
+      window.openFloat   = openFloat;
+      })();
+
+
+      /* ═══ PERFORMANCE SUMMARY SCRIPT ═══ */
+      (function(){
+        /* ══════ DATA ════════════════════════════════════════════════ */
+const DATA = {
+  monthly: {
+    stats: { submitted:48, shortlisted:22, client:14, interviews:9, onboarding:4, backouts:2 },
+    deltas: { submitted:'+12', shortlisted:'+6', client:'+4', interviews:'+3', onboarding:'-1', backouts:'+1' },
+    deltaDirs:{ submitted:true, shortlisted:true, client:true, interviews:true, onboarding:false, backouts:false },
+    trend: {
+      labels: ['W1','W2','W3','W4'],
+      submitted:  [10, 14, 12, 12],
+      shortlisted:[4,  6,  6,  6],
+      onboarded:  [1,  1,  1,  1]
+    },
+    funnel: [
+      { label:'Submitted',  val:48, pct:100, color:'#3b7fff' },
+      { label:'Shortlisted',val:22, pct:46,  color:'#14b8a6' },
+      { label:'Sent to client',val:14,pct:29,color:'#a855f7' },
+      { label:'Interviews', val:9,  pct:19,  color:'#f59e0b' },
+      { label:'Onboarded',  val:4,  pct:8,   color:'#22c55e' },
+      { label:'Backouts',   val:2,  pct:4,   color:'#ef4444' },
+    ],
+    vendors: [
+      { id:'TG', cls:'av1', name:'TechGate Staffing',  contact:'Anil Mehta',  submitted:18, shortlisted:9, client:6, interviews:4, onboarded:2, backouts:1 },
+      { id:'NS', cls:'av2', name:'NextStep Solutions', contact:'Priya Sharma', submitted:14, shortlisted:7, client:4, interviews:3, onboarded:1, backouts:0 },
+      { id:'RH', cls:'av3', name:'RapidHire India',    contact:'Kiran Das',   submitted:9,  shortlisted:4, client:2, interviews:1, onboarded:1, backouts:1 },
+      { id:'BT', cls:'av4', name:'BridgeTalent Co.',   contact:'Sneha Raju',  submitted:7,  shortlisted:2, client:2, interviews:1, onboarded:0, backouts:0 },
+    ],
+    recruiters: [
+      { initials:'RK', name:'Riya Kapoor',    role:'Senior Recruiter', submitted:28, shortlisted:14, client:9, interviews:6, onboarded:3, backouts:1, vendors:4 },
+      { initials:'AM', name:'Aryan Mehta',    role:'Recruiter',        submitted:12, shortlisted:5,  client:3, interviews:2, onboarded:1, backouts:1, vendors:2 },
+      { initials:'SJ', name:'Sneha Joshi',    role:'Associate',        submitted:8,  shortlisted:3,  client:2, interviews:1, onboarded:0, backouts:0, vendors:1 },
+    ],
+    jds: [
+      { title:'Senior React Developer', vendor:'TechGate', vcls:'av1', submitted:8, shortlisted:4, interviews:3, onboarded:1, backouts:0 },
+      { title:'DevOps Engineer',         vendor:'TechGate', vcls:'av1', submitted:5, shortlisted:2, interviews:1, onboarded:1, backouts:1 },
+      { title:'Product Manager',         vendor:'NextStep', vcls:'av2', submitted:6, shortlisted:3, interviews:2, onboarded:1, backouts:0 },
+      { title:'Data Analyst',            vendor:'RapidHire',vcls:'av3', submitted:7, shortlisted:3, interviews:1, onboarded:1, backouts:1 },
+      { title:'UI/UX Designer',          vendor:'BridgeTalent',vcls:'av4',submitted:4,shortlisted:2,interviews:1,onboarded:0, backouts:0 },
+      { title:'Backend Node.js Dev',     vendor:'TechGate', vcls:'av1', submitted:5, shortlisted:3, interviews:1, onboarded:1, backouts:0 },
+      { title:'ML Engineer',             vendor:'NextStep', vcls:'av2', submitted:8, shortlisted:4, interviews:1, onboarded:0, backouts:0 },
+      { title:'QA Automation',           vendor:'RapidHire',vcls:'av3', submitted:5, shortlisted:1, interviews:0, onboarded:0, backouts:0 },
+    ]
+  },
+  weekly: {
+    stats: { submitted:14, shortlisted:6, client:4, interviews:3, onboarding:1, backouts:1 },
+    deltas: { submitted:'+3', shortlisted:'+2', client:'+1', interviews:'+1', onboarding:'+1', backouts:'+1' },
+    deltaDirs:{ submitted:true, shortlisted:true, client:true, interviews:true, onboarding:true, backouts:false },
+    trend: {
+      labels: ['Mon','Tue','Wed','Thu','Fri'],
+      submitted:  [2,4,3,3,2],
+      shortlisted:[1,2,1,1,1],
+      onboarded:  [0,0,1,0,0]
+    },
+    funnel: [
+      { label:'Submitted',  val:14, pct:100, color:'#3b7fff' },
+      { label:'Shortlisted',val:6,  pct:43,  color:'#14b8a6' },
+      { label:'Sent to client',val:4,pct:29, color:'#a855f7' },
+      { label:'Interviews', val:3,  pct:21,  color:'#f59e0b' },
+      { label:'Onboarded',  val:1,  pct:7,   color:'#22c55e' },
+      { label:'Backouts',   val:1,  pct:7,   color:'#ef4444' },
+    ],
+    vendors: [
+      { id:'TG', cls:'av1', name:'TechGate Staffing',  contact:'Anil Mehta',  submitted:5, shortlisted:3, client:2, interviews:2, onboarded:1, backouts:1 },
+      { id:'NS', cls:'av2', name:'NextStep Solutions', contact:'Priya Sharma', submitted:4, shortlisted:2, client:1, interviews:1, onboarded:0, backouts:0 },
+      { id:'RH', cls:'av3', name:'RapidHire India',    contact:'Kiran Das',   submitted:3, shortlisted:1, client:1, interviews:0, onboarded:0, backouts:0 },
+      { id:'BT', cls:'av4', name:'BridgeTalent Co.',   contact:'Sneha Raju',  submitted:2, shortlisted:0, client:0, interviews:0, onboarded:0, backouts:0 },
+    ],
+    recruiters: [
+      { initials:'RK', name:'Riya Kapoor',    role:'Senior Recruiter', submitted:8, shortlisted:4, client:3, interviews:2, onboarded:1, backouts:1, vendors:4 },
+      { initials:'AM', name:'Aryan Mehta',    role:'Recruiter',        submitted:4, shortlisted:1, client:1, interviews:1, onboarded:0, backouts:0, vendors:2 },
+      { initials:'SJ', name:'Sneha Joshi',    role:'Associate',        submitted:2, shortlisted:1, client:0, interviews:0, onboarded:0, backouts:0, vendors:1 },
+    ],
+    jds: [
+      { title:'Senior React Developer', vendor:'TechGate', vcls:'av1', submitted:3, shortlisted:2, interviews:1, onboarded:1, backouts:1 },
+      { title:'DevOps Engineer',         vendor:'TechGate', vcls:'av1', submitted:2, shortlisted:1, interviews:1, onboarded:0, backouts:0 },
+      { title:'Product Manager',         vendor:'NextStep', vcls:'av2', submitted:2, shortlisted:1, interviews:1, onboarded:0, backouts:0 },
+      { title:'Data Analyst',            vendor:'RapidHire',vcls:'av3', submitted:3, shortlisted:1, interviews:0, onboarded:0, backouts:0 },
+      { title:'UI/UX Designer',          vendor:'BridgeTalent',vcls:'av4',submitted:2,shortlisted:0,interviews:0,onboarded:0,backouts:0 },
+      { title:'Backend Node.js Dev',     vendor:'TechGate', vcls:'av1', submitted:2, shortlisted:1, interviews:0, onboarded:0, backouts:0 },
+    ]
+  }
+};
+
+let currentPeriod = 'monthly';
+let trendChartInst, recChartInst, backoutChartInst;
+
+/* ══════ PERIOD SWITCH ═══════════════════════════════════════ */
+function switchPeriod(p) {
+  currentPeriod = p;
+  const d = DATA[p];
+
+  // toggle buttons
+  ['btn-weekly','btn-monthly','vbtn-weekly','vbtn-monthly','rbtn-weekly','rbtn-monthly'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', id.includes(p === 'weekly' ? 'weekly' : 'monthly'));
+  });
+  document.getElementById('periodSelect').value = p;
+
+  // stats
+  const s = d.stats, dl = d.deltas, dd = d.deltaDirs;
+  const ids = ['submitted','shortlisted','client','interviews','onboarding','backouts'];
+  ids.forEach(k => {
+    const ve = document.getElementById('st-'+k);
+    const de = document.getElementById('sd-'+k);
+    if (ve) ve.textContent = s[k];
+    if (de) {
+      de.textContent = (dd[k] ? '↑' : '↓') + ' ' + Math.abs(dl[k]) + ' vs last period';
+      de.className = 'sd ' + (dd[k] ? 'up' : 'dn');
+    }
+  });
+
+  document.getElementById('periodLabel').textContent =
+    p === 'monthly' ? 'March 2026 · All Vendors & Recruiters' : 'Mar 11–17, 2026 · All Vendors & Recruiters';
+
+  renderFunnel(d.funnel);
+  renderTrendChart(d.trend);
+  renderVendorTable(d.vendors);
+  renderVendorDetailCards(d.vendors, d.jds);
+  renderRecruiterCards(d.recruiters);
+  renderRecruiterChart(d.recruiters);
+  renderJDRows(d.jds);
+}
+
+/* ══════ FUNNEL ══════════════════════════════════════════════ */
+function renderFunnel(data) {
+  const el = document.getElementById('funnelChart');
+  if (!el) return;
+  el.innerHTML = data.map(row => `
+    <div class="funnel-row">
+      <div class="funnel-label">${row.label}</div>
+      <div class="funnel-bar-outer">
+        <div class="funnel-bar-inner" style="width:${row.pct}%;background:${row.color}22;color:${row.color};">
+          ${row.val}
+        </div>
+      </div>
+      <div class="funnel-pct">${row.pct}%</div>
+    </div>
+  `).join('');
+  setTimeout(() => {
+    el.querySelectorAll('.funnel-bar-inner').forEach((b,i) => b.style.width = data[i].pct + '%');
+  }, 50);
+}
+
+/* ══════ TREND CHART ═════════════════════════════════════════ */
+function renderTrendChart(data) {
+  const canvas = document.getElementById('trendChart');
+  if (!canvas) return;
+  if (trendChartInst) trendChartInst.destroy();
+  trendChartInst = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        { label:'Submitted',  data:data.submitted,   borderColor:'#3b7fff', backgroundColor:'#3b7fff22', fill:true, tension:.4, pointRadius:4, pointBackgroundColor:'#3b7fff' },
+        { label:'Shortlisted',data:data.shortlisted, borderColor:'#14b8a6', backgroundColor:'#14b8a622', fill:true, tension:.4, pointRadius:4, pointBackgroundColor:'#14b8a6' },
+        { label:'Onboarded',  data:data.onboarded,   borderColor:'#22c55e', backgroundColor:'#22c55e22', fill:true, tension:.4, pointRadius:4, pointBackgroundColor:'#22c55e' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{ display:false } },
+      scales: {
+        x: { grid:{ color:'#252c3e' }, ticks:{ color:'#8494b3', font:{size:11} } },
+        y: { grid:{ color:'#252c3e' }, ticks:{ color:'#8494b3', font:{size:11} }, beginAtZero:true }
+      }
+    }
+  });
+}
+
+/* ══════ VENDOR TABLE ════════════════════════════════════════ */
+function renderVendorTable(vendors) {
+  const el = document.getElementById('vendorTable');
+  if (!el) return;
+  const maxSub = Math.max(...vendors.map(v=>v.submitted));
+  el.innerHTML = `
+    <thead>
+      <tr>
+        <th>Vendor</th>
+        <th>Submitted</th>
+        <th>Shortlisted</th>
+        <th>Interviews</th>
+        <th>Onboarded</th>
+        <th>Backouts</th>
+        <th>Conv. Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${vendors.map(v => {
+        const conv = v.submitted > 0 ? Math.round((v.onboarded/v.submitted)*100) : 0;
+        const bar = Math.round((v.submitted/maxSub)*100);
+        return `<tr>
+          <td><div style="display:flex;align-items:center;gap:10px;"><div class="vav ${v.cls}">${v.id}</div><div><div class="vname">${v.name}</div><div class="vmeta">${v.contact}</div></div></div></td>
+          <td>
+            <div style="font-family:var(--mono);font-size:13px;font-weight:600;">${v.submitted}</div>
+            <div class="bar-wrap"><div class="bar-fill" style="width:${bar}%;background:var(--accent);"></div></div>
+          </td>
+          <td><span class="pill pt">${v.shortlisted}</span></td>
+          <td><span class="pill pa">${v.interviews}</span></td>
+          <td><span class="pill pg">${v.onboarded}</span></td>
+          <td><span class="pill pr">${v.backouts}</span></td>
+          <td>
+            <div style="font-family:var(--mono);font-size:12px;color:${conv>=10?'var(--green)':conv>=5?'var(--amber)':'var(--red)'};">${conv}%</div>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  `;
+}
+
+/* ══════ VENDOR DETAIL CARDS ═════════════════════════════════ */
+function renderVendorDetailCards(vendors, jds) {
+  const el = document.getElementById('vendorDetailCards');
+  if (!el) return;
+  el.innerHTML = vendors.map(v => {
+    const conv = v.submitted > 0 ? Math.round((v.onboarded/v.submitted)*100) : 0;
+    const sl_rate = v.submitted > 0 ? Math.round((v.shortlisted/v.submitted)*100) : 0;
+    const vJDs = jds.filter(j => j.vendor.toLowerCase().includes(v.id.toLowerCase()));
+    return `
+    <div class="sc2">
+      <div class="sch">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="vav ${v.cls}">${v.id}</div>
+          <div>
+            <div style="font-size:15px;font-weight:600;">${v.name}</div>
+            <div style="font-size:12px;color:var(--muted);">${v.contact}</div>
+          </div>
+        </div>
+        <span class="pill pg">Active</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:0;border-bottom:1px solid var(--border);">
+        ${[
+          ['Submitted','submitted', v.submitted, 'var(--accent)'],
+          ['Shortlisted','shortlisted', v.shortlisted, 'var(--teal)'],
+          ['Sent to Client','client', v.client, 'var(--purple)'],
+          ['Interviews','interviews', v.interviews, 'var(--amber)'],
+          ['Onboarded','onboarded', v.onboarded, 'var(--green)'],
+          ['Backouts','backouts', v.backouts, 'var(--red)'],
+        ].map(([lbl,,val,col],i) => `
+          <div style="padding:14px 16px;${i<5?'border-right:1px solid var(--border);':''}">
+            <div style="font-size:20px;font-weight:600;font-family:var(--mono);color:${col};">${val}</div>
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">${lbl}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div style="display:flex;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);">
+        <div style="flex:1;background:var(--surface);border-radius:8px;padding:12px 14px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">SHORTLIST RATE</div>
+          <div style="font-size:18px;font-weight:600;color:${sl_rate>=40?'var(--green)':sl_rate>=20?'var(--amber)':'var(--red)'};">${sl_rate}%</div>
+          <div class="bar-wrap" style="margin-top:6px;"><div class="bar-fill" style="width:${sl_rate}%;background:var(--teal);"></div></div>
+        </div>
+        <div style="flex:1;background:var(--surface);border-radius:8px;padding:12px 14px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">CONVERSION RATE</div>
+          <div style="font-size:18px;font-weight:600;color:${conv>=10?'var(--green)':conv>=5?'var(--amber)':'var(--red)'};">${conv}%</div>
+          <div class="bar-wrap" style="margin-top:6px;"><div class="bar-fill" style="width:${Math.min(conv*3,100)}%;background:var(--green);"></div></div>
+        </div>
+        <div style="flex:1;background:var(--surface);border-radius:8px;padding:12px 14px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">BACKOUT RATE</div>
+          <div style="font-size:18px;font-weight:600;color:${v.backouts===0?'var(--green)':v.backouts===1?'var(--amber)':'var(--red)'};">${v.onboarded>0?Math.round((v.backouts/v.onboarded)*100):0}%</div>
+          <div class="bar-wrap" style="margin-top:6px;"><div class="bar-fill" style="width:${v.onboarded>0?Math.min((v.backouts/v.onboarded)*100,100):0}%;background:var(--red);"></div></div>
+        </div>
+      </div>
+      ${vJDs.length > 0 ? `
+      <div style="padding:12px 18px 4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;">JD Breakdown</div>
+      ${vJDs.map(j => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 18px;border-top:1px solid var(--border);">
+          <div style="flex:1;font-size:13px;font-weight:500;">${j.title}</div>
+          <span class="pill pb" style="min-width:46px;justify-content:center;">${j.submitted} sub</span>
+          <span class="pill pt" style="min-width:46px;justify-content:center;">${j.shortlisted} sl</span>
+          <span class="pill pa" style="min-width:46px;justify-content:center;">${j.interviews} int</span>
+          <span class="pill pg" style="min-width:46px;justify-content:center;">${j.onboarded} on</span>
+          <span class="pill pr" style="min-width:46px;justify-content:center;">${j.backouts} bo</span>
+        </div>
+      `).join('')}
+      ` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ══════ RECRUITER CARDS ═════════════════════════════════════ */
+function renderRecruiterCards(recs) {
+  const el = document.getElementById('recruiterCards');
+  if (!el) return;
+  el.innerHTML = recs.map(r => {
+    const conv = r.submitted > 0 ? Math.round((r.onboarded/r.submitted)*100) : 0;
+    const sl = r.submitted > 0 ? Math.round((r.shortlisted/r.submitted)*100) : 0;
+    return `
+    <div class="rec-card">
+      <div class="rec-head">
+        <div class="rec-av">${r.initials}</div>
+        <div>
+          <div class="rec-name">${r.name}</div>
+          <div class="rec-role">${r.role} · ${r.vendors} vendor${r.vendors>1?'s':''}</div>
+        </div>
+      </div>
+      <div class="rec-stat-row">
+        <div><div class="rec-stat-val" style="color:var(--accent);">${r.submitted}</div><div class="rec-stat-lbl">Submitted</div></div>
+        <div><div class="rec-stat-val" style="color:var(--teal);">${r.shortlisted}</div><div class="rec-stat-lbl">Shortlisted</div></div>
+        <div><div class="rec-stat-val" style="color:var(--amber);">${r.interviews}</div><div class="rec-stat-lbl">Interviews</div></div>
+      </div>
+      <hr class="rec-divider"/>
+      <div class="rec-stat-row">
+        <div><div class="rec-stat-val" style="color:var(--green);">${r.onboarded}</div><div class="rec-stat-lbl">Onboarded</div></div>
+        <div><div class="rec-stat-val" style="color:var(--red);">${r.backouts}</div><div class="rec-stat-lbl">Backouts</div></div>
+        <div><div class="rec-stat-val" style="color:var(--purple);">${conv}%</div><div class="rec-stat-lbl">Conv. Rate</div></div>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Shortlist rate: ${sl}%</div>
+        <div class="bar-wrap"><div class="bar-fill" style="width:${sl}%;background:var(--teal);"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ══════ RECRUITER CHART ═════════════════════════════════════ */
+function renderRecruiterChart(recs) {
+  const c1 = document.getElementById('recChart');
+  const c2 = document.getElementById('backoutChart');
+  if (!c1 || !c2) return;
+  if (recChartInst) recChartInst.destroy();
+  if (backoutChartInst) backoutChartInst.destroy();
+
+  recChartInst = new Chart(c1, {
+    type: 'bar',
+    data: {
+      labels: recs.map(r => r.name.split(' ')[0]),
+      datasets: [
+        { label:'Submitted', data:recs.map(r=>r.submitted), backgroundColor:'#3b7fff88' },
+        { label:'Onboarded', data:recs.map(r=>r.onboarded), backgroundColor:'#22c55e88' },
+        { label:'Backouts',  data:recs.map(r=>r.backouts),  backgroundColor:'#ef444488' },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false } },
+      scales:{
+        x:{ grid:{ color:'#252c3e' }, ticks:{ color:'#8494b3', font:{size:11} } },
+        y:{ grid:{ color:'#252c3e' }, ticks:{ color:'#8494b3', font:{size:11} }, beginAtZero:true }
+      }
+    }
+  });
+
+  backoutChartInst = new Chart(c2, {
+    type: 'doughnut',
+    data: {
+      labels: recs.map(r => r.name.split(' ')[0]),
+      datasets: [{
+        data: recs.map(r => r.onboarded > 0 ? Math.round((r.backouts/r.onboarded)*100) : 0),
+        backgroundColor:['#3b7fff','#22c55e','#f59e0b'],
+        borderColor:'transparent',
+        hoverOffset:6
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:true, position:'bottom', labels:{ color:'#8494b3', font:{size:11}, padding:12, boxWidth:10 } }
+      }
+    }
+  });
+}
+
+/* ══════ JD ROWS ═════════════════════════════════════════════ */
+function renderJDRows(jds) {
+  const el = document.getElementById('jdRows');
+  if (!el) return;
+  el.innerHTML = jds.map(j => {
+    const conv = j.submitted > 0 ? Math.round((j.onboarded/j.submitted)*100) : 0;
+    return `
+    <div class="jd-row" style="cursor:pointer;" onclick="">
+      <div>
+        <div class="vname">${j.title}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">conv. rate: <span style="color:${conv>=10?'var(--green)':conv>=5?'var(--amber)':'var(--red)'};">${conv}%</span></div>
+      </div>
+      <div><div style="display:flex;align-items:center;gap:6px;"><div class="vav ${j.vcls}" style="width:22px;height:22px;font-size:9px;">${j.vendor.substring(0,2).toUpperCase()}</div><span style="font-size:12px;">${j.vendor}</span></div></div>
+      <div style="text-align:center;font-family:var(--mono);font-weight:600;color:var(--accent);">${j.submitted}</div>
+      <div style="text-align:center;font-family:var(--mono);font-weight:600;color:var(--teal);">${j.shortlisted}</div>
+      <div style="text-align:center;font-family:var(--mono);font-weight:600;color:var(--amber);">${j.interviews}</div>
+      <div style="text-align:center;font-family:var(--mono);font-weight:600;color:var(--green);">${j.onboarded}</div>
+      <div style="text-align:center;font-family:var(--mono);font-weight:600;color:var(--red);">${j.backouts}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ══════ VIEW SWITCH ═════════════════════════════════════════ */
+function showView(id, el) {
+  ['overview','vendor-perf','recruiter-perf','jd-breakdown'].forEach(v => {
+    document.getElementById('view-'+v).style.display = v===id ? 'block' : 'none';
+  });
+  document.querySelectorAll('.sl').forEach(s => s.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  if (id === 'recruiter-perf') {
+    setTimeout(() => renderRecruiterChart(DATA[currentPeriod].recruiters), 50);
+  }
+}
+
+/* ══════ INIT ════════════════════════════════════════════════ */
+      // Expose Performance functions to window so onclick= works
+      window.switchPeriod           = switchPeriod;
+      window.renderFunnel           = renderFunnel;
+      window.renderTrendChart       = renderTrendChart;
+      window.renderVendorTable      = renderVendorTable;
+      window.renderVendorDetailCards= renderVendorDetailCards;
+      window.renderRecruiterCards   = renderRecruiterCards;
+      window.renderRecruiterChart   = renderRecruiterChart;
+      window.renderJDRows           = renderJDRows;
+      window.showView               = showView;
+      // Don't init on load (view is hidden) — init when view is opened instead
+      })();
+      /* Fallback stubs removed — module always loads before standalone */
+
+      /* ═══ VENDOR-EXT (ZTX) INTERACTIVE FUNCTIONS ═══ */
+      (function() {
+        // Tab → sidebar map
+        var tabSBMap = {
+          'vendor-portal': 'ztx-sb-vendor-portal',
+          'vendor-mgmt':   'ztx-sb-vendor-mgmt',
+          recruiter:       'ztx-sb-recruiter',
+          reporting:       'ztx-sb-reporting',
+          compliance:      'ztx-sb-compliance',
+        };
+        // Tab → first view map
+        var tabDefaultView = {
+          'vendor-portal': 'v-vp-vendors',
+          'vendor-mgmt':   'v-sla',
+          recruiter:       'v-tasks',
+          reporting:       'v-rpt-overview',
+          compliance:      'v-docs'        };
+
+        /* ── view list for vendor-ext ── */
+        var ztxViews = [
+          'v-vp-vendors','v-vp-jd','v-vp-profiles','v-vp-access',
+          'v-sla','v-billing','v-onboarding','v-compliance',
+          'v-tasks','v-pipeline','v-submissions',
+          'v-rpt-overview','v-rpt-vendor','v-rpt-recruiter',
+          'v-docs','v-audit',
+        ];
+
+        /* ── Show a single view, hide all others ── */
+        window.ztxShowView = function(id) {
+          ztxViews.forEach(function(vid) {
+            var el = document.getElementById(vid);
+            if (el) el.style.display = vid === id ? '' : 'none';
+          });
+          // Update sidebar active state
+          document.querySelectorAll('#view-vendor-ext .tool-sidebar-link, #view-vendor-ext .si').forEach(function(l) {
+            l.classList.remove('active','on');
+          });
+          // Activate matching sidebar link
+          document.querySelectorAll('#view-vendor-ext .tool-sidebar-link, #view-vendor-ext .si').forEach(function(l) {
+            var oc = l.getAttribute('onclick') || '';
+            if (oc.indexOf("'" + id + "'") !== -1 || oc.indexOf('"' + id + '"') !== -1) {
+              l.classList.add('active');
+            }
+          });
+        };
+
+        /* ── Sub-view switcher within a tab ── */
+        window.ztxSwitchView = function(id, btn) {
+          window.ztxShowView(id);
+          // Update sidebar button active state
+          var parent = btn ? btn.closest('.sb-group') : null;
+          if (parent) {
+            parent.querySelectorAll('.tool-sidebar-link, .si').forEach(function(l) {
+              l.classList.remove('active','on');
+            });
+          }
+          if (btn) btn.classList.add('active');
+        };
+
+        /* ── Init on load: show default tab's first view ── */
+        document.addEventListener('DOMContentLoaded', function() {
+          // Init first active tab
+          var activeTab = document.querySelector('#ztx-tab-bar .ztx-tab.active, #ztx-tab-bar .tab.active');
+          if (activeTab) {
+            var tabId = activeTab.dataset.tab || activeTab.getAttribute('data-tab');
+            if (tabId) {
+              var defView = tabDefaultView[tabId] || tabDefaultView['vendor-portal'];
+              window.ztxShowView(defView);
+            }
+          } else {
+            // Default to vendor-portal
+            window.ztxShowView('v-vp-vendors');
+          }
+        });
+
+      })();
+
 </script>
+</body>
+</html>
