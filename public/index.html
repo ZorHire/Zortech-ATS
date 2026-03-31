@@ -11205,7 +11205,15 @@ function showView(id, el) {
         window.ztxShowView = function(id) {
           ztxViews.forEach(function(vid) {
             var el = document.getElementById(vid);
-            if (el) el.style.display = vid === id ? '' : 'none';
+            if (el) {
+              if (vid === id) {
+                el.style.display = 'block';
+                el.classList.add('on');
+              } else {
+                el.style.display = 'none';
+                el.classList.remove('on');
+              }
+            }
           });
           // Update sidebar active state
           document.querySelectorAll('#view-vendor-ext .tool-sidebar-link, #view-vendor-ext .si').forEach(function(l) {
