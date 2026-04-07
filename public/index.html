@@ -1017,7 +1017,7 @@ ${text.substring(0, 4000)}`
               .map((c) => {
                 const job = jobs.find((j) => j.id === c.jobId);
                 const score = scoreMap[c.id];
-                return `<tr>
+                return `<tr data-id="${c.id}">
       <td><div class="cname">${escapeHTML(c.firstName)} ${escapeHTML(c.lastName)}</div>
           <div class="csub">${c.skills || "No skills listed"}</div></td>
       <td>${job ? job.title : "—"}</td>
@@ -1664,34 +1664,44 @@ ${text.substring(0, 4000)}`
         const countWithEmail = candidates.filter(c => searchFilteredIds.includes(c.id) && c.email).length;
         
         el.innerHTML = `
-          <div style="margin-bottom: 20px; padding: 12px; background: rgba(255,107,0,0.05); border: 1px solid rgba(255,107,0,0.1); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
-            <div style="font-size: 20px;">🎯</div>
+          <div style="margin-bottom: 16px; padding: 12px; background: rgba(255,107,0,0.05); border: 1px solid rgba(255,107,0,0.1); border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+            <div style="font-size: 24px;">🎯</div>
             <div>
-              <div style="font-size: 13px; font-weight: 600; color: var(--orange-light)">Campaign Target</div>
-              <div style="font-size: 11px; color: var(--muted)">Sending to <strong>${countWithEmail}</strong> candidates from current search results.</div>
+              <div style="font-size: 14px; font-weight: 700; color: var(--orange-light)">Campaign Target</div>
+              <div style="font-size: 12px; color: var(--muted)">Sending to <strong>${countWithEmail}</strong> candidates from current search results.</div>
             </div>
           </div>
-          <div class="email-cards" style="grid-template-columns: 1fr; gap: 12px;">
-            <div class="email-template-card" onclick="openBulkModal(searchFilteredIds)">
-              <div class="email-icon" style="background:#1A2A3D;color:var(--blue); width:40px; height:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
-              <div style="flex:1">
-                <div class="email-template-title" style="font-size: 14px">Bulk Outreach</div>
-                <div class="email-template-desc" style="font-size: 11px">Send personalized bulk emails with {name} tags.</div>
-              </div>
-              <div class="btn btn-primary btn-sm">Launch →</div>
-            </div>
-            <div class="email-template-card" onclick="closeModal('email-campaign-modal'); setView('candidates', document.getElementById('nav-candidates'))">
-              <div class="email-icon" style="background:#2D1A3D;color:var(--purple); width:40px; height:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
-              <div style="flex:1">
-                <div class="email-template-title" style="font-size: 14px">Interview Invite</div>
-                <div class="email-template-desc" style="font-size: 11px">Send branded calendar invites to selected.</div>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div class="email-template-card" style="padding: 16px; min-height: fit-content; cursor: default;">
+              <div style="display: flex; align-items: flex-start; gap: 14px;">
+                <div class="email-icon" style="background:#1A2A3D;color:var(--blue); width:44px; height:44px; min-width:44px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+                <div style="flex:1">
+                  <div class="email-template-title" style="font-size: 15px; margin-bottom: 2px;">Bulk Outreach</div>
+                  <div class="email-template-desc" style="font-size: 12px; margin-bottom: 12px;">Send personalized bulk emails with {name} tags.</div>
+                  <button class="btn btn-primary btn-sm" onclick="openBulkModal(searchFilteredIds)" style="width: 100%; justify-content: center;">Launch Outreach →</button>
+                </div>
               </div>
             </div>
-            <div class="email-template-card" onclick="closeModal('email-campaign-modal'); setView('candidates', document.getElementById('nav-candidates'))">
-              <div class="email-icon" style="background:#1A3A2D;color:var(--green); width:40px; height:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
-              <div style="flex:1">
-                <div class="email-template-title" style="font-size: 14px">Offer Letter</div>
-                <div class="email-template-desc" style="font-size: 11px">Send professional offers to top picks.</div>
+            
+            <div class="email-template-card" style="padding: 16px; min-height: fit-content; cursor: pointer;" onclick="closeModal('email-campaign-modal'); setView('candidates', document.getElementById('nav-candidates'))">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <div class="email-icon" style="background:#2D1A3D;color:var(--purple); width:40px; height:40px; min-width:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+                <div style="flex:1">
+                  <div class="email-template-title" style="font-size: 14px">Interview Invite</div>
+                  <div class="email-template-desc" style="font-size: 11px">Send branded calendar invites.</div>
+                </div>
+                <div style="color: var(--muted); opacity: 0.5;">→</div>
+              </div>
+            </div>
+            
+            <div class="email-template-card" style="padding: 16px; min-height: fit-content; cursor: pointer;" onclick="closeModal('email-campaign-modal'); setView('candidates', document.getElementById('nav-candidates'))">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <div class="email-icon" style="background:#1A3A2D;color:var(--green); width:40px; height:40px; min-width:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+                <div style="flex:1">
+                  <div class="email-template-title" style="font-size: 14px">Offer Letter</div>
+                  <div class="email-template-desc" style="font-size: 11px">Send professional offers to top picks.</div>
+                </div>
+                <div style="color: var(--muted); opacity: 0.5;">→</div>
               </div>
             </div>
           </div>
@@ -7152,18 +7162,7 @@ window.setJobStatus = function(jobId, status) {
             </svg>
             <span>Resume Search</span>
           </button>
-          <div class="nav-section">Communication</div>
-          <button class="nav-item" id="nav-emails" onclick="setView('emails', this)">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
-            <span>Email Campaigns</span>
-          </button>
+
           <div class="nav-section" id="nav-section-tools">Tools</div>
           <button class="nav-item nav-tool-btn" id="nav-vendor-ext" onclick="handleToolNav('vendor-ext', this)">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -9317,20 +9316,21 @@ window.setJobStatus = function(jobId, status) {
 
       <!-- EMAIL CAMPAIGN SELECTION MODAL -->
       <div class="modal-overlay" id="email-campaign-modal">
-        <div class="modal" style="max-width: 480px">
+        <div class="modal" style="width: 95%; max-width: 480px; padding: 20px;">
           <div class="modal-header">
-            <div class="modal-title">✉️ Choose Campaign Type</div>
+            <div class="modal-title" style="font-size: 18px">✉️ Choose Campaign Type</div>
             <button class="modal-close" onclick="closeModal('email-campaign-modal')">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
               </svg>
             </button>
           </div>
-          <div class="modal-body" id="email-campaign-modal-body">
+          <div class="modal-body" id="email-campaign-modal-body" style="padding: 10px 0;">
             <!-- Populated by JS -->
           </div>
         </div>
       </div>
+
 
       <!-- BULK EMAIL MODAL -->
       <div class="modal-overlay" id="bulk-modal">
