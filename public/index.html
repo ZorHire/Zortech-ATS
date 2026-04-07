@@ -1405,25 +1405,35 @@ ${text.substring(0, 4000)}`
 
 
 
-      async function sendEmail(to, toName, subject, html) {
+      async function sendEmail(to, toName, subject, html, useBcc = false) {
         // Guard: if key not configured, fail gracefully instead of making a bad API call
         if (!RESEND_KEY) {
           showToast("Email not configured — add resend-key meta tag", "error");
           return false;
         }
         try {
+          const payload = {
+            from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
+            subject,
+            html,
+          };
+
+          if (useBcc) {
+            // Fulfill user request: use BCC to ensure recipients can't see others
+            // Even for individual sends, we put them in BCC and send TO the recruiter for maximum privacy
+            payload.to = [`${SENDER_NAME} <${SENDER_EMAIL}>` || "recruiter@zortech.com"];
+            payload.bcc = [`${toName} <${to}>` || to];
+          } else {
+            payload.to = [`${toName} <${to}>` || to];
+          }
+
           const r = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${RESEND_KEY}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
-              to: [`${toName} <${to}>`],
-              subject,
-              html,
-            }),
+            body: JSON.stringify(payload),
           });
           const d = await r.json();
           if (!r.ok) throw new Error(d.message || "Failed");
@@ -1535,12 +1545,21 @@ ${text.substring(0, 4000)}`
         } catch (e) { showToast("Error sending offer: " + e.message, "error"); }
       };
 
-      window.openBulkModal = function () {
-        bulkSelected = new Set(
-          candidates.filter((c) => c.email).map((c) => c.id),
-        );
+      window.openBulkModal = function (candidateIds = null) {
+        if (candidateIds && Array.isArray(candidateIds)) {
+          bulkSelected = new Set(candidateIds.filter(id => {
+            const c = candidates.find(x => x.id === id);
+            return c && c.email;
+          }));
+        } else {
+          bulkSelected = new Set(
+            candidates.filter((c) => c.email).map((c) => c.id),
+          );
+        }
         renderBulkList();
         gel("bulk-modal").classList.add("open");
+        // Close selection modal if it was open
+        closeModal("email-campaign-modal");
       };
       window.toggleBulkSelect = function (id) {
         bulkSelected.has(id) ? bulkSelected.delete(id) : bulkSelected.add(id);
@@ -1600,6 +1619,7 @@ ${text.substring(0, 4000)}`
             `${escapeHTML(c.firstName)} ${escapeHTML(c.lastName)}`,
             subject,
             html,
+            true // Use BCC flag for true privacy in bulk campaigns
           ))
             ? sent++
             : failed++;
@@ -1617,6 +1637,66 @@ ${text.substring(0, 4000)}`
           showToast("Campaign error: " + e.message, "error");
         }
       };
+
+      // ── EMAIL CAMPAIGN POPUP ───────────────────────────────────
+      let searchFilteredIds = [];
+      window.openEmailCampaignModal = function () {
+        // Capture specific candidates currently in the search results
+        const rows = document.querySelectorAll("#search-results-tbody tr");
+        searchFilteredIds = [];
+        rows.forEach(row => {
+          const id = row.getAttribute("data-id");
+          if (id) searchFilteredIds.push(id);
+        });
+
+        if (searchFilteredIds.length === 0) {
+          // If search is empty or not in search view, fallback to visible candidates or all
+          searchFilteredIds = candidates.map(c => c.id);
+        }
+
+        renderEmailCampaignModalContent();
+        gel("email-campaign-modal").classList.add("open");
+      };
+
+      function renderEmailCampaignModalContent() {
+        const el = gel("email-campaign-modal-body");
+        if (!el) return;
+        const countWithEmail = candidates.filter(c => searchFilteredIds.includes(c.id) && c.email).length;
+        
+        el.innerHTML = `
+          <div style="margin-bottom: 20px; padding: 12px; background: rgba(255,107,0,0.05); border: 1px solid rgba(255,107,0,0.1); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+            <div style="font-size: 20px;">🎯</div>
+            <div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--orange-light)">Campaign Target</div>
+              <div style="font-size: 11px; color: var(--muted)">Sending to <strong>${countWithEmail}</strong> candidates from current search results.</div>
+            </div>
+          </div>
+          <div class="email-cards" style="grid-template-columns: 1fr; gap: 12px;">
+            <div class="email-template-card" onclick="openBulkModal(searchFilteredIds)">
+              <div class="email-icon" style="background:#1A2A3D;color:var(--blue); width:40px; height:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+              <div style="flex:1">
+                <div class="email-template-title" style="font-size: 14px">Bulk Outreach</div>
+                <div class="email-template-desc" style="font-size: 11px">Send personalized bulk emails with {name} tags.</div>
+              </div>
+              <div class="btn btn-primary btn-sm">Launch →</div>
+            </div>
+            <div class="email-template-card" onclick="closeModal('email-campaign-modal'); setView('candidates', document.getElementById('nav-candidates'))">
+              <div class="email-icon" style="background:#2D1A3D;color:var(--purple); width:40px; height:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+              <div style="flex:1">
+                <div class="email-template-title" style="font-size: 14px">Interview Invite</div>
+                <div class="email-template-desc" style="font-size: 11px">Send branded calendar invites to selected.</div>
+              </div>
+            </div>
+            <div class="email-template-card" onclick="closeModal('email-campaign-modal'); setView('candidates', document.getElementById('nav-candidates'))">
+              <div class="email-icon" style="background:#1A3A2D;color:var(--green); width:40px; height:40px;"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+              <div style="flex:1">
+                <div class="email-template-title" style="font-size: 14px">Offer Letter</div>
+                <div class="email-template-desc" style="font-size: 11px">Send professional offers to top picks.</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
 
       // ── CSV EXPORT ────────────────────────────────────────────
       window.exportCSV = function () {
@@ -7370,6 +7450,13 @@ window.setJobStatus = function(jobId, status) {
                 >
                   Search
                 </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  style="gap: 8px; border: 1px solid var(--border)"
+                  onclick="openEmailCampaignModal()"
+                >
+                  📧 Email Campaign
+                </button>
               </div>
             </div>
             <div class="table-wrap">
@@ -9224,6 +9311,23 @@ window.setJobStatus = function(jobId, status) {
             >
               Save Job
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- EMAIL CAMPAIGN SELECTION MODAL -->
+      <div class="modal-overlay" id="email-campaign-modal">
+        <div class="modal" style="max-width: 480px">
+          <div class="modal-header">
+            <div class="modal-title">✉️ Choose Campaign Type</div>
+            <button class="modal-close" onclick="closeModal('email-campaign-modal')">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body" id="email-campaign-modal-body">
+            <!-- Populated by JS -->
           </div>
         </div>
       </div>
