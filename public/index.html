@@ -84,6 +84,13 @@ function escapeHTML(str) {
       const RESEND_KEY = "";
       const SENDER_EMAIL = "hr@zortechs.in";
       const SENDER_NAME = "Zortech Solutions HR";
+      
+      // Personalized user email config
+      let userConfig = {
+        resendKey: "",
+        senderEmail: "",
+        senderName: ""
+      };
 
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
@@ -441,6 +448,15 @@ function safeAsync(fn){
               snap = await getDoc(doc(db, "users", emailKey));
             }
             userRole = snap.exists() ? (snap.data().role || "recruiter_dashboard") : "recruiter_dashboard";
+            // Capture individual email config if present
+            if (snap.exists()) {
+              const d = snap.data();
+              userConfig = {
+                resendKey: d.resendKey || "",
+                senderEmail: d.senderEmail || "",
+                senderName: d.senderName || ""
+              };
+            }
           } catch(e) {
             console.warn("Could not load user role, defaulting to recruiter_dashboard", e);
             userRole = "recruiter_dashboard";
@@ -1406,14 +1422,19 @@ ${text.substring(0, 4000)}`
 
 
       async function sendEmail(to, toName, subject, html, useBcc = false) {
+        // Use user-specific config if available, otherwise fallback to global defaults
+        const apiKey = userConfig.resendKey || RESEND_KEY;
+        const senderMail = userConfig.senderEmail || SENDER_EMAIL;
+        const senderName = userConfig.senderName || SENDER_NAME;
+
         // Guard: if key not configured, fail gracefully instead of making a bad API call
-        if (!RESEND_KEY) {
-          showToast("Email not configured — add resend-key meta tag", "error");
+        if (!apiKey) {
+          showToast("Email not configured — click settings (⚙️) to add your Resend Key", "error");
           return false;
         }
         try {
           const payload = {
-            from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
+            from: `${senderName} <${senderMail}>`,
             subject,
             html,
           };
@@ -1421,7 +1442,7 @@ ${text.substring(0, 4000)}`
           if (useBcc) {
             // Fulfill user request: use BCC to ensure recipients can't see others
             // Even for individual sends, we put them in BCC and send TO the recruiter for maximum privacy
-            payload.to = [`${SENDER_NAME} <${SENDER_EMAIL}>` || "recruiter@zortech.com"];
+            payload.to = [`${senderName} <${senderMail}>` || "recruiter@zortech.com"];
             payload.bcc = [`${toName} <${to}>` || to];
           } else {
             payload.to = [`${toName} <${to}>` || to];
@@ -1430,7 +1451,7 @@ ${text.substring(0, 4000)}`
           const r = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${RESEND_KEY}`,
+              Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(payload),
@@ -1451,35 +1472,72 @@ ${text.substring(0, 4000)}`
         const password = generateTempPassword();
         const html = emailTpl(
           "Vendor Portal Access",
-          `<p class="p"> Hello <strong>${vendor.name}</strong>,</p>
-           <p class="p"> You have been added as a Vendor in Zortech ATS.</p>
-           <div class="box">
-            <strong>Login Credentials</strong><br/><br/>
-            Email: ${vendor.email}<br/>
-            Password: ${password}
-           </div>
-           <p class="p"> Please login and change your password after first login.</p>
-          `
+          `Hello <strong>${escapeHTML(vendor.contactName)}</strong>,<br><br>
+           Your Zortech Vendor Portal account has been created. Use the credentials below to log in and manage candidate profiles.<br><br>
+           <strong>Portal URL:</strong> <a href="${window.location.origin}/vendorPortal.html">${window.location.origin}/vendorPortal.html</a><br>
+           <strong>Email:</strong> ${escapeHTML(vendor.email)}<br>
+           <strong>Password:</strong> ${password}<br><br>
+           <em>Please change your password after your first login.</em>`,
         );
         const ok = await sendEmail(
           vendor.email,
-          vendor.name,
-          "Your Vendor Access - ZorteCh ATS",
-          html
+          vendor.contactName,
+          "Welcome to Zortech Vendor Portal",
+          html,
         );
         if (ok) {
-          showToast("Vendor credentials sent");
+          await updateDoc(doc(db, "vendors", vendor.id), {
+            password, // In a real app we'd store a hash and email a reset link
+            status: "Active",
+          });
+          showToast(`Credentials sent to ${vendor.email} ✉️`);
         }
-        await setDoc(
-          doc(db, "users", vendor.email.replace(/[^a-zA-Z0-9]/g, "_")),
-          {
-            email: vendor.email,
-            role: "vendor",
-            name: vendor.name,
-            createdAt: serverTimestamp()
-          }
-        );
       }
+
+      // ── USER SETTINGS (EMAIL INTEGRATION) ──────────────────────
+      window.openUserSettings = function() {
+        if (!currentUser) return;
+        gel("set-sender-name").value = userConfig.senderName || "";
+        gel("set-sender-email").value = userConfig.senderEmail || "";
+        gel("set-resend-key").value = userConfig.resendKey || "";
+        gel("user-settings-modal").classList.add("open");
+      }
+
+      window.saveUserSettings = async function() {
+        if (!currentUser) return;
+        const name = gel("set-sender-name").value.trim();
+        const mail = gel("set-sender-email").value.trim();
+        const key = gel("set-resend-key").value.trim();
+        
+        if (mail && !mail.includes('@')) {
+          showToast("Please enter a valid sender email", "error");
+          return;
+        }
+
+        const btn = gel("save-settings-btn");
+        btn.disabled = true;
+        btn.textContent = "Saving...";
+
+        try {
+          await updateDoc(doc(db, "users", currentUser.uid), {
+            senderName: name,
+            senderEmail: mail,
+            resendKey: key
+          });
+          
+          userConfig = { senderName: name, senderEmail: mail, resendKey: key };
+          showToast("Email settings updated successfully ✓");
+          closeModal("user-settings-modal");
+        } catch (e) {
+          showToast("Error saving: " + e.message, "error");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Save Settings";
+        }
+      }
+
+
+
 
       window.sendInterviewInvite = async function (id) {
         try {
@@ -7210,6 +7268,17 @@ window.setJobStatus = function(jobId, status) {
               </svg>
             </button>
             <button
+              onclick="openUserSettings()"
+              title="Email Integration Settings"
+              style="background:none;border:none;cursor:pointer;color:var(--muted);padding:4px;border-radius:6px;display:grid;place-items:center;transition:color .15s;"
+              onmouseover="this.style.color='var(--orange)'"
+              onmouseout="this.style.color='var(--muted)'"
+            >
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+            <button
               onclick="doLogout()"
               title="Sign out"
               style="
@@ -9422,6 +9491,40 @@ window.setJobStatus = function(jobId, status) {
 
     </div>
   
+      <!-- PERSONAL USER SETTINGS MODAL -->
+      <div class="modal-overlay" id="user-settings-modal">
+        <div class="modal" style="max-width:440px;">
+          <div class="modal-header">
+            <div class="modal-title" style="font-size:18px;">⚙️ Email Settings</div>
+            <button class="modal-close" onclick="closeModal('user-settings-modal')">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Configure your personalized recruiter identity and Resend API key for specialized outreach.</p>
+            <div class="form-grid">
+              <div class="form-group full">
+                <label>Sender Name</label>
+                <input id="set-sender-name" placeholder="e.g. Jane Doe | Zortech HR" />
+              </div>
+              <div class="form-group full">
+                <label>Sender Email (Verified Domain)</label>
+                <input id="set-sender-email" placeholder="e.g. jane@zortechs.in" />
+              </div>
+              <div class="form-group full">
+                <label>Resend API Key</label>
+                <input id="set-resend-key" type="password" placeholder="re_1234..." />
+                <div style="font-size:10px;color:var(--muted);margin-top:5px;">Your key remains private and is only used for your outreach.</div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeModal('user-settings-modal')">Cancel</button>
+            <button class="btn btn-primary" id="save-settings-btn" onclick="saveUserSettings()">Save Settings</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ADMIN: USER ROLE MANAGER MODAL -->
       <div class="modal-overlay" id="admin-modal">
         <div class="modal" style="max-width:520px;">
