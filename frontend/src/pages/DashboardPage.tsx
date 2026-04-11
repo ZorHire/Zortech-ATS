@@ -234,9 +234,9 @@ export default function DashboardPage() {
                 <h3 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
                   Active Pipeline
                 </h3>
-                <button className="text-gray-400" type="button">
+                <span className="text-gray-400">
                   <MoreHorizontal size={20} />
-                </button>
+                </span>
               </div>
               <div className="flex items-baseline gap-3">
                 <span className="text-3xl sm:text-4xl font-black text-[#111111] tracking-tighter">
