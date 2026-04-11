@@ -1,0 +1,11 @@
+Job Title: Senior React Developer
+Location: Bangalore
+Salary: 20,00,000 - 30,00,000
+Experience: 4-7 years
+
+Skills:
+React, TypeScript, Node.js, GraphQL, AWS
+
+Job Description:
+We are looking for a Senior React Developer to join our team.
+Responsibilities include building scalable frontend applications.

@@ -1,13 +1,24 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Profile } from '../types';
-import api from '../lib/api';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { Profile } from "../types";
+import api from "../lib/api";
 
 interface AuthContextType {
   user: any | null;
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any | null }>;
-  signUp: (email: string, password: string, fullName: string, role?: string) => Promise<{ error: any | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    role?: string,
+  ) => Promise<{ error: any | null }>;
   signOut: () => void;
 }
 
@@ -20,11 +31,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchMe = async () => {
     try {
-      const data = await api.get('/auth/me');
+      const data = await api.get("/auth/me");
       setProfile(data as Profile);
       setUser(data);
     } catch (error) {
-      console.error('Fetch me error:', error);
+      console.error("Fetch me error:", error);
       signOut();
     } finally {
       setLoading(false);
@@ -32,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (token) {
       fetchMe();
     } else {
@@ -42,19 +53,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const data = await api.post('/auth/login', { email, password });
-      localStorage.setItem('token', data.token);
+      const data = await api.post("/auth/login", { email, password });
+      localStorage.setItem("token", data.token);
       setProfile(data.user);
       setUser(data.user);
       return { error: null };
-    } catch (error) {
-      return { error };
+    } catch (error: any) {
+      console.error("Sign in error:", error);
+      const errorMessage =
+        error?.message || "Login failed. Please check your credentials.";
+      return { error: { message: errorMessage } };
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role = 'recruiter') => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    role = "recruiter",
+  ) => {
     try {
-      await api.post('/auth/register', { email, password, full_name: fullName, role });
+      await api.post("/auth/register", {
+        email,
+        password,
+        full_name: fullName,
+        role,
+      });
       return { error: null };
     } catch (error) {
       return { error };
@@ -62,13 +86,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
     setUser(null);
     setProfile(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ user, profile, loading, signIn, signUp, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -76,6 +102,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }

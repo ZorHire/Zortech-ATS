@@ -10,12 +10,14 @@ import {
   Briefcase,
   Building2,
   X,
+  TrendingUp,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import Header from "../components/layout/Header";
 import { jobStatusLabels } from "../lib/mockData";
 import { Job } from "../types";
 import api from "../lib/api";
+import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
 
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-200",
@@ -43,14 +45,11 @@ const workModeLabel: Record<string, string> = {
 function JobCard({ job }: { job: Job }) {
   const salary =
     job.salary_min && job.salary_max
-      ? `₹${(Number(job.salary_min) / 100000).toFixed(0)}L – ₹${(Number(job.salary_max) / 100000).toFixed(0)}L`
+      ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L - INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
       : "Not specified";
 
   return (
-    <Link
-      to={`/jobs/${job.id}`}
-      className="block bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md hover:border-blue-200 transition-all group"
-    >
+    <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md hover:border-blue-200 transition-all group">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div
@@ -58,9 +57,11 @@ function JobCard({ job }: { job: Job }) {
             title={`Priority: ${job.priority}`}
           />
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
-              {job.title}
-            </h3>
+            <Link to={`/jobs/${job.id}`}>
+              <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
+                {job.title}
+              </h3>
+            </Link>
             <div className="flex items-center gap-1.5 mt-0.5">
               <Building2 size={12} className="text-gray-400 flex-shrink-0" />
               <span className="text-xs text-gray-500 truncate">
@@ -92,7 +93,7 @@ function JobCard({ job }: { job: Job }) {
         </span>
         <span className="flex items-center gap-1">
           <Clock size={12} />
-          {job.experience_min}–{job.experience_max} yrs
+          {job.experience_min}-{job.experience_max} yrs
         </span>
         <span className="flex items-center gap-1">
           <Users size={12} />
@@ -128,7 +129,16 @@ function JobCard({ job }: { job: Job }) {
           candidates
         </span>
       </div>
-    </Link>
+
+      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+        <Link
+          to={`/jobs/${job.id}`}
+          className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+        >
+          View Job
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -138,8 +148,8 @@ export default function JobsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isPipelineSelectorOpen, setIsPipelineSelectorOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     client_id: "",
@@ -156,6 +166,10 @@ export default function JobsPage() {
     description: "",
     mandatory_skills: "",
   });
+  const [jobFile, setJobFile] = useState<File | null>(null);
+  const [jobParsing, setJobParsing] = useState(false);
+  const [jobParseMessage, setJobParseMessage] = useState("");
+  const [jobParseError, setJobParseError] = useState("");
   const [clients, setClients] = useState<any[]>([]);
 
   useEffect(() => {
@@ -180,6 +194,54 @@ export default function JobsPage() {
       setClients(data);
     } catch (error) {
       console.error("Fetch clients error:", error);
+    }
+  };
+
+  const parseJDFile = async (file: File) => {
+    setJobParsing(true);
+    setJobParseMessage("");
+    setJobParseError("");
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const parsed = await api.post("/parse/jd", body);
+
+      setFormData((current) => ({
+        ...current,
+        title: parsed.title || current.title,
+        location: parsed.location || current.location,
+        description: parsed.description || current.description,
+        experience_min:
+          parsed.experience_min !== undefined
+            ? parsed.experience_min
+            : current.experience_min,
+        experience_max:
+          parsed.experience_max !== undefined
+            ? parsed.experience_max
+            : current.experience_max,
+        salary_min:
+          parsed.salary_min !== undefined
+            ? parsed.salary_min
+            : current.salary_min,
+        salary_max:
+          parsed.salary_max !== undefined
+            ? parsed.salary_max
+            : current.salary_max,
+        mandatory_skills:
+          parsed.required_skills?.length > 0
+            ? parsed.required_skills.join(", ")
+            : current.mandatory_skills,
+      }));
+
+      setJobParseMessage(
+        "JD parsed successfully. Review and edit the auto-filled job details.",
+      );
+    } catch (error) {
+      console.error("JD parse failed:", error);
+      setJobParseError("Could not extract data, please fill manually.");
+    } finally {
+      setJobParsing(false);
     }
   };
 
@@ -214,6 +276,7 @@ export default function JobsPage() {
         description: "",
         mandatory_skills: "",
       });
+      setJobFile(null);
     } catch (error) {
       alert("Failed to add job description");
     }
@@ -239,23 +302,37 @@ export default function JobsPage() {
     on_hold: jobs.filter((j) => j.status === "on_hold").length,
   };
 
+  const handleViewPipeline = () => {
+    if (jobs.length === 0) return;
+    setIsPipelineSelectorOpen(true);
+  };
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
         title="Job Descriptions"
         subtitle={`${counts.active} active jobs across all clients`}
         actions={
-          <Link
-            to="/jobs/new"
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus size={16} />
-            New JD
-          </Link>
+          <div className="flex gap-2">
+            <button
+              onClick={handleViewPipeline}
+              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+            >
+              <TrendingUp size={16} />
+              View Pipeline
+            </button>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={16} />
+              Add JD
+            </button>
+          </div>
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search
@@ -270,7 +347,7 @@ export default function JobsPage() {
               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <div className="relative">
               <select
                 value={statusFilter}
@@ -308,13 +385,6 @@ export default function JobsPage() {
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
               />
             </div>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 bg-white"
-            >
-              <Plus size={14} />
-              Add JD
-            </button>
             <button className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 bg-white">
               <Filter size={14} />
               More filters
@@ -361,9 +431,16 @@ export default function JobsPage() {
         )}
       </div>
 
+      {isPipelineSelectorOpen && (
+        <PipelineJobSelector
+          jobs={jobs}
+          onClose={() => setIsPipelineSelectorOpen(false)}
+        />
+      )}
+
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <h2 className="text-xl font-black text-[#111111] tracking-tight">
                 Create New Job Description
@@ -543,11 +620,49 @@ export default function JobsPage() {
                     placeholder="Briefly describe the role and requirements..."
                   />
                 </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Upload JD File
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        setJobFile(file);
+                        parseJDFile(file);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {jobFile && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Selected file: {jobFile.name}
+                    </p>
+                  )}
+                  {jobParsing && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Parsing JD, please wait...
+                    </p>
+                  )}
+                  {jobParseMessage && (
+                    <p className="text-xs text-emerald-700 mt-1">
+                      {jobParseMessage}
+                    </p>
+                  )}
+                  {jobParseError && (
+                    <p className="text-xs text-red-600 mt-1">{jobParseError}</p>
+                  )}
+                </div>
               </div>
               <div className="flex gap-4 mt-10">
                 <button
                   type="button"
-                  onClick={() => setIsAddModalOpen(false)}
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setJobFile(null);
+                  }}
                   className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all"
                 >
                   Cancel

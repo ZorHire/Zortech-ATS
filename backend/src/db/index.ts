@@ -5,6 +5,11 @@ const pool = new Pool({
   connectionString: env.DATABASE_URL,
 });
 
+// Prevent unhandled pool errors from crashing the process
+pool.on("error", (err) => {
+  console.error("Unexpected pg pool error:", err.message);
+});
+
 export const query = (text: string, params?: any[]) => {
   return pool.query(text, params);
 };

@@ -1,18 +1,23 @@
-import { Response } from 'express';
-import pool from '../../db';
-import { AuthRequest } from '../../middleware/auth';
+import { Response } from "express";
+import pool from "../../db";
+import { AuthRequest } from "../../middleware/auth";
 
 export const getJobs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
     const result = await pool.query(
-      'SELECT * FROM jobs WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC',
-      [tenantId]
+      `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
+              (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+       FROM jobs j
+       JOIN clients c ON c.id = j.client_id
+       WHERE j.tenant_id = $1 AND j.deleted_at IS NULL
+       ORDER BY j.created_at DESC`,
+      [tenantId],
     );
     res.json(result.rows);
   } catch (error) {
-    console.error('Get jobs error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Get jobs error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -21,21 +26,44 @@ export const getJobById = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
   try {
     const result = await pool.query(
-      'SELECT * FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL',
-      [id, tenantId]
+      `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client
+       FROM jobs j
+       JOIN clients c ON c.id = j.client_id
+       WHERE j.id = $1 AND j.tenant_id = $2 AND j.deleted_at IS NULL`,
+      [id, tenantId],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({ message: "Job not found" });
     }
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Get job error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Get job error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const createJob = async (req: AuthRequest, res: Response) => {
-  const { client_id, title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, currency, headcount, priority, status, description, mandatory_skills, preferred_skills, assigned_recruiter_id, target_start_date } = req.body;
+  const {
+    client_id,
+    title,
+    department,
+    location,
+    work_mode,
+    employment_type,
+    experience_min,
+    experience_max,
+    salary_min,
+    salary_max,
+    currency,
+    headcount,
+    priority,
+    status,
+    description,
+    mandatory_skills,
+    preferred_skills,
+    assigned_recruiter_id,
+    target_start_date,
+  } = req.body;
   const createdBy = req.user?.id;
   const tenantId = req.user?.tenant_id;
 
@@ -44,18 +72,59 @@ export const createJob = async (req: AuthRequest, res: Response) => {
       `INSERT INTO jobs (tenant_id, client_id, title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, currency, headcount, priority, status, description, mandatory_skills, preferred_skills, assigned_recruiter_id, target_start_date, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
        RETURNING *`,
-      [tenantId, client_id, title, department, location, work_mode || 'onsite', employment_type || 'full_time', experience_min || 0, experience_max || 10, salary_min, salary_max, currency || 'INR', headcount || 1, priority || 'medium', status || 'draft', description, mandatory_skills || [], preferred_skills || [], assigned_recruiter_id, target_start_date, createdBy]
+      [
+        tenantId,
+        client_id,
+        title,
+        department,
+        location,
+        work_mode || "onsite",
+        employment_type || "full_time",
+        experience_min || 0,
+        experience_max || 10,
+        salary_min,
+        salary_max,
+        currency || "INR",
+        headcount || 1,
+        priority || "medium",
+        status || "draft",
+        description,
+        mandatory_skills || [],
+        preferred_skills || [],
+        assigned_recruiter_id,
+        target_start_date,
+        createdBy,
+      ],
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error('Create job error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Create job error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
 export const updateJob = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, currency, headcount, priority, status, description, mandatory_skills, preferred_skills, assigned_recruiter_id, target_start_date } = req.body;
+  const {
+    title,
+    department,
+    location,
+    work_mode,
+    employment_type,
+    experience_min,
+    experience_max,
+    salary_min,
+    salary_max,
+    currency,
+    headcount,
+    priority,
+    status,
+    description,
+    mandatory_skills,
+    preferred_skills,
+    assigned_recruiter_id,
+    target_start_date,
+  } = req.body;
   const tenantId = req.user?.tenant_id;
 
   try {
@@ -82,16 +151,37 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
        updated_at = now()
        WHERE id = $19 AND tenant_id = $20 AND deleted_at IS NULL
        RETURNING *`,
-      [title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, currency, headcount, priority, status, description, mandatory_skills, preferred_skills, assigned_recruiter_id, target_start_date, id, tenantId]
+      [
+        title,
+        department,
+        location,
+        work_mode,
+        employment_type,
+        experience_min,
+        experience_max,
+        salary_min,
+        salary_max,
+        currency,
+        headcount,
+        priority,
+        status,
+        description,
+        mandatory_skills,
+        preferred_skills,
+        assigned_recruiter_id,
+        target_start_date,
+        id,
+        tenantId,
+      ],
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({ message: "Job not found" });
     }
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Update job error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Update job error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -100,15 +190,15 @@ export const deleteJob = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
   try {
     const result = await pool.query(
-      'UPDATE jobs SET deleted_at = now() WHERE id = $1 AND tenant_id = $2 RETURNING id',
-      [id, tenantId]
+      "UPDATE jobs SET deleted_at = now() WHERE id = $1 AND tenant_id = $2 RETURNING id",
+      [id, tenantId],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Job not found' });
+      return res.status(404).json({ message: "Job not found" });
     }
-    res.json({ message: 'Job deleted successfully' });
+    res.json({ message: "Job deleted successfully" });
   } catch (error) {
-    console.error('Delete job error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error("Delete job error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };

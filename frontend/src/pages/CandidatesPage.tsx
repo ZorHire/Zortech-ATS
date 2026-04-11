@@ -1,11 +1,9 @@
 import { useState, useEffect } from "react";
 import {
   Search,
-  Filter,
   MapPin,
   Building2,
   Clock,
-  Star,
   Mail,
   Phone,
   Plus,
@@ -13,12 +11,12 @@ import {
   ChevronDown,
   CheckSquare,
   Square,
-  Trash2,
   Send,
   X,
+  TrendingUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Header from "../components/layout/Header";
-import { pipelineStageLabels } from "../lib/mockData";
 import { Candidate } from "../types";
 import api from "../lib/api";
 import CandidateModal from "../components/candidates/CandidateModal";
@@ -46,19 +44,6 @@ const sourceBadgeColors: Record<string, string> = {
   other: "bg-gray-100 text-gray-600",
 };
 
-const [resumeFile, setResumeFile] = useState<File | null>(null);
-
-const stageColors: Record<string, string> = {
-  shortlisted: "bg-violet-100 text-violet-700",
-  submitted_to_client: "bg-amber-100 text-amber-700",
-  client_interview_scheduled: "bg-orange-100 text-orange-700",
-  offer_extended: "bg-emerald-100 text-emerald-700",
-  offer_accepted: "bg-teal-100 text-teal-700",
-  screened: "bg-cyan-100 text-cyan-700",
-  sourced: "bg-blue-100 text-blue-700",
-  new: "bg-gray-100 text-gray-600",
-};
-
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +55,7 @@ export default function CandidatesPage() {
     null,
   );
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
+  const navigate = useNavigate();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -84,6 +70,10 @@ export default function CandidatesPage() {
     skills: "",
     source: "direct",
   });
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeParsing, setResumeParsing] = useState(false);
+  const [resumeParseMessage, setResumeParseMessage] = useState("");
+  const [resumeParseError, setResumeParseError] = useState("");
 
   useEffect(() => {
     fetchCandidates();
@@ -100,10 +90,60 @@ export default function CandidatesPage() {
     }
   };
 
-  // 🔥 ONLY ADDITION: resume file state
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const parseResumeFile = async (file: File) => {
+    setResumeParsing(true);
+    setResumeParseMessage("");
+    setResumeParseError("");
 
-  // 🔥 UPDATED FUNCTION (ONLY CHANGE HERE)
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const parsed = await api.post("/parse/resume", body);
+
+      if (
+        !parsed ||
+        Object.keys(parsed).length === 0 ||
+        (!parsed.name &&
+          !parsed.email &&
+          !parsed.phone &&
+          (!parsed.skills || parsed.skills.length === 0))
+      ) {
+        console.error("Resume parse returned empty response", parsed);
+        setResumeParseError("Could not extract meaningful data.");
+        return;
+      }
+
+      console.log("Parsed resume response:", parsed);
+
+      setFormData((current) => ({
+        ...current,
+        first_name: parsed.name?.split(" ")[0] || current.first_name,
+        last_name:
+          parsed.name?.split(" ").slice(1).join(" ") || current.last_name,
+        email: parsed.email || current.email,
+        phone: parsed.phone || current.phone,
+        current_title: parsed.current_title || current.current_title,
+        current_company: parsed.current_company || current.current_company,
+        current_location: parsed.current_location || current.current_location,
+        experience_years:
+          parsed.experience_years !== undefined
+            ? parsed.experience_years
+            : current.experience_years,
+        skills:
+          parsed.skills?.length > 0 ? parsed.skills.join(", ") : current.skills,
+      }));
+
+      setResumeParseMessage(
+        "Resume parsed successfully. Review fields and edit as needed.",
+      );
+    } catch (error) {
+      console.error("Resume parse failed:", error);
+      setResumeParseError("Could not extract data, please fill manually.");
+    } finally {
+      setResumeParsing(false);
+    }
+  };
+
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -134,11 +174,7 @@ export default function CandidatesPage() {
         formDataToSend.append("resume", resumeFile);
       }
 
-      const newCandidate = await api.post("/candidates", formDataToSend, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      const newCandidate = await api.post("/candidates", formDataToSend);
 
       setCandidates([newCandidate, ...candidates]);
       setIsAddModalOpen(false);
@@ -156,7 +192,6 @@ export default function CandidatesPage() {
         source: "direct",
       });
 
-      // 🔥 RESET FILE
       setResumeFile(null);
     } catch (error) {
       alert("Failed to add candidate");
@@ -254,6 +289,21 @@ export default function CandidatesPage() {
     document.body.removeChild(link);
   };
 
+  const handleViewPipeline = async () => {
+    try {
+      const jobs = await api.get("/jobs");
+      if (jobs && jobs.length > 0) {
+        navigate(`/pipeline/${jobs[0].id}`);
+      } else {
+        alert("No jobs available. Please create a job first.");
+        navigate("/jobs");
+      }
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      navigate("/jobs");
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-gray-50/50">
       <Header
@@ -261,6 +311,13 @@ export default function CandidatesPage() {
         subtitle={`${candidates.length} total candidates · ${selectedIds.size} selected`}
         actions={
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleViewPipeline}
+              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+            >
+              <TrendingUp size={16} />
+              View Pipeline
+            </button>
             {selectedIds.size > 0 && (
               <button
                 onClick={() => setIsCampaignModalOpen(true)}
@@ -630,7 +687,9 @@ export default function CandidatesPage() {
                     accept=".pdf,.doc,.docx"
                     onChange={(e) => {
                       if (e.target.files && e.target.files[0]) {
-                        setResumeFile(e.target.files[0]);
+                        const file = e.target.files[0];
+                        setResumeFile(file);
+                        parseResumeFile(file);
                       }
                     }}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -639,6 +698,22 @@ export default function CandidatesPage() {
                   {resumeFile && (
                     <p className="text-xs text-gray-500 mt-1">
                       Selected: {resumeFile.name}
+                    </p>
+                  )}
+
+                  {resumeParsing && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Parsing resume, please wait...
+                    </p>
+                  )}
+                  {resumeParseMessage && (
+                    <p className="text-xs text-emerald-700 mt-1">
+                      {resumeParseMessage}
+                    </p>
+                  )}
+                  {resumeParseError && (
+                    <p className="text-xs text-red-600 mt-1">
+                      {resumeParseError}
                     </p>
                   )}
                 </div>
@@ -653,9 +728,10 @@ export default function CandidatesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
+                  disabled={resumeParsing}
+                  className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Profile
+                  {resumeParsing ? "Parsing..." : "Create Profile"}
                 </button>
               </div>
             </form>

@@ -1,17 +1,20 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Layout from './components/layout/Layout';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import JobsPage from './pages/JobsPage';
-import JobDetailPage from './pages/JobDetailPage';
-import CandidatesPage from './pages/CandidatesPage';
-import VendorsPage from './pages/VendorsPage';
-import ResumeSearchPage from './pages/ResumeSearchPage';
-import EmailCampaignsPage from './pages/EmailCampaignsPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import AdminPage from './pages/AdminPage';
-import ChangePasswordPage from './pages/ChangePasswordPage';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import ErrorBoundary from "./components/ErrorBoundary";
+import Layout from "./components/layout/Layout";
+import LoginPage from "./pages/LoginPage";
+import DashboardPage from "./pages/DashboardPage";
+import JobsPage from "./pages/JobsPage";
+import JobDetailPage from "./pages/JobDetailPage";
+import NewJobPage from "./pages/NewJobPage";
+import CandidatesPage from "./pages/CandidatesPage";
+import VendorsPage from "./pages/VendorsPage";
+import ResumeSearchPage from "./pages/ResumeSearchPage";
+import EmailCampaignsPage from "./pages/EmailCampaignsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import AdminPage from "./pages/AdminPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
+import PipelinePage from "./pages/PipelinePage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -41,16 +44,98 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/jobs" element={<ProtectedRoute><JobsPage /></ProtectedRoute>} />
-      <Route path="/jobs/:id" element={<ProtectedRoute><JobDetailPage /></ProtectedRoute>} />
-      <Route path="/candidates" element={<ProtectedRoute><CandidatesPage /></ProtectedRoute>} />
-      <Route path="/vendors" element={<ProtectedRoute><VendorsPage /></ProtectedRoute>} />
-      <Route path="/search" element={<ProtectedRoute><ResumeSearchPage /></ProtectedRoute>} />
-      <Route path="/campaigns" element={<ProtectedRoute><EmailCampaignsPage /></ProtectedRoute>} />
-      <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+      <Route
+        path="/login"
+        element={user ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs"
+        element={
+          <ProtectedRoute>
+            <JobsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs/new"
+        element={
+          <ProtectedRoute>
+            <NewJobPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs/:id"
+        element={
+          <ProtectedRoute>
+            <JobDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pipeline/:jobId"
+        element={
+          <ProtectedRoute>
+            <PipelinePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/candidates"
+        element={
+          <ProtectedRoute>
+            <CandidatesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors"
+        element={
+          <ProtectedRoute>
+            <VendorsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <ResumeSearchPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns"
+        element={
+          <ProtectedRoute>
+            <EmailCampaignsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <AnalyticsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedRoute>
+            <AdminPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -58,10 +143,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
