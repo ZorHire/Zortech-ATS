@@ -1,89 +1,220 @@
 import {
   Briefcase,
-  Users,
   Calendar,
-  TrendingUp,
   AlertTriangle,
   Plus,
-  Clock,
-  ArrowRight,
-  CheckCircle2,
-  ChevronUp,
   MoreHorizontal,
   LayoutGrid,
-  Box,
-  Search,
-  Wallet,
   Star,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 import Header from "../components/layout/Header";
 import { useAuth } from "../contexts/AuthContext";
 import { Job } from "../types";
 import api from "../lib/api";
+import DashboardModal from "../components/DashboardModal";
+import DashboardCard from "../components/DashboardCard";
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  sub,
-  color,
-  trend,
-  bgColor,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string | number;
-  sub: string;
-  color: string;
-  trend?: string;
-  bgColor: string;
-}) {
-  return (
-    <div
-      className={`${bgColor} rounded-[32px] p-6 flex flex-col justify-between min-h-[160px] relative overflow-hidden group`}
-    >
-      <div className="flex items-start justify-between relative z-10">
-        <div className="space-y-1">
-          <p className="text-lg font-black text-[#111111] leading-none tracking-tight">
-            {value}
-          </p>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            {label}
-          </p>
-        </div>
-        <button className="text-gray-300 hover:text-gray-600 transition-colors">
-          <MoreHorizontal size={18} />
-        </button>
-      </div>
-
-      <div className="flex items-end justify-between relative z-10">
-        <div
-          className={`w-10 h-10 rounded-[14px] bg-white shadow-sm flex items-center justify-center ${color}`}
-        >
-          <Icon size={18} />
-        </div>
-        {trend && (
-          <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-1 rounded-full flex items-center gap-0.5">
-            <Plus size={10} strokeWidth={3} />
-            {trend}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
+type CardType = "pipeline" | "jobs" | "interviews" | "alerts";
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  useAuth();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [activeCard, setActiveCard] = useState<CardType | null>(null);
 
-  useEffect(() => {
-    api.get("/jobs").then(setJobs).catch(() => {});
-  }, []);
+  const interviewItems = [
+    {
+      title: "Senior UX Interview",
+      when: "Apr 12 · 11:00 AM",
+      candidate: "Priya K.",
+    },
+    {
+      title: "Backend Screening",
+      when: "Apr 13 · 02:30 PM",
+      candidate: "Rohit S.",
+    },
+    {
+      title: "Client Review",
+      when: "Apr 14 · 10:00 AM",
+      candidate: "Nisha T.",
+    },
+  ];
+
+  const slaAlerts = [
+    { title: "Candidate response delay", severity: "High", status: "Pending" },
+    {
+      title: "Interview feedback overdue",
+      severity: "Medium",
+      status: "Action Required",
+    },
+    { title: "Offer approval pending", severity: "Low", status: "Monitoring" },
+  ];
+
+  const pipelineSummary = [
+    { label: "Screening", count: 312 },
+    { label: "Interview", count: 128 },
+    { label: "Offer", count: 39 },
+    { label: "Hired", count: 18 },
+  ];
 
   const activeJobs = jobs.filter((j) => j.status === "active");
+
+  const renderModalContent = () => {
+    switch (activeCard) {
+      case "pipeline":
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              {pipelineSummary.map((item) => (
+                <div
+                  key={item.label}
+                  className="bg-slate-50 rounded-3xl p-4 border border-slate-100"
+                >
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                    {item.label}
+                  </p>
+                  <p className="mt-3 text-2xl font-black text-slate-900">
+                    {item.count}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-3">
+              <p className="text-sm text-slate-500">
+                The pipeline is performing steadily with a high candidate flow
+                into the screening stage.
+              </p>
+              <div className="rounded-3xl border border-slate-100 p-4 bg-slate-50">
+                <h3 className="text-sm font-black text-slate-900 mb-3">
+                  Stage overview
+                </h3>
+                <div className="space-y-3">
+                  {pipelineSummary.map((item) => (
+                    <div
+                      key={item.label}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="text-sm text-slate-700">
+                        {item.label}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">
+                        {item.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "jobs":
+        return (
+          <div className="space-y-4">
+            {activeJobs.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                No active jobs available right now.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {activeJobs.slice(0, 6).map((job) => (
+                  <div
+                    key={job.id}
+                    className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-black text-slate-900">
+                          {job.title}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {job.department}
+                        </p>
+                      </div>
+                      <span className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600 bg-emerald-50 rounded-full px-3 py-1">
+                        {job.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {job.application_count || 0}
+                        </p>
+                        <p>Applications</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {job.location}
+                        </p>
+                        <p>Location</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      case "interviews":
+        return (
+          <div className="space-y-4">
+            {interviewItems.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"
+              >
+                <p className="text-sm font-black text-slate-900">
+                  {item.title}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">{item.candidate}</p>
+                <p className="text-xs text-slate-400 mt-2">{item.when}</p>
+              </div>
+            ))}
+          </div>
+        );
+      case "alerts":
+        return (
+          <div className="space-y-3">
+            {slaAlerts.map((alert) => (
+              <div
+                key={alert.title}
+                className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-slate-900">
+                      {alert.title}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {alert.status}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-xs font-bold px-3 py-1 rounded-full ${
+                      alert.severity === "High"
+                        ? "bg-red-100 text-red-700"
+                        : alert.severity === "Medium"
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {alert.severity}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  useEffect(() => {
+    api
+      .get("/jobs")
+      .then(setJobs)
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -93,13 +224,17 @@ export default function DashboardPage() {
         {/* Main Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 sm:gap-6">
           {/* Portfolio Style Large Card */}
-          <div className="lg:col-span-6 bg-[#E3F2FF] rounded-[28px] sm:rounded-[40px] p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden min-h-[220px] sm:min-h-[240px]">
-            <div className="relative z-10">
+          <button
+            type="button"
+            onClick={() => setActiveCard("pipeline")}
+            className="lg:col-span-6 bg-[#E3F2FF] rounded-[28px] sm:rounded-[40px] p-5 sm:p-8 flex flex-col justify-between relative overflow-hidden min-h-[220px] sm:min-h-[240px] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
+          >
+            <div className="relative z-10 text-left">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-base sm:text-lg font-black text-[#111111] tracking-tight">
                   Active Pipeline
                 </h3>
-                <button className="text-gray-400">
+                <button className="text-gray-400" type="button">
                   <MoreHorizontal size={20} />
                 </button>
               </div>
@@ -117,7 +252,6 @@ export default function DashboardPage() {
             </div>
 
             <div className="relative h-20 mt-4">
-              {/* Simplified Sparkline UI */}
               <svg
                 className="w-full h-full"
                 viewBox="0 0 400 100"
@@ -154,13 +288,14 @@ export default function DashboardPage() {
               {["1H", "24H", "1W", "1M", "1Y", "ALL"].map((t) => (
                 <button
                   key={t}
+                  type="button"
                   className={`text-[10px] font-black ${t === "1W" ? "text-[#111111]" : "text-gray-400"}`}
                 >
                   {t}
                 </button>
               ))}
             </div>
-          </div>
+          </button>
 
           {/* Your Assets Style Grid */}
           <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -174,32 +309,32 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-            <StatCard
+            <DashboardCard
               icon={Briefcase}
               label="Active Jobs"
               value={activeJobs.length}
-              sub="open"
+              description="Open jobs currently recruiting"
               color="text-[#6366F1]"
-              trend="2"
               bgColor="bg-[#EBE9FE]"
+              onClick={() => setActiveCard("jobs")}
             />
-            <StatCard
+            <DashboardCard
               icon={Calendar}
               label="Interviews"
               value="14"
-              sub="scheduled"
+              description="Scheduled interviews"
               color="text-[#10B981]"
-              trend="0.31%"
               bgColor="bg-[#E1F7EF]"
+              onClick={() => setActiveCard("interviews")}
             />
-            <StatCard
+            <DashboardCard
               icon={AlertTriangle}
               label="SLA Alerts"
               value="02"
-              sub="pending"
+              description="Pending alerts"
               color="text-[#F59E0B]"
-              trend="0.27%"
               bgColor="bg-[#FEF3C7]"
+              onClick={() => setActiveCard("alerts")}
             />
           </div>
         </div>
@@ -310,6 +445,23 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        {activeCard && (
+          <DashboardModal
+            title={
+              activeCard === "pipeline"
+                ? "Active Pipeline"
+                : activeCard === "jobs"
+                  ? "Active Jobs"
+                  : activeCard === "interviews"
+                    ? "Upcoming Interviews"
+                    : "SLA Alerts"
+            }
+            subtitle="Tap outside or use the close button to dismiss"
+            onClose={() => setActiveCard(null)}
+          >
+            {renderModalContent()}
+          </DashboardModal>
+        )}
       </div>
     </div>
   );

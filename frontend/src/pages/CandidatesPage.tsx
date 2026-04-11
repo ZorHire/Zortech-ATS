@@ -13,7 +13,6 @@ import {
   Square,
   Send,
   X,
-  TrendingUp,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Header from "../components/layout/Header";
@@ -289,21 +288,6 @@ export default function CandidatesPage() {
     document.body.removeChild(link);
   };
 
-  const handleViewPipeline = async () => {
-    try {
-      const jobs = await api.get("/jobs");
-      if (jobs && jobs.length > 0) {
-        navigate(`/pipeline/${jobs[0].id}`);
-      } else {
-        alert("No jobs available. Please create a job first.");
-        navigate("/jobs");
-      }
-    } catch (error) {
-      console.error("Error fetching jobs:", error);
-      navigate("/jobs");
-    }
-  };
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-gray-50/50">
       <Header
@@ -311,13 +295,6 @@ export default function CandidatesPage() {
         subtitle={`${candidates.length} total candidates · ${selectedIds.size} selected`}
         actions={
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleViewPipeline}
-              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
-            >
-              <TrendingUp size={16} />
-              View Pipeline
-            </button>
             {selectedIds.size > 0 && (
               <button
                 onClick={() => setIsCampaignModalOpen(true)}

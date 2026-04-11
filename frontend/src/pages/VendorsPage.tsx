@@ -5,7 +5,6 @@ import {
   Mail,
   Phone,
   Star,
-  TrendingUp,
   Users,
   Award,
   AlertCircle,
@@ -233,21 +232,6 @@ export default function VendorsPage() {
         : 0,
   };
 
-  const handleViewPipeline = async () => {
-    try {
-      const jobs = await api.get("/jobs");
-      if (jobs && jobs.length > 0) {
-        navigate(`/pipeline/${jobs[0].id}`);
-      } else {
-        alert("No jobs available. Please create a job first.");
-        navigate("/jobs");
-      }
-    } catch (error) {
-      console.error("Error fetching jobs:", error);
-      navigate("/jobs");
-    }
-  };
-
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
@@ -255,13 +239,6 @@ export default function VendorsPage() {
         subtitle="Manage staffing partners and track performance"
         actions={
           <div className="flex gap-2">
-            <button
-              onClick={handleViewPipeline}
-              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
-            >
-              <TrendingUp size={16} />
-              View Pipeline
-            </button>
             <button
               onClick={() => setShowAddVendor(true)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
