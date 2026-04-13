@@ -9,17 +9,25 @@ console.log("Parse routes loaded");
 
 router.post(
   "/resume",
+  memoryUpload.single("file"),
   authMiddleware,
   tenantIsolation,
-  memoryUpload.single("file"),
   parseController.parseResume,
 );
 
 router.post(
-  "/jd",
+  "/vendor",
+  memoryUpload.single("file"),
   authMiddleware,
   tenantIsolation,
+  parseController.parseVendor,
+);
+
+router.post(
+  "/jd",
   memoryUpload.single("file"),
+  authMiddleware,
+  tenantIsolation,
   parseController.parseJobDescription,
 );
 

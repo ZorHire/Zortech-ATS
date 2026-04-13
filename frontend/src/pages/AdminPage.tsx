@@ -1,7 +1,19 @@
-import { useState, useEffect } from 'react';
-import { UserPlus, Shield, Mail, CheckCircle2, XCircle, RotateCcw, Search, MoreVertical, ShieldCheck, UserCheck, ShieldAlert } from 'lucide-react';
-import Header from '../components/layout/Header';
-import api from '../lib/api';
+import { useState, useEffect } from "react";
+import {
+  UserPlus,
+  Shield,
+  Mail,
+  CheckCircle2,
+  XCircle,
+  RotateCcw,
+  Search,
+  MoreVertical,
+  ShieldCheck,
+  UserCheck,
+  ShieldAlert,
+} from "lucide-react";
+import Header from "../components/layout/Header";
+import api from "../lib/api";
 
 interface ManagedUser {
   id: string;
@@ -16,15 +28,15 @@ export default function AdminPage() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [searchTerm, setSearch] = useState('');
+  const [searchTerm, setSearch] = useState("");
 
   // Form state
-  const [newEmail, setNewEmail] = useState('');
-  const [newFullName, setNewFullName] = useState('');
-  const [newRole, setNewRole] = useState('recruiter');
-  const [newPassword, setNewPassword] = useState('');
+  const [newEmail, setNewEmail] = useState("");
+  const [newFullName, setNewFullName] = useState("");
+  const [newRole, setNewRole] = useState("recruiter");
+  const [newPassword, setNewPassword] = useState("");
   const [formLoading, setFormLoading] = useState(false);
-  const [formError, setFormError] = useState('');
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     fetchUsers();
@@ -32,10 +44,10 @@ export default function AdminPage() {
 
   const fetchUsers = async () => {
     try {
-      const data = await api.get('/admin/users');
+      const data = await api.get("/admin/users");
       setUsers(data);
     } catch (error) {
-      console.error('Fetch users error:', error);
+      console.error("Fetch users error:", error);
     } finally {
       setLoading(false);
     }
@@ -44,19 +56,19 @@ export default function AdminPage() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(true);
-    setFormError('');
+    setFormError("");
     try {
-      await api.post('/admin/users', {
+      await api.post("/admin/users", {
         email: newEmail,
         full_name: newFullName,
         role: newRole,
-        password: newPassword
+        password: newPassword,
       });
       setShowCreateModal(false);
       resetForm();
       fetchUsers();
     } catch (err: any) {
-      setFormError(err.message || 'Failed to create user');
+      setFormError(err.message || "Failed to create user");
     } finally {
       setFormLoading(false);
     }
@@ -64,61 +76,68 @@ export default function AdminPage() {
 
   const toggleUserStatus = async (user: ManagedUser) => {
     try {
-      await api.patch(`/admin/users/${user.id}`, { is_active: !user.is_active });
+      await api.patch(`/admin/users/${user.id}`, {
+        is_active: !user.is_active,
+      });
       fetchUsers();
     } catch (error) {
-      alert('Failed to update user status');
+      alert("Failed to update user status");
     }
   };
 
   const handleResetPassword = async (userId: string) => {
-    const password = prompt('Enter new temporary password:');
+    const password = prompt("Enter new temporary password:");
     if (!password) return;
     try {
-      await api.post(`/admin/users/${userId}/reset-password`, { newPassword: password });
-      alert('Password reset successfully. User will be forced to change it on next login.');
+      await api.post(`/admin/users/${userId}/reset-password`, {
+        newPassword: password,
+      });
+      alert(
+        "Password reset successfully. User will be forced to change it on next login.",
+      );
       fetchUsers();
     } catch (error) {
-      alert('Failed to reset password');
+      alert("Failed to reset password");
     }
   };
 
   const resetForm = () => {
-    setNewEmail('');
-    setNewFullName('');
-    setNewRole('recruiter');
-    setNewPassword('');
-    setFormError('');
+    setNewEmail("");
+    setNewFullName("");
+    setNewRole("recruiter");
+    setNewPassword("");
+    setFormError("");
   };
 
-  const filteredUsers = users.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.full_name.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredUsers = users.filter(
+    (u) =>
+      u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.full_name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const roleLabels: Record<string, string> = {
-    super_admin: 'Super Admin',
-    ats_admin: 'ATS Admin',
-    senior_recruiter: 'Senior Recruiter',
-    recruiter: 'Recruiter',
-    sourcing_specialist: 'Sourcing Specialist',
+    super_admin: "Super Admin",
+    ats_admin: "ATS Admin",
+    vendor_manager: "Vendor Manager",
+    recruiter: "Recruiter",
+    sourcing_specialist: "Sourcing Specialist",
   };
 
   const roleIcons: Record<string, any> = {
     super_admin: ShieldAlert,
     ats_admin: ShieldCheck,
-    senior_recruiter: UserCheck,
+    vendor_manager: UserCheck,
     recruiter: UserPlus,
     sourcing_specialist: Search,
   };
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-gray-50/50">
-      <Header 
-        title="User Management" 
+      <Header
+        title="User Management"
         subtitle="Manage platform access and roles for your team"
         actions={
-          <button 
+          <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
           >
@@ -132,16 +151,18 @@ export default function AdminPage() {
         {/* Stats & Search */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Total Users</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">
+              Total Users
+            </p>
             <p className="text-2xl font-bold text-gray-900">{users.length}</p>
           </div>
           <div className="md:col-span-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
             <Search size={20} className="text-gray-400 ml-2" />
-            <input 
-              type="text" 
-              placeholder="Search by name or email..." 
+            <input
+              type="text"
+              placeholder="Search by name or email..."
               value={searchTerm}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               className="flex-1 bg-transparent border-none focus:ring-0 text-sm"
             />
           </div>
@@ -153,11 +174,21 @@ export default function AdminPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-gray-50/50 border-b border-gray-100">
-                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">User</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Role</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Password</th>
-                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">Actions</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">
+                    Password
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-right">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -169,70 +200,94 @@ export default function AdminPage() {
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500 font-medium">
+                    <td
+                      colSpan={5}
+                      className="px-6 py-12 text-center text-gray-500 font-medium"
+                    >
                       No users found
                     </td>
                   </tr>
-                ) : filteredUsers.map(user => {
-                  const RoleIcon = roleIcons[user.role] || UserPlus;
-                  return (
-                    <tr key={user.id} className="hover:bg-gray-50/50 transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
-                            {user.full_name ? user.full_name.charAt(0) : user.email.charAt(0).toUpperCase()}
+                ) : (
+                  filteredUsers.map((user) => {
+                    const RoleIcon = roleIcons[user.role] || UserPlus;
+                    return (
+                      <tr
+                        key={user.id}
+                        className="hover:bg-gray-50/50 transition-colors group"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm">
+                              {user.full_name
+                                ? user.full_name.charAt(0)
+                                : user.email.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-gray-900">
+                                {user.full_name || "No Name"}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {user.email}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-900">{user.full_name || 'No Name'}</p>
-                            <p className="text-xs text-gray-500">{user.email}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg w-fit">
+                            <RoleIcon size={14} className="text-gray-500" />
+                            <span className="text-xs font-bold">
+                              {roleLabels[user.role] || user.role}
+                            </span>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 px-2.5 py-1 bg-gray-100 text-gray-700 rounded-lg w-fit">
-                          <RoleIcon size={14} className="text-gray-500" />
-                          <span className="text-xs font-bold">{roleLabels[user.role] || user.role}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        {user.is_active ? (
-                          <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold">
-                            <CheckCircle2 size={14} /> Active
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
-                            <XCircle size={14} /> Inactive
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {user.must_change_password ? (
-                          <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold border border-amber-100 uppercase">Pending Reset</span>
-                        ) : (
-                          <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-100 uppercase">Verified</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => handleResetPassword(user.id)}
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                            title="Reset Password"
-                          >
-                            <RotateCcw size={16} />
-                          </button>
-                          <button 
-                            onClick={() => toggleUserStatus(user)}
-                            className={`p-2 rounded-lg transition-all ${user.is_active ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
-                            title={user.is_active ? 'Deactivate' : 'Activate'}
-                          >
-                            {user.is_active ? <XCircle size={16} /> : <CheckCircle2 size={16} />}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.is_active ? (
+                            <span className="flex items-center gap-1.5 text-emerald-600 text-xs font-bold">
+                              <CheckCircle2 size={14} /> Active
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-red-500 text-xs font-bold">
+                              <XCircle size={14} /> Inactive
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.must_change_password ? (
+                            <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold border border-amber-100 uppercase">
+                              Pending Reset
+                            </span>
+                          ) : (
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-bold border border-emerald-100 uppercase">
+                              Verified
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleResetPassword(user.id)}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Reset Password"
+                            >
+                              <RotateCcw size={16} />
+                            </button>
+                            <button
+                              onClick={() => toggleUserStatus(user)}
+                              className={`p-2 rounded-lg transition-all ${user.is_active ? "text-gray-400 hover:text-red-600 hover:bg-red-50" : "text-emerald-600 hover:bg-emerald-50"}`}
+                              title={user.is_active ? "Deactivate" : "Activate"}
+                            >
+                              {user.is_active ? (
+                                <XCircle size={16} />
+                              ) : (
+                                <CheckCircle2 size={16} />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -249,11 +304,15 @@ export default function AdminPage() {
                   <UserPlus size={20} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-gray-900">Invite New User</h2>
-                  <p className="text-xs text-gray-500 font-medium">User will be forced to change password</p>
+                  <h2 className="text-lg font-bold text-gray-900">
+                    Invite New User
+                  </h2>
+                  <p className="text-xs text-gray-500 font-medium">
+                    User will be forced to change password
+                  </p>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setShowCreateModal(false)}
                 className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-gray-600"
               >
@@ -270,68 +329,82 @@ export default function AdminPage() {
               )}
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Full Name</label>
-                <input 
-                  type="text" 
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
                   required
                   value={newFullName}
-                  onChange={e => setNewFullName(e.target.value)}
+                  onChange={(e) => setNewFullName(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="John Doe"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Email Address</label>
-                <input 
-                  type="email" 
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
                   required
                   value={newEmail}
-                  onChange={e => setNewEmail(e.target.value)}
+                  onChange={(e) => setNewEmail(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="name@company.com"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Assigned Role</label>
-                <select 
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  Assigned Role
+                </label>
+                <select
                   value={newRole}
-                  onChange={e => setNewRole(e.target.value)}
+                  onChange={(e) => setNewRole(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {Object.entries(roleLabels).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
+                    <option key={val} value={val}>
+                      {label}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Temporary Password</label>
-                <input 
-                  type="text" 
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                  Temporary Password
+                </label>
+                <input
+                  type="text"
                   required
                   value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
+                  onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Set a temporary password"
                 />
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
                   className="flex-1 py-3 bg-gray-50 text-gray-700 font-bold text-sm rounded-xl hover:bg-gray-100 transition-all"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   disabled={formLoading}
                   className="flex-1 py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
                 >
-                  {formLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'Create User'}
+                  {formLoading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    "Create User"
+                  )}
                 </button>
               </div>
             </form>

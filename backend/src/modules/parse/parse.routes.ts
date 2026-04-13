@@ -40,4 +40,12 @@ router.post(
   parseController.parseJobDescription,
 );
 
+router.post(
+  "/vendor",
+  authMiddleware,
+  tenantIsolation,
+  memUpload.single("file"),
+  parseController.parseVendor,
+);
+
 export default router;

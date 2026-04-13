@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import pool from '../../db';
 import { AuthRequest } from '../../middleware/auth';
+import nodemailer from "nodemailer";
+import { env } from "../../config/env";
 
 export const getVendors = async (req: AuthRequest, res: Response) => {
   try {
@@ -45,7 +47,36 @@ export const createVendor = async (req: AuthRequest, res: Response) => {
        RETURNING *`,
       [tenantId, company_name, registration_number, gst_id, primary_contact_name, primary_contact_email, primary_contact_phone, industry_specializations || [], geographies || [], tier || 'standard']
     );
-    res.status(201).json(result.rows[0]);
+
+    const newVendor = result.rows[0];
+
+    // Send welcome email (non-blocking)
+    if (newVendor.primary_contact_email && env.EMAIL_USER && env.EMAIL_PASS) {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: env.EMAIL_USER,
+          pass: env.EMAIL_PASS,
+        },
+      });
+
+      transporter.sendMail({
+        from: env.EMAIL_USER,
+        to: newVendor.primary_contact_email,
+        subject: "Welcome to ZorHire",
+        html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2>Welcome to ZorHire, ${newVendor.company_name}!</h2>
+            <p>You have been added as a vendor to our recruitment platform.</p>
+            <p>We look forward to working with you.</p>
+            <hr />
+            <p style="font-size: 0.8em; color: #666;">This is an automated message from ZorHire ATS.</p>
+          </div>
+        `,
+      }).catch(err => console.error("Vendor email failed:", err));
+    }
+
+    res.status(201).json(newVendor);
   } catch (error) {
     console.error('Create vendor error:', error);
     res.status(500).json({ message: 'Internal server error' });

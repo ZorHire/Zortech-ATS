@@ -15,13 +15,20 @@ router.get(
   emailController.listTemplates,
 );
 router.post(
+  "/send-single",
+  authMiddleware,
+  tenantIsolation,
+  emailController.sendSingleEmail,
+);
+
+router.post(
   "/send",
   authMiddleware,
   tenantIsolation,
   authorize([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
   ]),

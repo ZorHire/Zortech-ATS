@@ -13,7 +13,6 @@ import vendorRoutes from "./modules/vendors/vendors.routes";
 import adminRoutes from "./modules/admin/admin.routes";
 import pipelineRoutes from "./modules/pipeline/pipeline.routes";
 import emailRoutes from "./modules/email/email.routes";
-import emailCampaignRoutes from "./modules/email/emailCampaign.routes";
 import parseRoutes from "./routes/parse.routes";
 
 const app = express();
@@ -31,6 +30,12 @@ app.use(
     credentials: true,
   }),
 );
+// CRITICAL: Mount parse routes BEFORE express.json() to prevent stream consumption
+// This allows Multer to handle the multipart/form-data request first
+const parseRouter = express.Router();
+parseRouter.use("/", parseRoutes);
+app.use("/api/v1/parse", parseRouter);
+
 app.use(express.json());
 app.use(express.static(uploadsPath));
 app.use(morgan("dev"));
@@ -55,8 +60,7 @@ v1Router.use("/vendors", vendorRoutes);
 v1Router.use("/admin", adminRoutes);
 v1Router.use("/pipeline", pipelineRoutes);
 v1Router.use("/email", emailRoutes);
-v1Router.use("/email-campaigns", emailCampaignRoutes);
-v1Router.use("/parse", parseRoutes);
+// v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/api/v1", v1Router);
 

@@ -1,27 +1,46 @@
-export type UserRole = 'super_admin' | 'ats_admin' | 'senior_recruiter' | 'recruiter' | 'sourcing_specialist' | 'client_user' | 'vendor_user';
+export type UserRole =
+  | "super_admin"
+  | "ats_admin"
+  | "vendor_manager"
+  | "recruiter"
+  | "sourcing_specialist"
+  | "client_user"
+  | "vendor_user";
 
-export type JobStatus = 'draft' | 'pending_review' | 'active' | 'on_hold' | 'closed_filled' | 'closed_cancelled' | 'expired';
+export type JobStatus =
+  | "draft"
+  | "pending_review"
+  | "active"
+  | "on_hold"
+  | "closed_filled"
+  | "closed_cancelled"
+  | "expired";
 
 export type PipelineStage =
-  | 'new'
-  | 'sourced'
-  | 'screened'
-  | 'shortlisted'
-  | 'submitted_to_client'
-  | 'client_interview_scheduled'
-  | 'interview_completed'
-  | 'selected'
-  | 'offer_extended'
-  | 'offer_accepted'
-  | 'offer_rejected'
-  | 'joined'
-  | 'disqualified';
+  | "new"
+  | "sourced"
+  | "screened"
+  | "shortlisted"
+  | "submitted_to_client"
+  | "client_interview_scheduled"
+  | "interview_completed"
+  | "selected"
+  | "offer_extended"
+  | "offer_accepted"
+  | "offer_rejected"
+  | "joined"
+  | "disqualified";
 
-export type WorkMode = 'remote' | 'hybrid' | 'onsite';
-export type Priority = 'low' | 'medium' | 'high' | 'critical';
-export type VendorTier = 'preferred' | 'standard' | 'blocked';
-export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
-export type InterviewType = 'phone' | 'video' | 'face_to_face';
+export type WorkMode = "remote" | "hybrid" | "onsite";
+export type Priority = "low" | "medium" | "high" | "critical";
+export type VendorTier = "preferred" | "standard" | "blocked";
+export type CampaignStatus =
+  | "draft"
+  | "scheduled"
+  | "sending"
+  | "sent"
+  | "failed";
+export type InterviewType = "phone" | "video" | "face_to_face";
 
 export interface Profile {
   id: string;
@@ -40,7 +59,7 @@ export interface Client {
   id: string;
   name: string;
   industry?: string;
-  tier: 'priority' | 'standard';
+  tier: "priority" | "standard";
   website?: string;
   logo_url?: string;
   city?: string;
@@ -185,7 +204,7 @@ export interface Interview {
   meeting_link?: string;
   feedback_score?: number;
   feedback_notes?: string;
-  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+  status: "scheduled" | "completed" | "cancelled" | "no_show";
   created_at: string;
 }
 

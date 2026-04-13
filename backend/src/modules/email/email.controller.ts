@@ -22,23 +22,48 @@ const templateMap = {
   },
 };
 
-const transporter = env.SMTP_HOST
+const transporter = (env.EMAIL_USER && env.EMAIL_PASS)
   ? nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: Number(env.SMTP_PORT) || 587,
-      secure: env.SMTP_SECURE === "true",
-      auth:
-        env.SMTP_USER && env.SMTP_PASS
-          ? { user: env.SMTP_USER, pass: env.SMTP_PASS }
-          : undefined,
+      service: "gmail",
+      auth: { user: env.EMAIL_USER, pass: env.EMAIL_PASS }
     })
-  : nodemailer.createTransport({ jsonTransport: true });
+  : env.SMTP_HOST
+    ? nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: Number(env.SMTP_PORT) || 587,
+        secure: env.SMTP_SECURE === "true",
+        auth: env.SMTP_USER && env.SMTP_PASS ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
+      })
+    : nodemailer.createTransport({ jsonTransport: true });
 
 const renderTemplate = (template: string, data: Record<string, string>) => {
   return template.replace(
     /{{\s*([A-Za-z0-9_]+)\s*}}/g,
     (_, key) => data[key] || "",
   );
+};
+
+export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
+  const { to, subject, body } = req.body;
+
+  if (!to || !subject || !body) {
+    return res.status(400).json({ message: "To, subject, and body are required" });
+  }
+
+  try {
+    await transporter.sendMail({
+      from: env.EMAIL_USER || env.EMAIL_FROM || "no-reply@zorhire.com",
+      to,
+      subject,
+      text: body,
+      html: `<div style="font-family: sans-serif; white-space: pre-wrap;">${body}</div>`,
+    });
+
+    res.json({ message: "Email sent successfully" });
+  } catch (error) {
+    console.error("Send single email error:", error);
+    res.status(500).json({ message: "Unable to send email" });
+  }
 };
 
 export const listTemplates = async (_req: AuthRequest, res: Response) => {
@@ -106,107 +131,5 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error("Send email error:", error);
     res.status(500).json({ message: "Unable to send email" });
-  }
-};
-
-export const listCampaigns = async (req: AuthRequest, res: Response) => {
-  const tenantId = req.user?.tenant_id;
-  try {
-    const result = await pool.query(
-      "SELECT * FROM email_campaigns WHERE tenant_id = $1 ORDER BY created_at DESC",
-      [tenantId],
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error("List campaigns error:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-export const createCampaign = async (req: AuthRequest, res: Response) => {
-  const { name, subject, body, status, recipient_count } = req.body;
-  const tenantId = req.user?.tenant_id;
-  const createdBy = req.user?.id;
-
-  if (!name || !subject || !body) {
-    return res
-      .status(400)
-      .json({ message: "Name, subject, and body are required" });
-  }
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO email_campaigns (tenant_id, name, subject, body, status, recipient_count, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [
-        tenantId,
-        name,
-        subject,
-        body,
-        status || "draft",
-        recipient_count || 0,
-        createdBy,
-      ],
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error("Create campaign error:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-export const sendCampaign = async (req: AuthRequest, res: Response) => {
-  const { id } = req.params;
-  const { recipients } = req.body;
-  const tenantId = req.user?.tenant_id;
-
-  if (!Array.isArray(recipients) || recipients.length === 0) {
-    return res
-      .status(400)
-      .json({ message: "Recipients are required to send a campaign" });
-  }
-
-  try {
-    const campaignResult = await pool.query(
-      "SELECT * FROM email_campaigns WHERE id = $1 AND tenant_id = $2",
-      [id, tenantId],
-    );
-    if (campaignResult.rows.length === 0) {
-      return res.status(404).json({ message: "Campaign not found" });
-    }
-
-    const campaign = campaignResult.rows[0];
-    const sendResults = await Promise.allSettled(
-      recipients.map((recipient: any) =>
-        transporter.sendMail({
-          from: env.EMAIL_FROM,
-          to: recipient.email,
-          subject: campaign.subject,
-          text: campaign.body,
-          html: `<pre style="font-family:inherit;white-space:pre-wrap">${campaign.body}</pre>`,
-        }),
-      ),
-    );
-
-    const deliveredCount = sendResults.filter(
-      (promise) => promise.status === "fulfilled",
-    ).length;
-    const statusUpdate =
-      deliveredCount === recipients.length ? "sent" : "failed";
-
-    await pool.query(
-      `UPDATE email_campaigns SET status = $1, recipient_count = $2, delivered_count = $3, sent_at = now(), updated_at = now() WHERE id = $4`,
-      [statusUpdate, recipients.length, deliveredCount, id],
-    );
-
-    res.json({
-      message: "Campaign sent",
-      delivered_count: deliveredCount,
-      recipient_count: recipients.length,
-    });
-  } catch (error) {
-    console.error("Send campaign error:", error);
-    res.status(500).json({ message: "Unable to send campaign" });
   }
 };

@@ -10,7 +10,6 @@ import NewJobPage from "./pages/NewJobPage";
 import CandidatesPage from "./pages/CandidatesPage";
 import VendorsPage from "./pages/VendorsPage";
 import ResumeSearchPage from "./pages/ResumeSearchPage";
-import EmailCampaignsPage from "./pages/EmailCampaignsPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import AdminPage from "./pages/AdminPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -109,14 +108,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <ResumeSearchPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/campaigns"
-        element={
-          <ProtectedRoute>
-            <EmailCampaignsPage />
           </ProtectedRoute>
         }
       />

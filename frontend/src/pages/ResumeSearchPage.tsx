@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Sparkles, MapPin, Building2, Clock, UserCheck, Star, Filter, BookmarkPlus, ChevronDown } from 'lucide-react';
+import { Search, Sparkles, MapPin, Building2, Clock, UserCheck, Star, BookmarkPlus, ChevronDown, Mail } from 'lucide-react';
 import Header from '../components/layout/Header';
 import api from '../lib/api';
 import { Candidate } from '../types';
@@ -66,6 +66,26 @@ function ResultCard({ candidate, score }: { candidate: Candidate; score: number 
           {candidate.source.charAt(0).toUpperCase() + candidate.source.slice(1)}
         </span>
         <div className="flex gap-2">
+          <button 
+            onClick={async () => {
+              try {
+                const body = `Hi ${candidate.first_name},\n\nI came across your profile and would love to connect regarding an exciting opportunity.\n\nBest regards,\nRecruiter`;
+                await api.post('/email/send-single', {
+                  to: candidate.email,
+                  subject: "Quick catch-up - ZorHire",
+                  body: body
+                });
+                alert('Email sent successfully!');
+              } catch (error) {
+                console.error('Email send error:', error);
+                alert('Failed to send email.');
+              }
+            }}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 transition-all font-bold shadow-sm"
+          >
+            <Mail size={14} className="text-blue-600" />
+            Email
+          </button>
           <button className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
             <BookmarkPlus size={12} />Save
           </button>

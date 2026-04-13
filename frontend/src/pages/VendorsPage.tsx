@@ -3,7 +3,6 @@ import {
   Plus,
   Search,
   Mail,
-  Phone,
   Star,
   Users,
   Award,
@@ -11,7 +10,6 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import Header from "../components/layout/Header";
 import api from "../lib/api";
 import { Vendor } from "../types";
@@ -188,7 +186,21 @@ export default function VendorsPage() {
   const [tierFilter, setTierFilter] = useState("all");
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [vendorFile, setVendorFile] = useState<File | null>(null);
-  const navigate = useNavigate();
+  const [vendorParsing, setVendorParsing] = useState(false);
+  const [vendorParseMessage, setVendorParseMessage] = useState("");
+  const [vendorParseError, setVendorParseError] = useState("");
+  const [formLoading, setFormLoading] = useState(false);
+  const [vendorFormData, setVendorFormData] = useState({
+    company_name: "",
+    registration_number: "",
+    gst_id: "",
+    primary_contact_name: "",
+    primary_contact_email: "",
+    primary_contact_phone: "",
+    industry_specializations: "",
+    geographies: "",
+    tier: "standard",
+  });
 
   useEffect(() => {
     fetchVendors();
@@ -205,14 +217,114 @@ export default function VendorsPage() {
     }
   };
 
-  const filtered = vendors.filter((v) => {
+  const resetVendorForm = () => {
+    setVendorFormData({
+      company_name: "",
+      registration_number: "",
+      gst_id: "",
+      primary_contact_name: "",
+      primary_contact_email: "",
+      primary_contact_phone: "",
+      industry_specializations: "",
+      geographies: "",
+      tier: "standard",
+    });
+    setVendorFile(null);
+    setVendorParseMessage("");
+    setVendorParseError("");
+    setVendorParsing(false);
+  };
+
+  const parseVendorFile = async (file: File) => {
+    setVendorParsing(true);
+    setVendorParseMessage("");
+    setVendorParseError("");
+
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const parsed = await api.post("/parse/vendor", body);
+
+      setVendorFormData((current) => ({
+        ...current,
+        company_name: parsed.company_name || current.company_name,
+        primary_contact_name:
+          parsed.primary_contact_name || current.primary_contact_name,
+        primary_contact_email:
+          parsed.primary_contact_email || current.primary_contact_email,
+        primary_contact_phone:
+          parsed.primary_contact_phone || current.primary_contact_phone,
+        industry_specializations:
+          parsed.industry_specializations?.length > 0
+            ? parsed.industry_specializations.join(", ")
+            : current.industry_specializations,
+        geographies:
+          parsed.geographies?.length > 0
+            ? parsed.geographies.join(", ")
+            : current.geographies,
+      }));
+
+      setVendorParseMessage(
+        "Vendor document parsed successfully. Please review the data.",
+      );
+    } catch (error: any) {
+      console.error("Vendor parse failed:", error);
+      setVendorParseError(
+        error?.message || "Could not extract vendor data from the file.",
+      );
+    } finally {
+      setVendorParsing(false);
+    }
+  };
+
+  const handleAddVendor = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setFormLoading(true);
+    setVendorParseError("");
+
+    try {
+      const payload = {
+        company_name: vendorFormData.company_name,
+        registration_number: vendorFormData.registration_number,
+        gst_id: vendorFormData.gst_id,
+        primary_contact_name: vendorFormData.primary_contact_name,
+        primary_contact_email: vendorFormData.primary_contact_email,
+        primary_contact_phone: vendorFormData.primary_contact_phone,
+        industry_specializations: vendorFormData.industry_specializations
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        geographies: vendorFormData.geographies
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        tier: vendorFormData.tier,
+      };
+
+      const createdVendor = await api.post("/vendors", payload);
+      setVendors([createdVendor, ...vendors]);
+      setShowAddVendor(false);
+      resetVendorForm();
+    } catch (error: any) {
+      console.error("Add vendor failed:", error);
+      setVendorParseError(
+        error?.message || "Failed to create vendor. Please check the form.",
+      );
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const filtered = vendors.filter((vendor) => {
     const matchSearch =
-      v.company_name.toLowerCase().includes(search.toLowerCase()) ||
-      v.primary_contact_name.toLowerCase().includes(search.toLowerCase()) ||
-      v.industry_specializations.some((s) =>
+      vendor.company_name.toLowerCase().includes(search.toLowerCase()) ||
+      vendor.primary_contact_name
+        .toLowerCase()
+        .includes(search.toLowerCase()) ||
+      vendor.industry_specializations.some((s) =>
         s.toLowerCase().includes(search.toLowerCase()),
       );
-    const matchTier = tierFilter === "all" || v.tier === tierFilter;
+    const matchTier = tierFilter === "all" || vendor.tier === tierFilter;
     return matchSearch && matchTier;
   });
 
@@ -341,31 +453,178 @@ export default function VendorsPage() {
 
       {showAddVendor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-hidden p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              Add New Vendor
-            </h2>
-            <div
-              className="space-y-3 overflow-y-auto"
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden p-6">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">
+                  Add New Vendor
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Upload a file to auto-extract vendor details, then confirm the
+                  form.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddVendor(false);
+                  resetVendorForm();
+                }}
+                className="text-gray-400 hover:text-gray-700"
+              >
+                Close
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleAddVendor}
+              className="space-y-4 overflow-y-auto"
               style={{ maxHeight: "calc(85vh - 5rem)" }}
             >
-              {[
-                { label: "Company Name", placeholder: "Staffing Agency Ltd" },
-                { label: "Contact Name", placeholder: "Primary Contact" },
-                { label: "Contact Email", placeholder: "contact@agency.com" },
-                { label: "Contact Phone", placeholder: "+91-XXXXXXXXXX" },
-              ].map((f) => (
-                <div key={f.label}>
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  {
+                    label: "Company Name",
+                    name: "company_name",
+                    placeholder: "Staffing Agency Ltd",
+                  },
+                  {
+                    label: "Contact Name",
+                    name: "primary_contact_name",
+                    placeholder: "Primary Contact",
+                  },
+                  {
+                    label: "Contact Email",
+                    name: "primary_contact_email",
+                    placeholder: "contact@agency.com",
+                  },
+                  {
+                    label: "Contact Phone",
+                    name: "primary_contact_phone",
+                    placeholder: "+91-XXXXXXXXXX",
+                  },
+                ].map((field) => (
+                  <div key={field.name}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                    </label>
+                    <input
+                      type="text"
+                      name={field.name}
+                      value={
+                        vendorFormData[
+                          field.name as keyof typeof vendorFormData
+                        ]
+                      }
+                      placeholder={field.placeholder}
+                      onChange={(e) =>
+                        setVendorFormData((current) => ({
+                          ...current,
+                          [e.target.name]: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {f.label}
+                    Industry Specializations
                   </label>
                   <input
                     type="text"
-                    placeholder={f.placeholder}
+                    value={vendorFormData.industry_specializations}
+                    onChange={(e) =>
+                      setVendorFormData((current) => ({
+                        ...current,
+                        industry_specializations: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. IT staffing, healthcare, finance"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Comma-separated values are supported.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Geographies
+                  </label>
+                  <input
+                    type="text"
+                    value={vendorFormData.geographies}
+                    onChange={(e) =>
+                      setVendorFormData((current) => ({
+                        ...current,
+                        geographies: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. India, UAE"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-              ))}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vendor Tier
+                  </label>
+                  <select
+                    value={vendorFormData.tier}
+                    onChange={(e) =>
+                      setVendorFormData((current) => ({
+                        ...current,
+                        tier: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="standard">Standard</option>
+                    <option value="preferred">Preferred</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Registration Number
+                  </label>
+                  <input
+                    type="text"
+                    value={vendorFormData.registration_number}
+                    onChange={(e) =>
+                      setVendorFormData((current) => ({
+                        ...current,
+                        registration_number: e.target.value,
+                      }))
+                    }
+                    placeholder="123456789"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    GST ID
+                  </label>
+                  <input
+                    type="text"
+                    value={vendorFormData.gst_id}
+                    onChange={(e) =>
+                      setVendorFormData((current) => ({
+                        ...current,
+                        gst_id: e.target.value,
+                      }))
+                    }
+                    placeholder="GSTIN"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Upload Vendor Document
@@ -374,8 +633,10 @@ export default function VendorsPage() {
                   type="file"
                   accept=".pdf,.doc,.docx"
                   onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setVendorFile(e.target.files[0]);
+                    const file = e.target.files?.[0] || null;
+                    setVendorFile(file);
+                    if (file) {
+                      parseVendorFile(file);
                     }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -386,27 +647,45 @@ export default function VendorsPage() {
                   </p>
                 )}
               </div>
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowAddVendor(false);
-                  setVendorFile(null);
-                }}
-                className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddVendor(false);
-                  setVendorFile(null);
-                }}
-                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-              >
-                Add Vendor
-              </button>
-            </div>
+
+              {vendorParsing && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-700">
+                  Parsing document, please wait...
+                </div>
+              )}
+
+              {vendorParseMessage && (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-700">
+                  {vendorParseMessage}
+                </div>
+              )}
+
+              {vendorParseError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+                  {vendorParseError}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 mt-6 md:flex-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddVendor(false);
+                    resetVendorForm();
+                  }}
+                  className="flex-1 py-3 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={formLoading}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {formLoading ? "Saving..." : "Add Vendor"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

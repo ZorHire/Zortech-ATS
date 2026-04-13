@@ -21,7 +21,7 @@ router.post(
   authorize([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
   ]),
@@ -34,7 +34,7 @@ router.patch(
   authorize([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
   ]),

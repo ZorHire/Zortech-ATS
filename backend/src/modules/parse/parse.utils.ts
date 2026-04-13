@@ -1,13 +1,20 @@
-// pdf-parse v2 uses a class-based API: new PDFParse({data: buffer}).getText()
+// ---------------------------------------------------------------------------
+// Dependencies — kept for fallback when Tika server is unavailable
+// ---------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { PDFParse } = require("pdf-parse") as {
-  PDFParse: new (opts: { data: Buffer }) => { getText: () => Promise<{ text: string }> };
-};
+const pdfParse = require("pdf-parse") as (
+  buffer: Buffer | Uint8Array | string,
+) => Promise<{ text: string }>;
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const mammoth = require("mammoth") as {
   extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }>;
 };
 
+import { extractTextWithTika } from "../../services/tika.service";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 export type ParsedResumeData = {
   name?: string;
   email?: string;
@@ -32,6 +39,9 @@ export type ParsedJobData = {
   description?: string;
 };
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 const normalizeText = (value: string) =>
   value
     .replace(/\r/g, "\n")
@@ -39,16 +49,19 @@ const normalizeText = (value: string) =>
     .replace(/[ ]{2,}/g, " ")
     .trim();
 
-const readFileText = async (file: Express.Multer.File): Promise<string> => {
+/**
+ * Local fallback extractor — used when Tika is unreachable.
+ * Supports PDF (pdf-parse), DOCX/DOC (mammoth), and plain text.
+ */
+const readFileTextFallback = async (file: Express.Multer.File): Promise<string> => {
   // file.buffer is populated by multer memoryStorage
   const buffer: Buffer = file.buffer;
   const extension = file.originalname
-    ? file.originalname.split(".").pop()?.toLowerCase() ?? ""
+    ? (file.originalname.split(".").pop()?.toLowerCase() ?? "")
     : "";
 
   if (extension === "pdf" || file.mimetype === "application/pdf") {
-    const parser = new PDFParse({ data: buffer });
-    const result = await parser.getText();
+    const result = await pdfParse(buffer);
     return result.text || "";
   }
 
@@ -60,21 +73,14 @@ const readFileText = async (file: Express.Multer.File): Promise<string> => {
     return data.value || "";
   }
 
-  if (
-    extension === "doc" ||
-    file.mimetype === "application/msword"
-  ) {
-    // mammoth has limited support for old binary .doc; attempt it but surface
-    // a clear warning rather than silently returning empty text
+  if (extension === "doc" || file.mimetype === "application/msword") {
     try {
       const data = await mammoth.extractRawText({ buffer });
       if (data.value && data.value.trim().length > 20) return data.value;
     } catch {
-      // fall through
+      // fall through to clear error message below
     }
-    throw new Error(
-      "Legacy .doc format could not be parsed. Please save the file as .docx or .pdf and re-upload.",
-    );
+    throw new Error("Legacy .doc not supported. Please upload .docx or PDF.");
   }
 
   if (extension === "txt" || file.mimetype.includes("text/plain")) {
@@ -153,7 +159,10 @@ const parseExperience = (content: string): { min?: number; max?: number } => {
     /(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(?:\+)?\s*(?:years|yrs|year)\b/i,
   );
   if (rangeMatch) {
-    return { min: Number(parseFloat(rangeMatch[1])), max: Number(parseFloat(rangeMatch[2])) };
+    return {
+      min: Number(parseFloat(rangeMatch[1])),
+      max: Number(parseFloat(rangeMatch[2])),
+    };
   }
 
   // Handle single value: "5+ years"
@@ -177,34 +186,136 @@ const parseExperience = (content: string): { min?: number; max?: number } => {
 // Broad keyword list used as a fallback when section parsing yields nothing
 const KNOWN_SKILLS = [
   // Languages
-  "javascript","typescript","python","java","c++","c#","c","go","golang","rust","ruby","php","swift","kotlin","scala","r","matlab","perl","bash","shell",
+  "javascript",
+  "typescript",
+  "python",
+  "java",
+  "c++",
+  "c#",
+  "c",
+  "go",
+  "golang",
+  "rust",
+  "ruby",
+  "php",
+  "swift",
+  "kotlin",
+  "scala",
+  "r",
+  "matlab",
+  "perl",
+  "bash",
+  "shell",
   // Frontend
-  "react","vue","angular","next.js","nextjs","nuxt","svelte","html","css","sass","less","tailwind","bootstrap","jquery","redux","mobx","zustand","graphql","rest","websocket",
+  "react",
+  "vue",
+  "angular",
+  "next.js",
+  "nextjs",
+  "nuxt",
+  "svelte",
+  "html",
+  "css",
+  "sass",
+  "less",
+  "tailwind",
+  "bootstrap",
+  "jquery",
+  "redux",
+  "mobx",
+  "zustand",
+  "graphql",
+  "rest",
+  "websocket",
   // Backend
-  "node","node.js","nodejs","express","fastapi","django","flask","spring","laravel","rails","nestjs","fastify","hapi","koa",
+  "node",
+  "node.js",
+  "nodejs",
+  "express",
+  "fastapi",
+  "django",
+  "flask",
+  "spring",
+  "laravel",
+  "rails",
+  "nestjs",
+  "fastify",
+  "hapi",
+  "koa",
   // Databases
-  "sql","mysql","postgresql","postgres","mongodb","redis","elasticsearch","cassandra","dynamodb","sqlite","oracle","mssql","firestore","supabase",
+  "sql",
+  "mysql",
+  "postgresql",
+  "postgres",
+  "mongodb",
+  "redis",
+  "elasticsearch",
+  "cassandra",
+  "dynamodb",
+  "sqlite",
+  "oracle",
+  "mssql",
+  "firestore",
+  "supabase",
   // Cloud & DevOps
-  "aws","azure","gcp","docker","kubernetes","terraform","ansible","jenkins","ci/cd","github actions","gitlab ci","linux","nginx","apache",
+  "aws",
+  "azure",
+  "gcp",
+  "docker",
+  "kubernetes",
+  "terraform",
+  "ansible",
+  "jenkins",
+  "ci/cd",
+  "github actions",
+  "gitlab ci",
+  "linux",
+  "nginx",
+  "apache",
   // Data & ML
-  "machine learning","deep learning","tensorflow","pytorch","keras","pandas","numpy","scikit-learn","spark","hadoop","tableau","power bi","data analysis","nlp",
+  "machine learning",
+  "deep learning",
+  "tensorflow",
+  "pytorch",
+  "keras",
+  "pandas",
+  "numpy",
+  "scikit-learn",
+  "spark",
+  "hadoop",
+  "tableau",
+  "power bi",
+  "data analysis",
+  "nlp",
   // Mobile
-  "react native","flutter","ios","android","xamarin",
+  "react native",
+  "flutter",
+  "ios",
+  "android",
+  "xamarin",
   // Tools
-  "git","jira","figma","postman","webpack","vite","babel","eslint",
+  "git",
+  "jira",
+  "figma",
+  "postman",
+  "webpack",
+  "vite",
+  "babel",
+  "eslint",
 ];
 
 const parseSkills = (content: string) => {
   // First try to find a skills section
-  const section =
-    findSectionText(
-      content,
-      /(?:skills|technical skills|key skills|core competencies|core skills|technologies)[:\s]*/i,
-    );
+  const section = findSectionText(
+    content,
+    /(?:skills|technical skills|key skills|core competencies|core skills|technologies)[:\s]*/i,
+  );
 
   if (section && section.length > 10) {
     const items = splitListText(section);
-    const filtered = items.filter((skill) => skill.length > 1 && skill.length < 60);
+    const filtered = items.filter(
+      (skill) => skill.length > 1 && skill.length < 60,
+    );
     if (filtered.length > 0) return filtered;
   }
 
@@ -251,15 +362,15 @@ const parseNumericString = (s: string): number => {
 };
 
 const parseBudget = (content: string) => {
-  const match = content.match(/(?:budget|salary|compensation|ctc)[:\s]*([^\n]+)/i);
+  const match = content.match(
+    /(?:budget|salary|compensation|ctc)[:\s]*([^\n]+)/i,
+  );
   if (!match)
     return { budget_text: "", salary_min: undefined, salary_max: undefined };
 
   const budgetText = match[1].trim();
   // Match full numbers including commas (Indian/Western format), then optional range
-  const valueMatch = budgetText.match(
-    /([\d,]+)\s*(?:-\s*([\d,]+))?/,
-  );
+  const valueMatch = budgetText.match(/([\d,]+)\s*(?:-\s*([\d,]+))?/);
   if (!valueMatch) {
     return {
       budget_text: budgetText,
@@ -279,9 +390,23 @@ const parseBudget = (content: string) => {
 };
 
 export const extractFileText = async (file?: Express.Multer.File) => {
-  if (!file) return "";
-  const text = await readFileText(file);
-  return normalizeText(text);
+  if (!file || !file.buffer) return "";
+  console.log("[Parse] File:", file.originalname, "| MIME:", file.mimetype);
+
+  // 1. Try Apache Tika (most reliable — handles PDF, DOCX, DOC, TXT and more)
+  const tikaText = await extractTextWithTika(file);
+  if (tikaText !== null) {
+    const normalized = normalizeText(tikaText);
+    console.log(`[Parse] Tika extracted ${normalized.length} chars`);
+    return normalized;
+  }
+
+  // 2. Tika unavailable — fall back to local parsers
+  console.log("[Parse] Using local fallback parsers");
+  const text = await readFileTextFallback(file);
+  const normalized = normalizeText(text);
+  console.log(`[Parse] Fallback extracted ${normalized.length} chars`);
+  return normalized;
 };
 
 export const parseResumeText = (content: string): ParsedResumeData => {
@@ -308,6 +433,48 @@ export const parseResumeText = (content: string): ParsedResumeData => {
         normalized,
         /(?:summary|profile|about me|professional summary)[:\s]*/i,
       ) || "",
+  };
+};
+
+export const parseVendorText = (content: string) => {
+  const normalized = normalizeText(content);
+  const resume = parseResumeText(normalized);
+  const companySection =
+    findSectionText(
+      normalized,
+      /(?:company|organization|agency|vendor|firm|business)[:\s]*/i,
+    ) ||
+    resume.current_company ||
+    "";
+
+  const contactName =
+    resume.name ||
+    normalized
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .find(
+        (line) =>
+          !/[0-9@]/.test(line) &&
+          !/^(Skills|Experience|Education|Summary|Profile|Contact|Company)/i.test(
+            line,
+          ),
+      ) ||
+    "";
+
+  const geographyText =
+    findSectionText(
+      normalized,
+      /(?:locations|geographies|operating in|territories)[:\s]*/i,
+    ) || "";
+
+  return {
+    company_name: companySection,
+    primary_contact_name: contactName,
+    primary_contact_email: resume.email,
+    primary_contact_phone: resume.phone,
+    industry_specializations: resume.skills || [],
+    geographies: geographyText ? splitListText(geographyText) : [],
   };
 };
 

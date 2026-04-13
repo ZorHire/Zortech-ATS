@@ -11,15 +11,12 @@ import {
   ChevronDown,
   CheckSquare,
   Square,
-  Send,
   X,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import Header from "../components/layout/Header";
 import { Candidate } from "../types";
 import api from "../lib/api";
 import CandidateModal from "../components/candidates/CandidateModal";
-import EmailCampaignModal from "../components/candidates/EmailCampaignModal";
 
 const sourceLabels: Record<string, string> = {
   linkedin: "LinkedIn",
@@ -53,8 +50,6 @@ export default function CandidatesPage() {
   const [viewingCandidate, setViewingCandidate] = useState<Candidate | null>(
     null,
   );
-  const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
-  const navigate = useNavigate();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -295,15 +290,6 @@ export default function CandidatesPage() {
         subtitle={`${candidates.length} total candidates · ${selectedIds.size} selected`}
         actions={
           <div className="flex items-center gap-3">
-            {selectedIds.size > 0 && (
-              <button
-                onClick={() => setIsCampaignModalOpen(true)}
-                className="flex items-center gap-2 bg-white text-blue-600 border border-blue-200 px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-50 transition-all shadow-sm"
-              >
-                <Send size={16} />
-                Send Campaign
-              </button>
-            )}
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-100"
@@ -499,7 +485,24 @@ export default function CandidatesPage() {
                     {sourceLabels[candidate.source]}
                   </span>
                   <div className="flex gap-1">
-                    <button className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                    <button 
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          const body = `Hi ${candidate.first_name},\n\nI came across your profile and would love to connect regarding an exciting opportunity.\n\nBest regards,\nRecruiter`;
+                          await api.post('/email/send-single', {
+                            to: candidate.email,
+                            subject: "Quick catch-up - ZorHire",
+                            body: body
+                          });
+                          alert('Email sent successfully!');
+                        } catch (error) {
+                          console.error('Email send error:', error);
+                          alert('Failed to send email.');
+                        }
+                      }}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                    >
                       <Mail size={14} />
                     </button>
                     <button className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all">
@@ -729,18 +732,6 @@ export default function CandidatesPage() {
         />
       )}
 
-      {isCampaignModalOpen && (
-        <EmailCampaignModal
-          candidates={Array.from(selectedIds)}
-          onClose={() => setIsCampaignModalOpen(false)}
-          onSend={(campaignId) => {
-            console.log("Sending campaign", campaignId, "to", selectedIds);
-            setIsCampaignModalOpen(false);
-            setSelectedIds(new Set());
-            alert("Emails sent successfully!");
-          }}
-        />
-      )}
     </div>
   );
 }

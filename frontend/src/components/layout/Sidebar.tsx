@@ -32,7 +32,7 @@ const navItems = [
     roles: [
       "super_admin",
       "ats_admin",
-      "senior_recruiter",
+      "vendor_manager",
       "recruiter",
       "sourcing_specialist",
     ],
@@ -44,7 +44,7 @@ const navItems = [
     roles: [
       "super_admin",
       "ats_admin",
-      "senior_recruiter",
+      "vendor_manager",
       "recruiter",
       "sourcing_specialist",
     ],
@@ -56,7 +56,7 @@ const navItems = [
     roles: [
       "super_admin",
       "ats_admin",
-      "senior_recruiter",
+      "vendor_manager",
       "recruiter",
       "sourcing_specialist",
     ],
@@ -68,7 +68,7 @@ const navItems = [
     roles: [
       "super_admin",
       "ats_admin",
-      "senior_recruiter",
+      "vendor_manager",
       "recruiter",
       "sourcing_specialist",
     ],
@@ -77,19 +77,13 @@ const navItems = [
     icon: Building2,
     label: "Vendors",
     path: "/vendors",
-    roles: ["super_admin", "ats_admin", "senior_recruiter"],
-  },
-  {
-    icon: Mail,
-    label: "Email Campaigns",
-    path: "/campaigns",
-    roles: ["super_admin", "ats_admin", "senior_recruiter", "recruiter"],
+    roles: ["super_admin", "ats_admin", "vendor_manager"],
   },
   {
     icon: BarChart3,
     label: "Analytics",
     path: "/analytics",
-    roles: ["super_admin", "ats_admin", "senior_recruiter"],
+    roles: ["super_admin", "ats_admin", "vendor_manager"],
   },
   {
     icon: Settings,

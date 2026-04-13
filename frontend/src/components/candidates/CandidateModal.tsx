@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Mail, Phone, MapPin, Building2, Clock, Calendar, Star, Download, Eye, FileText, Send, UserCheck, Trash2 } from 'lucide-react';
+import { X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye, FileText, Send, Trash2 } from 'lucide-react';
 import { Candidate } from '../../types';
+import api from '../../lib/api';
 
 interface CandidateModalProps {
   candidate: Candidate;
@@ -9,16 +10,6 @@ interface CandidateModalProps {
   onDelete: (id: string) => void;
 }
 
-const stageColors: Record<string, string> = {
-  shortlisted: 'bg-violet-100 text-violet-700',
-  submitted_to_client: 'bg-amber-100 text-amber-700',
-  client_interview_scheduled: 'bg-orange-100 text-orange-700',
-  offer_extended: 'bg-emerald-100 text-emerald-700',
-  offer_accepted: 'bg-teal-100 text-teal-700',
-  screened: 'bg-cyan-100 text-cyan-700',
-  sourced: 'bg-blue-100 text-blue-700',
-  new: 'bg-gray-100 text-gray-600',
-};
 
 const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onUpdate, onDelete }) => {
   const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity'>('overview');
@@ -154,6 +145,26 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onU
                   <button className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
                     <Send size={16} />
                     Move to Next Stage
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      try {
+                        const body = `Hi ${candidate.first_name},\n\nI hope you are doing well. I would like to connect with you regarding the ${candidate.current_title} position.\n\nBest regards,\nRecruiter`;
+                        await api.post('/email/send-single', {
+                          to: candidate.email,
+                          subject: "Inquiry - ZorHire",
+                          body: body
+                        });
+                        alert('Email sent successfully!');
+                      } catch (error) {
+                        console.error('Email send error:', error);
+                        alert('Failed to send email.');
+                      }
+                    }}
+                    className="w-full py-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Mail size={16} />
+                    Send individual Email
                   </button>
                   <button className="w-full py-3 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2">
                     <Calendar size={16} />
