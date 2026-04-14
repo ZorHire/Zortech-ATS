@@ -24,9 +24,23 @@ const uploadsPath = path.resolve(
 fs.mkdirSync(uploadsPath, { recursive: true });
 
 // Middleware
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  /\.run\.app$/,           // any Cloud Run frontend
+  /\.web\.app$/,           // Firebase Hosting
+  /\.firebaseapp\.com$/,   // Firebase Hosting alt
+];
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      const allowed = allowedOrigins.some((o) =>
+        typeof o === "string" ? o === origin : o.test(origin),
+      );
+      callback(allowed ? null : new Error("CORS: origin not allowed"), allowed);
+    },
     credentials: true,
   }),
 );

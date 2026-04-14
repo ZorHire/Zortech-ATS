@@ -15,6 +15,61 @@ const normalizeStage = (value: any): Stage => {
   return "new";
 };
 
+export const addToPipeline = async (req: AuthRequest, res: Response) => {
+  const { candidateId, jobId } = req.body;
+  const tenantId = req.user?.tenant_id;
+  const createdBy = req.user?.id;
+
+  if (!candidateId || !jobId) {
+    return res.status(400).json({ message: "candidateId and jobId are required" });
+  }
+
+  try {
+    const jobResult = await pool.query(
+      "SELECT id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      [jobId, tenantId],
+    );
+    if (jobResult.rows.length === 0) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    const candidateResult = await pool.query(
+      "SELECT id FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      [candidateId, tenantId],
+    );
+    if (candidateResult.rows.length === 0) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+
+    const existing = await pool.query(
+      "SELECT id FROM job_applications WHERE tenant_id = $1 AND job_id = $2 AND candidate_id = $3",
+      [tenantId, jobId, candidateId],
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ message: "Candidate is already in this pipeline" });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO job_applications (tenant_id, job_id, candidate_id, stage, created_at, updated_at)
+       VALUES ($1, $2, $3, 'new', now(), now())
+       RETURNING *`,
+      [tenantId, jobId, candidateId],
+    );
+
+    const application = insertResult.rows[0];
+    await pool.query(
+      `INSERT INTO pipeline_events (tenant_id, application_id, from_stage, to_stage, changed_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, now())`,
+      [tenantId, application.id, null, "new", createdBy],
+    );
+
+    res.status(201).json(application);
+  } catch (error: any) {
+    console.error("[addToPipeline] Error:", error?.message);
+    res.status(500).json({ message: "Failed to add to pipeline" });
+  }
+};
+
 export const getJobApplications = async (req: AuthRequest, res: Response) => {
   const { jobId } = req.params;
   const tenantId = req.user?.tenant_id;

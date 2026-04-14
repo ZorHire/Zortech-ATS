@@ -8,6 +8,20 @@ import {
 
 const router = Router();
 
+router.post(
+  "/add",
+  authMiddleware,
+  tenantIsolation,
+  authorize([
+    "super_admin",
+    "ats_admin",
+    "vendor_manager",
+    "recruiter",
+    "sourcing_specialist",
+  ]),
+  pipelineController.addToPipeline,
+);
+
 router.get(
   "/jobs/:jobId/applications",
   authMiddleware,

@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const adminController = __importStar(require("./admin.controller"));
+const analyticsController = __importStar(require("./analytics.controller"));
 const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
 // Only super_admin and ats_admin can access user management
@@ -42,4 +43,6 @@ router.get('/users', auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.a
 router.post('/users', auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(['super_admin', 'ats_admin']), adminController.createUser);
 router.patch('/users/:id', auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(['super_admin', 'ats_admin']), adminController.updateUser);
 router.post('/users/:id/reset-password', auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(['super_admin', 'ats_admin']), adminController.resetPassword);
+// Analytics
+router.get('/analytics/export', auth_1.authMiddleware, auth_1.tenantIsolation, analyticsController.exportAnalytics);
 exports.default = router;

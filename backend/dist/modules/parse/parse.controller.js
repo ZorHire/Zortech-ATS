@@ -1,42 +1,168 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseJobDescription = exports.parseResume = void 0;
+exports.parseJobDescription = exports.parseVendor = exports.parseResume = void 0;
 const parse_utils_1 = require("./parse.utils");
+const defaultResumeResponse = {
+    name: "",
+    email: "",
+    phone: "",
+    skills: [],
+    experience_years: undefined,
+    current_title: "",
+    current_company: "",
+    current_location: "",
+    summary: "",
+};
+const defaultJobResponse = {
+    title: "",
+    location: "",
+    required_skills: [],
+    experience_min: undefined,
+    experience_max: undefined,
+    budget_text: "",
+    salary_min: undefined,
+    salary_max: undefined,
+    description: "",
+};
+const defaultVendorResponse = {
+    company_name: "",
+    primary_contact_name: "",
+    primary_contact_email: "",
+    primary_contact_phone: "",
+    industry_specializations: [],
+    geographies: [],
+};
 const parseResume = async (req, res) => {
-    console.log("Resume parse route hit");
+    console.log("Resume route hit");
+    const file = req.file;
+    console.log("Resume file:", file?.originalname);
+    console.log("File type:", file?.mimetype);
+    console.log("Parsing file:", file?.originalname);
     try {
-        const file = req.file;
-        if (!file) {
-            return res.status(400).json({ message: "No file uploaded." });
+        if (!file || !file.buffer || !Buffer.isBuffer(file.buffer)) {
+            return res.status(400).json({ message: "Invalid file upload" });
         }
         const content = await (0, parse_utils_1.extractFileText)(file);
+        console.log("Extracted text length:", content.length);
+        if (!content || content.trim().length < 20) {
+            console.warn("Empty or invalid parsed content");
+            return res.status(200).json(defaultResumeResponse);
+        }
         const parsed = (0, parse_utils_1.parseResumeText)(content);
-        res.json(parsed);
+        const fallbackName = parsed.name ||
+            content
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .find((line) => !/[0-9@]/.test(line) &&
+                !/^(Skills|Experience|Education|Summary|Profile|Contact)/i.test(line)) ||
+            "";
+        const fallbackEmail = parsed.email ||
+            content.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i)?.[0] ||
+            "";
+        const phoneMatch = content.match(/\+?\d[\d\s\-().]{7,}\d/);
+        const fallbackPhone = parsed.phone ||
+            (phoneMatch ? phoneMatch[0].replace(/[\s().-]/g, "") : "");
+        const skillsList = ["react", "node", "python", "java", "sql"];
+        const fallbackSkills = parsed.skills && parsed.skills.length > 0
+            ? parsed.skills
+            : skillsList.filter((skill) => content.toLowerCase().includes(skill));
+        return res.json({
+            name: fallbackName,
+            email: fallbackEmail,
+            phone: fallbackPhone,
+            skills: fallbackSkills,
+            experience_years: parsed.experience_years,
+            current_title: parsed.current_title || "",
+            current_company: parsed.current_company || "",
+            current_location: parsed.current_location || "",
+            summary: parsed.summary || "",
+        });
     }
     catch (error) {
-        console.error("Resume parse error:", error);
-        res
-            .status(500)
-            .json({ message: "Could not extract data, please fill manually." });
+        const msg = error instanceof Error ? error.message : "Parse error";
+        console.error("Resume parse error:", msg);
+        if (msg.toLowerCase().includes("doc") ||
+            msg.toLowerCase().includes("unsupported")) {
+            return res.status(400).json({ message: msg });
+        }
+        return res.status(200).json({ ...defaultResumeResponse });
     }
 };
 exports.parseResume = parseResume;
-const parseJobDescription = async (req, res) => {
-    console.log("JD parse route hit");
+const parseVendor = async (req, res) => {
+    console.log("Vendor parse route hit");
+    const file = req.file;
+    console.log("Vendor file:", file?.originalname);
+    console.log("File type:", file?.mimetype);
+    console.log("Parsing file:", file?.originalname);
     try {
-        const file = req.file;
-        if (!file) {
-            return res.status(400).json({ message: "No file uploaded." });
+        if (!file || !file.buffer || !Buffer.isBuffer(file.buffer)) {
+            return res.status(400).json({ message: "Invalid file upload" });
         }
         const content = await (0, parse_utils_1.extractFileText)(file);
-        const parsed = (0, parse_utils_1.parseJobDescriptionText)(content);
-        res.json(parsed);
+        console.log("Extracted text length:", content.length);
+        if (!content || content.trim().length < 20) {
+            console.warn("Empty or invalid parsed content");
+            return res.status(200).json(defaultVendorResponse);
+        }
+        const parsed = (0, parse_utils_1.parseVendorText)(content);
+        return res.json({
+            company_name: parsed.company_name || "",
+            primary_contact_name: parsed.primary_contact_name || "",
+            primary_contact_email: parsed.primary_contact_email || "",
+            primary_contact_phone: parsed.primary_contact_phone || "",
+            industry_specializations: parsed.industry_specializations || [],
+            geographies: parsed.geographies || [],
+        });
     }
     catch (error) {
-        console.error("JD parse error:", error);
-        res
-            .status(500)
-            .json({ message: "Could not extract data, please fill manually." });
+        const msg = error instanceof Error ? error.message : "Parse error";
+        console.error("Vendor parse error:", msg);
+        if (msg.toLowerCase().includes("doc") ||
+            msg.toLowerCase().includes("unsupported")) {
+            return res.status(400).json({ message: msg });
+        }
+        return res.status(200).json({ ...defaultVendorResponse });
+    }
+};
+exports.parseVendor = parseVendor;
+const parseJobDescription = async (req, res) => {
+    console.log("JD route hit");
+    console.log("JD file:", req.file?.originalname);
+    console.log("File type:", req.file?.mimetype);
+    try {
+        const file = req.file;
+        if (!file || !file.buffer || !Buffer.isBuffer(file.buffer)) {
+            return res.status(400).json({ message: "Invalid file upload" });
+        }
+        const content = await (0, parse_utils_1.extractFileText)(file);
+        console.log("Extracted text length:", content.length);
+        if (!content || content.trim().length < 20) {
+            console.warn("Empty or invalid parsed content");
+            return res.status(200).json({ ...defaultJobResponse });
+        }
+        const parsed = (0, parse_utils_1.parseJobDescriptionText)(content);
+        return res.json({
+            title: parsed.title || "",
+            location: parsed.location || "",
+            required_skills: parsed.required_skills || [],
+            experience_min: parsed.experience_min,
+            experience_max: parsed.experience_max,
+            budget_text: parsed.budget_text || "",
+            salary_min: parsed.salary_min,
+            salary_max: parsed.salary_max,
+            description: parsed.description || "",
+        });
+    }
+    catch (error) {
+        const msg = error instanceof Error ? error.message : "Parse error";
+        console.error("JD parse error:", msg);
+        if (msg.toLowerCase().includes("doc") ||
+            msg.toLowerCase().includes("unsupported")) {
+            return res.status(400).json({ message: msg });
+        }
+        return res.status(200).json({ ...defaultJobResponse });
     }
 };
 exports.parseJobDescription = parseJobDescription;

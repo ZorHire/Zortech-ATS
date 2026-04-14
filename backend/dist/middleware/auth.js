@@ -18,7 +18,10 @@ const authMiddleware = (req, res, next) => {
         next();
     }
     catch (error) {
-        return res.status(401).json({ message: "Invalid or expired token" });
+        const isExpired = error instanceof jsonwebtoken_1.default.TokenExpiredError;
+        return res.status(401).json({
+            message: isExpired ? "Token expired" : "Invalid or expired token",
+        });
     }
 };
 exports.authMiddleware = authMiddleware;

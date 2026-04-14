@@ -38,10 +38,11 @@ const emailController = __importStar(require("./email.controller"));
 const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
 router.get("/templates", auth_1.authMiddleware, auth_1.tenantIsolation, emailController.listTemplates);
+router.post("/send-single", auth_1.authMiddleware, auth_1.tenantIsolation, emailController.sendSingleEmail);
 router.post("/send", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
 ]), emailController.sendEmail);

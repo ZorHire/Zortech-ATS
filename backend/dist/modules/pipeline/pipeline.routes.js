@@ -37,18 +37,25 @@ const express_1 = require("express");
 const pipelineController = __importStar(require("./pipeline.controller"));
 const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
+router.post("/add", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
+    "super_admin",
+    "ats_admin",
+    "vendor_manager",
+    "recruiter",
+    "sourcing_specialist",
+]), pipelineController.addToPipeline);
 router.get("/jobs/:jobId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, pipelineController.getJobApplications);
 router.post("/jobs/:jobId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
 ]), pipelineController.createApplication);
 router.patch("/applications/:id/stage", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
 ]), pipelineController.moveApplicationStage);

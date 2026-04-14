@@ -10,6 +10,20 @@ import { upload } from "../../middleware/fileUpload";
 const router = Router();
 
 router.get(
+  "/search",
+  authMiddleware,
+  tenantIsolation,
+  candidateController.searchCandidates,
+);
+
+router.get(
+  "/export",
+  authMiddleware,
+  tenantIsolation,
+  candidateController.exportCandidates,
+);
+
+router.get(
   "/",
   authMiddleware,
   tenantIsolation,

@@ -261,3 +261,213 @@ export const deleteCandidate = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+const EXPERIENCE_RANGES: Record<string, [number, number | null]> = {
+  "0-3 yrs": [0, 3],
+  "3-7 yrs": [3, 7],
+  "7+ yrs": [7, null],
+};
+
+function buildSearchFilters(
+  tenantId: string,
+  query: Record<string, any>,
+): { filters: string[]; params: any[] } {
+  const { location, experience, noticePeriod } = query;
+  // NOTE: intentionally omits is_active filter — matches getCandidates behaviour
+  // and avoids excluding rows where is_active IS NULL (no NOT NULL on schema)
+  const filters: string[] = ["tenant_id = $1", "deleted_at IS NULL"];
+  const params: any[] = [tenantId];
+
+  if (location && location !== "All") {
+    params.push(`%${String(location).toLowerCase()}%`);
+    filters.push(`LOWER(current_location) LIKE $${params.length}`);
+  }
+
+  if (experience && experience !== "All") {
+    const range = EXPERIENCE_RANGES[String(experience)];
+    if (range) {
+      params.push(range[0]);
+      filters.push(`experience_years >= $${params.length}`);
+      if (range[1] !== null) {
+        params.push(range[1]);
+        filters.push(`experience_years <= $${params.length}`);
+      }
+    }
+  }
+
+  if (noticePeriod && noticePeriod !== "Any") {
+    if (noticePeriod === "< 30 days") {
+      filters.push("notice_period_days < 30");
+    } else if (noticePeriod === "30-60 days") {
+      filters.push("notice_period_days BETWEEN 30 AND 60");
+    } else if (noticePeriod === "60+ days") {
+      filters.push("notice_period_days > 60");
+    }
+  }
+
+  return { filters, params };
+}
+
+function normalizeSkillsArray(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((s) => String(s).toLowerCase());
+  }
+  // pg may return a PostgreSQL array literal string e.g. '{React,"Node.js"}'
+  if (typeof raw === "string" && raw.startsWith("{") && raw.endsWith("}")) {
+    return raw
+      .slice(1, -1)
+      .split(",")
+      .map((s) => s.replace(/^"|"$/g, "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function scoreCandidate(candidate: any, queryTerms: string[]): number {
+  if (queryTerms.length === 0) return 100;
+
+  const skills = normalizeSkillsArray(candidate.skills);
+  const title = (candidate.current_title || "").toLowerCase();
+  const summary = (candidate.summary || "").toLowerCase();
+
+  let skillMatches = 0;
+  let titleMatch = false;
+  let summaryMatch = false;
+
+  for (const term of queryTerms) {
+    if (skills.some((s) => s.includes(term) || term.includes(s)))
+      skillMatches++;
+    if (title.includes(term)) titleMatch = true;
+    if (summary.includes(term)) summaryMatch = true;
+  }
+
+  return Math.min(
+    98,
+    50 + skillMatches * 12 + (titleMatch ? 25 : 0) + (summaryMatch ? 10 : 0),
+  );
+}
+
+// ─── search ─────────────────────────────────────────────────────────────────
+
+export const searchCandidates = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user?.tenant_id;
+  if (!tenantId) {
+    return res.status(403).json({ message: "Tenant context missing" });
+  }
+
+  const rawPage = req.query.page;
+  const rawLimit = req.query.limit;
+  const rawQuery = req.query.query;
+
+  const pageNum = Math.max(1, parseInt(String(rawPage ?? "1"), 10) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(String(rawLimit ?? "10"), 10) || 10));
+  const offset = (pageNum - 1) * limitNum;
+
+  try {
+    const { filters, params } = buildSearchFilters(tenantId, req.query as any);
+
+    const dbResult = await pool.query(
+      `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC`,
+      params,
+    );
+
+    // Parse query into individual search terms, stripping boolean operators
+    const queryStr = String(rawQuery ?? "").trim();
+    const queryTerms = queryStr.length === 0
+      ? []
+      : queryStr
+          .toLowerCase()
+          .split(/\s+(?:AND|OR|NOT)\s+|\s+/i)
+          .map((t) => t.replace(/[()]/g, "").trim())
+          .filter(Boolean);
+
+    let withScores: Array<{ candidate: any; score: number }>;
+
+    if (queryTerms.length === 0) {
+      // No query — return everything, score 100
+      withScores = dbResult.rows.map((c) => ({ candidate: c, score: 100 }));
+    } else {
+      withScores = dbResult.rows
+        .map((c) => ({ candidate: c, score: scoreCandidate(c, queryTerms) }))
+        .filter((r) => r.score > 55)
+        .sort((a, b) => b.score - a.score);
+    }
+
+    const total = withScores.length;
+    const paginated = withScores.slice(offset, offset + limitNum);
+
+    return res.json({
+      results: paginated,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum) || 1,
+    });
+  } catch (error: any) {
+    console.error("[searchCandidates] Error:", error?.message);
+    console.error("[searchCandidates] Stack:", error?.stack);
+    return res.status(500).json({
+      message: "Search failed",
+      error: process.env.NODE_ENV !== "production" ? error?.message : undefined,
+    });
+  }
+};
+
+// ─── export ─────────────────────────────────────────────────────────────────
+
+export const exportCandidates = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user?.tenant_id!;
+
+  try {
+    const { filters, params } = buildSearchFilters(tenantId, req.query as any);
+
+    const dbResult = await pool.query(
+      `SELECT first_name, last_name, email, phone, current_title, current_company,
+              experience_years, current_location, notice_period_days, expected_ctc,
+              skills, source, created_at
+       FROM candidates
+       WHERE ${filters.join(" AND ")}
+       ORDER BY created_at DESC`,
+      params,
+    );
+
+    const rows = dbResult.rows.map((r) => ({
+      ...r,
+      skills: Array.isArray(r.skills) ? r.skills.join(", ") : r.skills,
+    }));
+
+    // Lazy require avoids module-level import issues with json2csv v5 (see git: "fix: import issue of json2csv")
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Parser: CsvParser } = require("json2csv");
+    const parser = new CsvParser({
+      fields: [
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+        "current_title",
+        "current_company",
+        "experience_years",
+        "current_location",
+        "notice_period_days",
+        "expected_ctc",
+        "skills",
+        "source",
+        "created_at",
+      ],
+    });
+    const csv = parser.parse(rows);
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="candidates_export.csv"',
+    );
+    res.send(csv);
+  } catch (error) {
+    console.error("Export candidates error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

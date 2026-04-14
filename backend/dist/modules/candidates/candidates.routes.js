@@ -38,26 +38,28 @@ const candidateController = __importStar(require("./candidates.controller"));
 const auth_1 = require("../../middleware/auth");
 const fileUpload_1 = require("../../middleware/fileUpload");
 const router = (0, express_1.Router)();
+router.get("/search", auth_1.authMiddleware, auth_1.tenantIsolation, candidateController.searchCandidates);
+router.get("/export", auth_1.authMiddleware, auth_1.tenantIsolation, candidateController.exportCandidates);
 router.get("/", auth_1.authMiddleware, auth_1.tenantIsolation, candidateController.getCandidates);
 router.get("/:id", auth_1.authMiddleware, auth_1.tenantIsolation, candidateController.getCandidateById);
 router.post("/", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
 ]), fileUpload_1.upload.single("resume"), candidateController.createCandidate);
 router.patch("/:id", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
 ]), fileUpload_1.upload.single("resume"), candidateController.updateCandidate);
 router.delete("/:id", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
     "ats_admin",
-    "senior_recruiter",
+    "vendor_manager",
     "recruiter",
     "sourcing_specialist",
 ]), candidateController.deleteCandidate);

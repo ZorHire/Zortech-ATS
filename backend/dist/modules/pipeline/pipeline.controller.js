@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getApplicationHistory = exports.moveApplicationStage = exports.createApplication = exports.getJobApplications = void 0;
+exports.getApplicationHistory = exports.addToPipeline = exports.moveApplicationStage = exports.createApplication = exports.getJobApplications = void 0;
 const db_1 = __importDefault(require("../../db"));
 const allowedStages = [
     "new",
@@ -126,6 +126,44 @@ const moveApplicationStage = async (req, res) => {
     }
 };
 exports.moveApplicationStage = moveApplicationStage;
+const addToPipeline = async (req, res) => {
+    const { candidateId, jobId } = req.body;
+    const tenantId = req.user?.tenant_id;
+    const createdBy = req.user?.id;
+    if (!candidateId || !jobId) {
+        return res
+            .status(400)
+            .json({ message: "candidateId and jobId are required" });
+    }
+    try {
+        const jobResult = await db_1.default.query("SELECT id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL", [jobId, tenantId]);
+        if (jobResult.rows.length === 0) {
+            return res.status(404).json({ message: "Job not found" });
+        }
+        const candidateResult = await db_1.default.query("SELECT id FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL", [candidateId, tenantId]);
+        if (candidateResult.rows.length === 0) {
+            return res.status(404).json({ message: "Candidate not found" });
+        }
+        const existing = await db_1.default.query("SELECT id FROM job_applications WHERE tenant_id = $1 AND job_id = $2 AND candidate_id = $3", [tenantId, jobId, candidateId]);
+        if (existing.rows.length > 0) {
+            return res
+                .status(409)
+                .json({ message: "Candidate already in this pipeline" });
+        }
+        const insertResult = await db_1.default.query(`INSERT INTO job_applications (tenant_id, job_id, candidate_id, stage, created_at, updated_at)
+       VALUES ($1, $2, $3, 'new', now(), now())
+       RETURNING *`, [tenantId, jobId, candidateId]);
+        const application = insertResult.rows[0];
+        await db_1.default.query(`INSERT INTO pipeline_events (tenant_id, application_id, from_stage, to_stage, changed_by, created_at)
+       VALUES ($1, $2, $3, $4, $5, now())`, [tenantId, application.id, null, "new", createdBy]);
+        res.status(201).json(application);
+    }
+    catch (error) {
+        console.error("Add to pipeline error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+exports.addToPipeline = addToPipeline;
 const getApplicationHistory = async (req, res) => {
     const { id } = req.params;
     const tenantId = req.user?.tenant_id;

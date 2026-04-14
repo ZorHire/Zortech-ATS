@@ -5,6 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteVendor = exports.updateVendor = exports.createVendor = exports.getVendorById = exports.getVendors = void 0;
 const db_1 = __importDefault(require("../../db"));
+const nodemailer_1 = __importDefault(require("nodemailer"));
+const env_1 = require("../../config/env");
 const getVendors = async (req, res) => {
     try {
         const tenantId = req.user?.tenant_id;
@@ -40,7 +42,32 @@ const createVendor = async (req, res) => {
         const result = await db_1.default.query(`INSERT INTO vendors (tenant_id, company_name, registration_number, gst_id, primary_contact_name, primary_contact_email, primary_contact_phone, industry_specializations, geographies, tier)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`, [tenantId, company_name, registration_number, gst_id, primary_contact_name, primary_contact_email, primary_contact_phone, industry_specializations || [], geographies || [], tier || 'standard']);
-        res.status(201).json(result.rows[0]);
+        const newVendor = result.rows[0];
+        // Send welcome email (non-blocking)
+        if (newVendor.primary_contact_email && env_1.env.EMAIL_USER && env_1.env.EMAIL_PASS) {
+            const transporter = nodemailer_1.default.createTransport({
+                service: "gmail",
+                auth: {
+                    user: env_1.env.EMAIL_USER,
+                    pass: env_1.env.EMAIL_PASS,
+                },
+            });
+            transporter.sendMail({
+                from: env_1.env.EMAIL_USER,
+                to: newVendor.primary_contact_email,
+                subject: "Welcome to ZorHire",
+                html: `
+          <div style="font-family: sans-serif; padding: 20px; color: #333;">
+            <h2>Welcome to ZorHire, ${newVendor.company_name}!</h2>
+            <p>You have been added as a vendor to our recruitment platform.</p>
+            <p>We look forward to working with you.</p>
+            <hr />
+            <p style="font-size: 0.8em; color: #666;">This is an automated message from ZorHire ATS.</p>
+          </div>
+        `,
+            }).catch(err => console.error("Vendor email failed:", err));
+        }
+        res.status(201).json(newVendor);
     }
     catch (error) {
         console.error('Create vendor error:', error);

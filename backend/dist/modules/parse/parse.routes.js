@@ -32,12 +32,35 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const multer_1 = __importDefault(require("multer"));
 const auth_1 = require("../../middleware/auth");
-const fileUpload_1 = require("../../middleware/fileUpload");
 const parseController = __importStar(require("./parse.controller"));
 const router = (0, express_1.Router)();
-router.post("/resume", auth_1.authMiddleware, auth_1.tenantIsolation, fileUpload_1.upload.single("file"), parseController.parseResume);
-router.post("/jd", auth_1.authMiddleware, auth_1.tenantIsolation, fileUpload_1.upload.single("file"), parseController.parseJobDescription);
+// Use memory storage — we only need the buffer to parse, no disk writes needed
+const memUpload = (0, multer_1.default)({
+    storage: multer_1.default.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024 }, // 8 MB max
+    fileFilter: (_req, file, cb) => {
+        const allowed = [
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+        ];
+        if (allowed.includes(file.mimetype)) {
+            cb(null, true);
+        }
+        else {
+            cb(new Error("Only PDF, DOCX, DOC and TXT files are allowed"));
+        }
+    },
+});
+router.post("/resume", auth_1.authMiddleware, auth_1.tenantIsolation, memUpload.single("file"), parseController.parseResume);
+router.post("/jd", auth_1.authMiddleware, auth_1.tenantIsolation, memUpload.single("file"), parseController.parseJobDescription);
+router.post("/vendor", auth_1.authMiddleware, auth_1.tenantIsolation, memUpload.single("file"), parseController.parseVendor);
 exports.default = router;
