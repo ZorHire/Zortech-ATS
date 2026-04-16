@@ -57,17 +57,33 @@ const readFileTextFallback = async (file: Express.Multer.File): Promise<string> 
     ? file.originalname.split(".").pop()?.toLowerCase() ?? ""
     : "";
 
+  console.log(`[Parse] Fallback: ext=${extension}, mime=${file.mimetype}, size=${buffer.length}`);
+
   if (extension === "pdf" || file.mimetype === "application/pdf") {
-    const result = await pdfParse(buffer);
-    return result.text || "";
+    try {
+      const result = await pdfParse(buffer);
+      const text = result.text || "";
+      console.log(`[Parse] pdf-parse extracted ${text.length} chars`);
+      return text;
+    } catch (err) {
+      console.error("[Parse] pdf-parse failed:", err instanceof Error ? err.message : err);
+      throw new Error("Failed to extract text from PDF. Please try uploading the file as DOCX or TXT.");
+    }
   }
 
   if (
     extension === "docx" ||
     file.mimetype.includes("officedocument.wordprocessingml.document")
   ) {
-    const data = await mammoth.extractRawText({ buffer });
-    return data.value || "";
+    try {
+      const data = await mammoth.extractRawText({ buffer });
+      const text = data.value || "";
+      console.log(`[Parse] mammoth extracted ${text.length} chars`);
+      return text;
+    } catch (err) {
+      console.error("[Parse] mammoth (docx) failed:", err instanceof Error ? err.message : err);
+      throw new Error("Failed to extract text from DOCX file. Please try uploading as PDF or TXT.");
+    }
   }
 
   if (extension === "doc" || file.mimetype === "application/msword") {
@@ -183,18 +199,63 @@ const KNOWN_SKILLS = [
   "git","jira","figma","postman","webpack","vite","babel","eslint",
 ];
 
+// Major section headers that end a skills block
+const MAJOR_SECTION_RE =
+  /^(experience|work experience|employment|education|projects?|certifications?|awards?|achievements?|publications?|interests?|references?|work history|summary|profile|about|objective)\s*$/i;
+
 const parseSkills = (content: string) => {
+  // Find the SKILLS section header as a standalone line
+  const headerMatch = content.match(
+    /(?:^|\n)[ \t]*(skills|technical skills|key skills|core competencies|core skills|technologies)[ \t]*\n/im,
+  );
+
+  if (headerMatch && headerMatch.index !== undefined) {
+    const start = headerMatch.index + headerMatch[0].length;
+    const lines = content.slice(start).split(/\r?\n/);
+    const skillItems: string[] = [];
+    let blankCount = 0;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+
+      if (!line) {
+        blankCount++;
+        // Two consecutive blank lines → end of section
+        if (blankCount >= 2) break;
+        continue;
+      }
+      blankCount = 0;
+
+      // A major section header ends the skills block
+      if (MAJOR_SECTION_RE.test(line)) break;
+
+      // Strip sub-section label prefix e.g. "Languages:", "Frameworks:", "Tools:"
+      const withoutLabel = line.replace(/^[A-Za-z][A-Za-z &\/]{0,25}:\s*/, "");
+
+      // Split on common delimiters
+      const items = withoutLabel
+        .split(/[,•|\*\/]+/)
+        .map((s) => s.replace(/^[-\s]+/, "").trim())
+        .filter((s) => s.length > 1 && s.length < 60);
+
+      skillItems.push(...items);
+    }
+
+    if (skillItems.length > 0) return skillItems;
+  }
+
+  // Fallback: use findSectionText (single-line skills lists work fine here)
   const section = findSectionText(
     content,
     /(?:skills|technical skills|key skills|core competencies|core skills|technologies)[:\s]*/i,
   );
-
   if (section && section.length > 10) {
     const items = splitListText(section);
     const filtered = items.filter((skill) => skill.length > 1 && skill.length < 60);
     if (filtered.length > 0) return filtered;
   }
 
+  // Last resort: scan for known skill names in the full text
   const lower = content.toLowerCase();
   return KNOWN_SKILLS.filter((skill) => {
     const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -274,8 +335,8 @@ export const parseResumeText = (content: string): ParsedResumeData => {
     phone: parsePhone(normalized),
     skills: parseSkills(normalized),
     experience_years: parseExperience(normalized).min,
-    current_title: findSectionText(normalized, /(?:current title|title|designation)[:\s]*/i) || "",
-    current_company: findSectionText(normalized, /(?:current company|company|organization|employer)[:\s]*/i) || "",
+    current_title: findSectionText(normalized, /(?:^|\n)\s*(?:current title|job title|designation)\s*[:\-]\s*/im) || "",
+    current_company: findSectionText(normalized, /(?:^|\n)\s*(?:current company|current employer|current organization)\s*[:\-]\s*/im) || "",
     current_location: parseLocation(normalized),
     summary: findSectionText(normalized, /(?:summary|profile|about me|professional summary)[:\s]*/i) || "",
   };

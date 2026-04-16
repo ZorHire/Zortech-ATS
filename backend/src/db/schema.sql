@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS tenant_memberships (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  role text NOT NULL DEFAULT 'recruiter' CHECK (role IN ('super_admin','ats_admin','senior_recruiter','recruiter','sourcing_specialist','client_user','vendor_user')),
+  role text NOT NULL DEFAULT 'recruiter' CHECK (role IN ('super_admin','ats_admin','senior_recruiter','recruiter','sourcing_specialist','client_user','vendor_user','vendor_manager')),
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -204,6 +204,20 @@ CREATE TABLE IF NOT EXISTS email_campaigns (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Per-user SMTP email configuration (app-password stored encrypted at rest)
+CREATE TABLE IF NOT EXISTS user_email_config (
+  id                 uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id            uuid        NOT NULL REFERENCES users(id)   ON DELETE CASCADE,
+  tenant_id          uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  email              text        NOT NULL,
+  encrypted_password text        NOT NULL,
+  provider           text        NOT NULL DEFAULT 'gmail',
+  is_active          boolean     NOT NULL DEFAULT true,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, tenant_id)
+);
+
 -- Interviews
 CREATE TABLE IF NOT EXISTS interviews (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -223,33 +237,36 @@ CREATE TABLE IF NOT EXISTS interviews (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Seed demo data
+-- Seed: primary tenant
 INSERT INTO tenants (id, name, slug)
 VALUES
   ('77777777-7777-7777-7777-777777777777', 'Zortech Global', 'zortech')
 ON CONFLICT (id) DO NOTHING;
 
--- Admin Users
-INSERT INTO users (id, email, password, must_change_password)
-VALUES
-  ('00000000-0000-0000-0000-000000000000', 'hr@zortechs.in', '$2b$10$DUj1Z9eSwQ4KzYeUl0By..PbKcOzuR8d.C7EeoyqxuhSSTmPpbfqK', false), -- password: Solutions1!
-  ('00000000-0000-0000-0000-000000000001', 'recruiter@zortechs.in', '$2b$10$DUj1Z9eSwQ4KzYeUl0By..PbKcOzuR8d.C7EeoyqxuhSSTmPpbfqK', true), -- password: Solutions1! (must change)
-  ('00000000-0000-0000-0000-000000000002', 'sourcer@zortechs.in', '$2b$10$DUj1Z9eSwQ4KzYeUl0By..PbKcOzuR8d.C7EeoyqxuhSSTmPpbfqK', true) -- password: Solutions1! (must change)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO tenant_memberships (user_id, tenant_id, role)
-VALUES
-  ('00000000-0000-0000-0000-000000000000', '77777777-7777-7777-7777-777777777777', 'super_admin'),
-  ('00000000-0000-0000-0000-000000000001', '77777777-7777-7777-7777-777777777777', 'recruiter'),
-  ('00000000-0000-0000-0000-000000000002', '77777777-7777-7777-7777-777777777777', 'sourcing_specialist')
-ON CONFLICT (user_id, tenant_id) DO NOTHING;
+-- Seed: super_admin user (joy@zortechs.in / Training5!@)
+INSERT INTO users (id, email, password, must_change_password, is_active)
+VALUES (
+  'a0000000-0000-0000-0000-000000000001',
+  'joy@zortechs.in',
+  '$2b$10$4B2BRFYweY1Mmnbs0JguhuBJmozz4IVdEYds0Sf5zB86sVdnwaLD2',
+  false,
+  true
+) ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO profiles (id, email, full_name)
-VALUES
-  ('00000000-0000-0000-0000-000000000000', 'hr@zortechs.in', 'System Admin'),
-  ('00000000-0000-0000-0000-000000000001', 'recruiter@zortechs.in', 'John Recruiter'),
-  ('00000000-0000-0000-0000-000000000002', 'sourcer@zortechs.in', 'Sarah Sourcer')
-ON CONFLICT (id) DO NOTHING;
+VALUES (
+  'a0000000-0000-0000-0000-000000000001',
+  'joy@zortechs.in',
+  'Joy (Super Admin)'
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO tenant_memberships (user_id, tenant_id, role, is_active)
+VALUES (
+  'a0000000-0000-0000-0000-000000000001',
+  '77777777-7777-7777-7777-777777777777',
+  'super_admin',
+  true
+) ON CONFLICT (user_id, tenant_id) DO NOTHING;
 
 -- Clients
 INSERT INTO clients (id, tenant_id, name, industry, tier, city, primary_contact_name, primary_contact_email, sla_hours)
@@ -259,20 +276,20 @@ VALUES
   ('33333333-3333-3333-3333-333333333333', '77777777-7777-7777-7777-777777777777', 'HealthTech Pvt Ltd', 'Healthcare', 'priority', 'Hyderabad', 'Anita Rao', 'anita@healthtech.in', 36)
 ON CONFLICT (id) DO NOTHING;
 
--- Job Openings
-INSERT INTO jobs (id, tenant_id, client_id, title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, headcount, priority, status, description, mandatory_skills, created_by)
+-- Job Openings (created_by is NULL — no hardcoded user dependency)
+INSERT INTO jobs (id, tenant_id, client_id, title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, headcount, priority, status, description, mandatory_skills)
 VALUES
-  ('11111111-1111-1111-1111-111111111112', '77777777-7777-7777-7777-777777777777', '11111111-1111-1111-1111-111111111111', 'Senior Frontend Engineer', 'Engineering', 'Bangalore', 'remote', 'full_time', 5, 10, 2500000, 4500000, 2, 'high', 'active', 'Looking for a React expert with 5+ years of experience.', ARRAY['React', 'TypeScript', 'Tailwind CSS'], '00000000-0000-0000-0000-000000000000'),
-  ('22222222-2222-2222-2222-222222222223', '77777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 'Backend Developer (Node.js)', 'Engineering', 'Mumbai', 'hybrid', 'full_time', 3, 7, 1800000, 3500000, 3, 'medium', 'active', 'Node.js and PostgreSQL expert needed.', ARRAY['Node.js', 'PostgreSQL', 'Express'], '00000000-0000-0000-0000-000000000000'),
-  ('33333333-3333-3333-3333-333333333334', '77777777-7777-7777-7777-777777777777', '11111111-1111-1111-1111-111111111111', 'Product Manager', 'Product', 'Remote', 'remote', 'full_time', 4, 8, 2000000, 4000000, 1, 'critical', 'active', 'Experienced PM for B2B SaaS.', ARRAY['Product Strategy', 'Agile', 'Jira'], '00000000-0000-0000-0000-000000000000')
+  ('11111111-1111-1111-1111-111111111112', '77777777-7777-7777-7777-777777777777', '11111111-1111-1111-1111-111111111111', 'Senior Frontend Engineer', 'Engineering', 'Bangalore', 'remote', 'full_time', 5, 10, 2500000, 4500000, 2, 'high', 'active', 'Looking for a React expert with 5+ years of experience.', ARRAY['React', 'TypeScript', 'Tailwind CSS']),
+  ('22222222-2222-2222-2222-222222222223', '77777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 'Backend Developer (Node.js)', 'Engineering', 'Mumbai', 'hybrid', 'full_time', 3, 7, 1800000, 3500000, 3, 'medium', 'active', 'Node.js and PostgreSQL expert needed.', ARRAY['Node.js', 'PostgreSQL', 'Express']),
+  ('33333333-3333-3333-3333-333333333334', '77777777-7777-7777-7777-777777777777', '11111111-1111-1111-1111-111111111111', 'Product Manager', 'Product', 'Remote', 'remote', 'full_time', 4, 8, 2000000, 4000000, 1, 'critical', 'active', 'Experienced PM for B2B SaaS.', ARRAY['Product Strategy', 'Agile', 'Jira'])
 ON CONFLICT (id) DO NOTHING;
 
--- Candidates
-INSERT INTO candidates (id, tenant_id, first_name, last_name, email, phone, current_title, current_company, experience_years, current_location, skills, source, created_by)
+-- Candidates (created_by is NULL — no hardcoded user dependency)
+INSERT INTO candidates (id, tenant_id, first_name, last_name, email, phone, current_title, current_company, experience_years, current_location, skills, source)
 VALUES
-  ('11111111-1111-1111-1111-111111111113', '77777777-7777-7777-7777-777777777777', 'Amit', 'Sharma', 'amit.sharma@example.com', '9876543210', 'Senior Dev', 'TCS', 6, 'Bangalore', ARRAY['React', 'Node.js'], 'linkedin', '00000000-0000-0000-0000-000000000000'),
-  ('22222222-2222-2222-2222-222222222224', '77777777-7777-7777-7777-777777777777', 'Neha', 'Gupta', 'neha.gupta@example.com', '9876543211', 'Frontend Dev', 'Infosys', 4, 'Pune', ARRAY['Vue.js', 'JavaScript'], 'indeed', '00000000-0000-0000-0000-000000000000'),
-  ('33333333-3333-3333-3333-333333333335', '77777777-7777-7777-7777-777777777777', 'Vikram', 'Singh', 'vikram.singh@example.com', '9876543212', 'PM', 'Airtel', 7, 'Delhi', ARRAY['Agile', 'Product'], 'referral', '00000000-0000-0000-0000-000000000000')
+  ('11111111-1111-1111-1111-111111111113', '77777777-7777-7777-7777-777777777777', 'Amit', 'Sharma', 'amit.sharma@example.com', '9876543210', 'Senior Dev', 'TCS', 6, 'Bangalore', ARRAY['React', 'Node.js'], 'linkedin'),
+  ('22222222-2222-2222-2222-222222222224', '77777777-7777-7777-7777-777777777777', 'Neha', 'Gupta', 'neha.gupta@example.com', '9876543211', 'Frontend Dev', 'Infosys', 4, 'Pune', ARRAY['Vue.js', 'JavaScript'], 'indeed'),
+  ('33333333-3333-3333-3333-333333333335', '77777777-7777-7777-7777-777777777777', 'Vikram', 'Singh', 'vikram.singh@example.com', '9876543212', 'PM', 'Airtel', 7, 'Delhi', ARRAY['Agile', 'Product'], 'referral')
 ON CONFLICT (id) DO NOTHING;
 
 -- Vendors

@@ -17,6 +17,8 @@ import Header from "../components/layout/Header";
 import { Candidate } from "../types";
 import api from "../lib/api";
 import CandidateModal from "../components/candidates/CandidateModal";
+import { useSendEmail } from "../hooks/useSendEmail";
+import EmailToast from "../components/ui/EmailToast";
 
 const sourceLabels: Record<string, string> = {
   linkedin: "LinkedIn",
@@ -41,6 +43,7 @@ const sourceBadgeColors: Record<string, string> = {
 };
 
 export default function CandidatesPage() {
+  const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -485,23 +488,17 @@ export default function CandidatesPage() {
                     {sourceLabels[candidate.source]}
                   </span>
                   <div className="flex gap-1">
-                    <button 
-                      onClick={async (e) => {
+                    <button
+                      onClick={(e) => {
                         e.stopPropagation();
-                        try {
-                          const body = `Hi ${candidate.first_name},\n\nI came across your profile and would love to connect regarding an exciting opportunity.\n\nBest regards,\nRecruiter`;
-                          await api.post('/email/send-single', {
-                            to: candidate.email,
-                            subject: "Quick catch-up - ZorHire",
-                            body: body
-                          });
-                          alert('Email sent successfully!');
-                        } catch (error) {
-                          console.error('Email send error:', error);
-                          alert('Failed to send email.');
-                        }
+                        sendEmail(candidate.email, {
+                          firstName: candidate.first_name,
+                          subject: "Quick catch-up — ZorHire",
+                        });
                       }}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                      disabled={emailSending}
+                      title="Send email"
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Mail size={14} />
                     </button>
@@ -643,19 +640,26 @@ export default function CandidatesPage() {
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     Source
                   </label>
-                  <select
-                    value={formData.source}
-                    onChange={(e) =>
-                      setFormData({ ...formData, source: e.target.value })
-                    }
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none"
-                  >
-                    {Object.entries(sourceLabels).map(([k, v]) => (
-                      <option key={k} value={k}>
-                        {v}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={formData.source}
+                      onChange={(e) =>
+                        setFormData({ ...formData, source: e.target.value })
+                      }
+                      className="w-full px-4 py-3 pr-10 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none"
+                    >
+                      {Object.entries(sourceLabels).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
@@ -732,6 +736,7 @@ export default function CandidatesPage() {
         />
       )}
 
+      {emailToast && <EmailToast {...emailToast} />}
     </div>
   );
 }

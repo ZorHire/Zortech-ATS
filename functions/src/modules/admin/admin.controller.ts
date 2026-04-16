@@ -22,12 +22,29 @@ export const listUsers = async (req: AuthRequest, res: Response) => {
   }
 };
 
+const ALLOWED_ROLES = [
+  "super_admin",
+  "ats_admin",
+  "senior_recruiter",
+  "recruiter",
+  "sourcing_specialist",
+  "client_user",
+  "vendor_user",
+  "vendor_manager",
+] as const;
+
 export const createUser = async (req: AuthRequest, res: Response) => {
   const { email, password, full_name, role } = req.body;
   const tenantId = req.user?.tenant_id;
 
   if (!email || !password || !role) {
     return res.status(400).json({ message: "Email, password, and role are required" });
+  }
+
+  if (!ALLOWED_ROLES.includes(role)) {
+    return res
+      .status(400)
+      .json({ message: `Invalid role '${role}'. Allowed: ${ALLOWED_ROLES.join(", ")}` });
   }
 
   const client = await pool.connect();
@@ -105,6 +122,44 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Update user error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+};
+
+export const deleteUser = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  const requesterId = req.user?.id;
+
+  // Prevent self-deletion
+  if (id === requesterId) {
+    return res.status(400).json({ message: "You cannot delete your own account." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Verify the user belongs to this tenant before deleting
+    const member = await client.query(
+      "SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2",
+      [id, tenantId],
+    );
+    if (member.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "User not found in this tenant." });
+    }
+
+    // Permanently delete — CASCADE in schema handles memberships, profiles, etc.
+    await client.query("DELETE FROM users WHERE id = $1", [id]);
+
+    await client.query("COMMIT");
+    res.json({ message: "User deleted successfully." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Delete user error:", error);
     res.status(500).json({ message: "Internal server error" });
   } finally {
     client.release();

@@ -79,6 +79,6 @@ app.use(
 );
 
 export const api = onRequest(
-  { secrets: ["SERVER_DATABASE_URL", "SERVER_JWT_SECRET"] },
+  { secrets: ["SERVER_DATABASE_URL", "SERVER_JWT_SECRET", "SERVER_EMAIL_ENCRYPTION_KEY"] },
   app,
 );

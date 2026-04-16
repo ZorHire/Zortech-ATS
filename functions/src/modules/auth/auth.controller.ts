@@ -8,7 +8,7 @@ const JWT_SECRET = env.JWT_SECRET;
 
 export const login = async (req: Request, res: Response) => {
   console.log("Login route hit");
-  const { email, password } = req.body;
+  const { email, password, role: selectedRole } = req.body;
 
   try {
     const userResult = await pool.query(
@@ -40,6 +40,14 @@ export const login = async (req: Request, res: Response) => {
     );
     const profile = profileResult.rows[0];
     const primaryMembership = membershipResult.rows[0];
+
+    // RBAC: if a role was provided at login, it must match the DB-assigned role
+    if (selectedRole && primaryMembership?.role !== selectedRole) {
+      return res.status(401).json({
+        message:
+          "Role does not match your assigned role. Please select the correct role.",
+      });
+    }
 
     const token = jwt.sign(
       {
@@ -151,6 +159,87 @@ export const changePassword = async (req: any, res: Response) => {
   } catch (error) {
     console.error("Change password error:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/**
+ * POST /v1/auth/setup
+ * One-time super_admin bootstrap.
+ * Allowed ONLY when zero active super_admin accounts exist in the system.
+ * Requires the SETUP_TOKEN env var to match the `setupToken` body field so this
+ * endpoint cannot be called by random visitors.
+ */
+export const setupAdmin = async (req: Request, res: Response) => {
+  const { email, password, full_name, setupToken } = req.body;
+
+  const expectedToken = process.env.SERVER_SETUP_TOKEN || process.env.SETUP_TOKEN;
+  if (!expectedToken) {
+    return res.status(503).json({ message: "Setup is disabled on this server." });
+  }
+  if (setupToken !== expectedToken) {
+    return res.status(401).json({ message: "Invalid setup token." });
+  }
+
+  // Only allow if no super_admin already exists
+  const existing = await pool.query(
+    `SELECT 1 FROM tenant_memberships WHERE role = 'super_admin' AND is_active = true LIMIT 1`,
+  );
+  if (existing.rows.length > 0) {
+    return res.status(409).json({ message: "A super_admin account already exists. Setup is not available." });
+  }
+
+  if (!email || !password || !full_name) {
+    return res.status(400).json({ message: "email, password, and full_name are required." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Get (or create) the primary tenant
+    let tenantResult = await client.query(
+      "SELECT id FROM tenants WHERE is_active = true ORDER BY created_at ASC LIMIT 1",
+    );
+    let tenantId: string;
+    if (tenantResult.rows.length === 0) {
+      const slug = email.split("@")[1]?.split(".")[0] ?? "default";
+      const newTenant = await client.query(
+        "INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id",
+        ["Default Organization", slug],
+      );
+      tenantId = newTenant.rows[0].id;
+    } else {
+      tenantId = tenantResult.rows[0].id;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userResult = await client.query(
+      "INSERT INTO users (email, password, must_change_password) VALUES ($1, $2, false) RETURNING id",
+      [email.trim().toLowerCase(), hashedPassword],
+    );
+    const userId = userResult.rows[0].id;
+
+    await client.query(
+      "INSERT INTO profiles (id, email, full_name) VALUES ($1, $2, $3)",
+      [userId, email.trim().toLowerCase(), full_name],
+    );
+
+    await client.query(
+      "INSERT INTO tenant_memberships (user_id, tenant_id, role, is_active) VALUES ($1, $2, 'super_admin', true)",
+      [userId, tenantId],
+    );
+
+    await client.query("COMMIT");
+    res.status(201).json({ message: "Super admin created successfully." });
+  } catch (error: any) {
+    await client.query("ROLLBACK");
+    if (error?.code === "23505") {
+      return res.status(400).json({ message: "Email already in use." });
+    }
+    console.error("Setup admin error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
   }
 };
 

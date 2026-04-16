@@ -2,18 +2,20 @@ import { useState, useEffect } from "react";
 import {
   UserPlus,
   Shield,
-  Mail,
   CheckCircle2,
   XCircle,
   RotateCcw,
   Search,
-  MoreVertical,
   ShieldCheck,
   UserCheck,
   ShieldAlert,
+  SendHorizonal,
+  Trash2,
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import api from "../lib/api";
+import { useSendEmail } from "../hooks/useSendEmail";
+import EmailToast from "../components/ui/EmailToast";
 
 interface ManagedUser {
   id: string;
@@ -37,6 +39,8 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+
+  const { sendEmail, sending, emailToast } = useSendEmail();
 
   useEffect(() => {
     fetchUsers();
@@ -64,13 +68,64 @@ export default function AdminPage() {
         role: newRole,
         password: newPassword,
       });
+
+      // Close modal and refresh list before sending email
       setShowCreateModal(false);
+      const capturedName = newFullName;
+      const capturedEmail = newEmail;
+      const capturedPassword = newPassword;
+      const capturedRole = roleLabels[newRole] || newRole;
       resetForm();
       fetchUsers();
+
+      // Send invite email with credentials
+      await sendEmail(capturedEmail, {
+        firstName: capturedName.split(" ")[0] || capturedName,
+        subject: "You've been invited to ZorHire",
+        body: `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">
+            <h2 style="color:#2563eb;margin-bottom:8px">Welcome to ZorHire!</h2>
+            <p>Hi <strong>${capturedName || capturedEmail}</strong>,</p>
+            <p>Your account has been created. Here are your login credentials:</p>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#64748b;width:40%">Email</td>
+                <td style="padding:10px 14px;color:#1e293b">${capturedEmail}</td>
+              </tr>
+              <tr style="background:#f1f5f9">
+                <td style="padding:10px 14px;font-weight:600;color:#64748b">Temporary Password</td>
+                <td style="padding:10px 14px;color:#1e293b;font-family:monospace">${capturedPassword}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#64748b">Role</td>
+                <td style="padding:10px 14px;color:#1e293b">${capturedRole}</td>
+              </tr>
+            </table>
+            <p style="color:#ef4444;font-size:13px">You will be required to change your password upon first login.</p>
+            <p style="margin-top:24px;font-size:13px;color:#94a3b8">If you have any questions, contact your administrator.</p>
+          </div>
+        `,
+      });
     } catch (err: any) {
       setFormError(err.message || "Failed to create user");
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: ManagedUser) => {
+    if (
+      !window.confirm(
+        `Permanently delete "${user.full_name || user.email}"?\n\nThis cannot be undone. All data for this user will be removed.`,
+      )
+    )
+      return;
+
+    try {
+      await api.delete(`/admin/users/${user.id}`);
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+    } catch (err: any) {
+      alert(err?.message || "Failed to delete user.");
     }
   };
 
@@ -282,6 +337,13 @@ export default function AdminPage() {
                                 <CheckCircle2 size={16} />
                               )}
                             </button>
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete User"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -293,6 +355,9 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      {/* Email send toast */}
+      {emailToast && <EmailToast {...emailToast} />}
 
       {/* Create User Modal */}
       {showCreateModal && (
@@ -397,13 +462,16 @@ export default function AdminPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={formLoading}
-                  className="flex-1 py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+                  disabled={formLoading || sending}
+                  className="flex-1 py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {formLoading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
-                    "Create User"
+                    <>
+                      <SendHorizonal size={16} />
+                      Send Invite
+                    </>
                   )}
                 </button>
               </div>

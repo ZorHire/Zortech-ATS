@@ -14,6 +14,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import AdminPage from "./pages/AdminPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PipelinePage from "./pages/PipelinePage";
+import EmailSettingsPage from "./pages/EmailSettingsPage";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -124,6 +125,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AdminPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/email"
+        element={
+          <ProtectedRoute>
+            <EmailSettingsPage />
           </ProtectedRoute>
         }
       />

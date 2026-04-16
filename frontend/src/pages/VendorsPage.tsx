@@ -9,10 +9,20 @@ import {
   AlertCircle,
   CheckCircle2,
   XCircle,
+  Phone,
+  MapPin,
+  Briefcase,
+  Hash,
+  Calendar,
+  X,
+  TrendingUp,
+  Trash2,
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import api from "../lib/api";
 import { Vendor } from "../types";
+import { useSendEmail } from "../hooks/useSendEmail";
+import EmailToast from "../components/ui/EmailToast";
 
 const tierConfig: Record<
   string,
@@ -59,16 +69,332 @@ function ScoreBar({
   );
 }
 
-function VendorCard({ vendor }: { vendor: Vendor }) {
+function VendorDetailModal({
+  vendor,
+  onClose,
+  onSendEmail,
+  emailSending,
+}: {
+  vendor: Vendor;
+  onClose: () => void;
+  onSendEmail: (email: string) => void;
+  emailSending: boolean;
+}) {
   const tier = tierConfig[vendor.tier];
   const TierIcon = tier.icon;
 
   return (
     <div
-      className={`bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-all ${!vendor.is_active ? "opacity-60" : ""}`}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center flex-shrink-0">
+              <span className="text-xl font-bold text-white">
+                {vendor.company_name.charAt(0)}
+              </span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                {vendor.company_name}
+              </h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span
+                  className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${tier.color}`}
+                >
+                  <TierIcon size={11} />
+                  {tier.label}
+                </span>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    vendor.is_active
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {vendor.is_active ? "Active" : "Inactive"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 transition-colors p-1 rounded-lg hover:bg-gray-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+          {/* Contact info */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Contact Information
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <Users size={15} className="text-gray-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400">Primary Contact</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">
+                    {vendor.primary_contact_name}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <Mail size={15} className="text-gray-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400">Email</p>
+                  <p className="text-sm font-medium text-gray-800 truncate">
+                    {vendor.primary_contact_email}
+                  </p>
+                </div>
+              </div>
+              {vendor.primary_contact_phone && (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                  <Phone size={15} className="text-gray-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-400">Phone</p>
+                    <p className="text-sm font-medium text-gray-800">
+                      {vendor.primary_contact_phone}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                <Calendar size={15} className="text-gray-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400">Member Since</p>
+                  <p className="text-sm font-medium text-gray-800">
+                    {new Date(vendor.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Registration details */}
+          {(vendor.registration_number || vendor.gst_id) && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Registration Details
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {vendor.registration_number && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <Hash size={15} className="text-gray-400 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-400">Registration No.</p>
+                      <p className="text-sm font-medium text-gray-800">
+                        {vendor.registration_number}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                {vendor.gst_id && (
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+                    <Hash size={15} className="text-gray-400 shrink-0" />
+                    <div>
+                      <p className="text-xs text-gray-400">GST ID</p>
+                      <p className="text-sm font-medium text-gray-800">
+                        {vendor.gst_id}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Performance metrics */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+              Performance Metrics
+            </h3>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-xl font-bold text-gray-900">
+                  {vendor.submission_count}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Submissions</p>
+              </div>
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-xl font-bold text-gray-900">
+                  {vendor.shortlist_rate}%
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Shortlist Rate</p>
+              </div>
+              <div className="text-center p-3 bg-gray-50 rounded-xl">
+                <p className="text-xl font-bold text-gray-900">
+                  {vendor.fill_rate}%
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Fill Rate</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span className="flex items-center gap-1">
+                    <TrendingUp size={12} />
+                    Quality Score
+                  </span>
+                  <span className="font-semibold text-gray-700">
+                    {vendor.quality_score}%
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      vendor.quality_score >= 80
+                        ? "bg-emerald-500"
+                        : vendor.quality_score >= 60
+                          ? "bg-amber-500"
+                          : "bg-red-400"
+                    }`}
+                    style={{ width: `${vendor.quality_score}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 size={12} />
+                    SLA Adherence
+                  </span>
+                  <span className="font-semibold text-gray-700">
+                    {vendor.sla_adherence}%
+                  </span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      vendor.sla_adherence >= 85
+                        ? "bg-blue-500"
+                        : vendor.sla_adherence >= 65
+                          ? "bg-amber-500"
+                          : "bg-red-400"
+                    }`}
+                    style={{ width: `${vendor.sla_adherence}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Specializations & Geographies */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {vendor.industry_specializations.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Briefcase size={12} />
+                  Specializations
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {vendor.industry_specializations.map((spec) => (
+                    <span
+                      key={spec}
+                      className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-100"
+                    >
+                      {spec}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {vendor.geographies.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <MapPin size={12} />
+                  Geographies
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {vendor.geographies.map((geo) => (
+                    <span
+                      key={geo}
+                      className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg"
+                    >
+                      {geo}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+          <button
+            onClick={() => onSendEmail(vendor.primary_contact_email)}
+            disabled={emailSending}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            <Mail size={14} />
+            {emailSending ? "Sending…" : "Send Job"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VendorCard({
+  vendor,
+  onSendEmail,
+  onViewDetails,
+  emailSending,
+  isSelected,
+  onToggleSelect,
+}: {
+  vendor: Vendor;
+  onSendEmail: (email: string) => void;
+  onViewDetails: (vendor: Vendor) => void;
+  emailSending: boolean;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
+}) {
+  const tier = tierConfig[vendor.tier];
+  const TierIcon = tier.icon;
+
+  return (
+    <div
+      className={`bg-white rounded-xl p-5 hover:shadow-md transition-all cursor-pointer border-2 ${
+        isSelected
+          ? "border-blue-500 shadow-md shadow-blue-100"
+          : "border-gray-200 hover:border-gray-300"
+      } ${!vendor.is_active ? "opacity-60" : ""}`}
+      onClick={() => onViewDetails(vendor)}
     >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-start gap-3 flex-1 min-w-0">
+          {/* Checkbox — stopPropagation so it doesn't open the detail modal */}
+          <div
+            className="flex-shrink-0 mt-0.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect(vendor.id);
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect(vendor.id)}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer accent-blue-600"
+            />
+          </div>
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center flex-shrink-0">
             <span className="text-sm font-bold text-white">
               {vendor.company_name.charAt(0)}
@@ -161,16 +487,28 @@ function VendorCard({ vendor }: { vendor: Vendor }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors">
+      <div className="flex items-center gap-2 pt-3 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => onSendEmail(vendor.primary_contact_email)}
+          disabled={emailSending}
+          title="Send email"
+          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <Mail size={13} />
           {vendor.primary_contact_email}
         </button>
         <div className="ml-auto flex gap-1">
-          <button className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium">
-            Send Job
+          <button
+            onClick={() => onSendEmail(vendor.primary_contact_email)}
+            disabled={emailSending}
+            className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {emailSending ? "Sending…" : "Send Job"}
           </button>
-          <button className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+          <button
+            onClick={() => onViewDetails(vendor)}
+            className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          >
             View
           </button>
         </div>
@@ -180,10 +518,14 @@ function VendorCard({ vendor }: { vendor: Vendor }) {
 }
 
 export default function VendorsPage() {
+  const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [vendorFile, setVendorFile] = useState<File | null>(null);
   const [vendorParsing, setVendorParsing] = useState(false);
@@ -315,6 +657,49 @@ export default function VendorsPage() {
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length && filtered.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((v) => v.id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (
+      !window.confirm(
+        `Permanently delete ${count} vendor${count > 1 ? "s" : ""}? This cannot be undone.`,
+      )
+    )
+      return;
+
+    setDeleting(true);
+    const ids = Array.from(selectedIds);
+    const results = await Promise.allSettled(
+      ids.map((id) => api.delete(`/vendors/${id}`)),
+    );
+
+    const deleted = ids.filter((_, i) => results[i].status === "fulfilled");
+    setVendors((prev) => prev.filter((v) => !deleted.includes(v.id)));
+    setSelectedIds(new Set());
+    setDeleting(false);
+
+    const failed = ids.length - deleted.length;
+    if (failed > 0) {
+      alert(`${failed} vendor${failed > 1 ? "s" : ""} could not be deleted.`);
+    }
+  };
+
   const filtered = vendors.filter((vendor) => {
     const matchSearch =
       vendor.company_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -433,6 +818,42 @@ export default function VendorsPage() {
           </div>
         </div>
 
+        {/* Selection action bar — visible only when ≥1 vendor is checked */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.size === filtered.length && filtered.length > 0}
+                ref={(el) => {
+                  if (el)
+                    el.indeterminate =
+                      selectedIds.size > 0 && selectedIds.size < filtered.length;
+                }}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer"
+              />
+              <span className="text-sm font-medium text-blue-700">
+                {selectedIds.size} vendor{selectedIds.size > 1 ? "s" : ""} selected
+              </span>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-blue-500 hover:text-blue-700 underline"
+              >
+                Clear
+              </button>
+            </div>
+            <button
+              onClick={handleDeleteSelected}
+              disabled={deleting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              <Trash2 size={14} />
+              {deleting ? "Deleting…" : `Delete ${selectedIds.size > 1 ? `${selectedIds.size} vendors` : "vendor"}`}
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {loading ? (
             <div className="col-span-full flex items-center justify-center py-20">
@@ -445,11 +866,34 @@ export default function VendorsPage() {
             </div>
           ) : (
             filtered.map((vendor) => (
-              <VendorCard key={vendor.id} vendor={vendor} />
+              <VendorCard
+                key={vendor.id}
+                vendor={vendor}
+                onSendEmail={(email) =>
+                  sendEmail(email, { subject: "Job Opportunity from ZorHire" })
+                }
+                onViewDetails={setSelectedVendor}
+                emailSending={emailSending}
+                isSelected={selectedIds.has(vendor.id)}
+                onToggleSelect={toggleSelect}
+              />
             ))
           )}
         </div>
       </div>
+
+      {emailToast && <EmailToast {...emailToast} />}
+
+      {selectedVendor && (
+        <VendorDetailModal
+          vendor={selectedVendor}
+          onClose={() => setSelectedVendor(null)}
+          onSendEmail={(email) =>
+            sendEmail(email, { subject: "Job Opportunity from ZorHire" })
+          }
+          emailSending={emailSending}
+        />
+      )}
 
       {showAddVendor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -544,7 +988,7 @@ export default function VendorsPage() {
                       }))
                     }
                     placeholder="e.g. IT staffing, healthcare, finance"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Comma-separated values are supported.
@@ -564,7 +1008,7 @@ export default function VendorsPage() {
                       }))
                     }
                     placeholder="e.g. India, UAE"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
@@ -582,7 +1026,7 @@ export default function VendorsPage() {
                         tier: e.target.value,
                       }))
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="standard">Standard</option>
                     <option value="preferred">Preferred</option>
@@ -603,7 +1047,7 @@ export default function VendorsPage() {
                       }))
                     }
                     placeholder="123456789"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -620,7 +1064,7 @@ export default function VendorsPage() {
                       }))
                     }
                     placeholder="GSTIN"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>

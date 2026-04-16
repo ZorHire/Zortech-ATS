@@ -14,7 +14,6 @@ import {
   LogOut,
   Wallet,
   LayoutGrid,
-  Box,
   CircleUser,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
@@ -91,6 +90,18 @@ const navItems = [
     path: "/admin",
     roles: ["super_admin", "ats_admin"],
   },
+  {
+    icon: Mail,
+    label: "Email Settings",
+    path: "/settings/email",
+    roles: [
+      "super_admin",
+      "ats_admin",
+      "senior_recruiter",
+      "recruiter",
+      "sourcing_specialist",
+    ],
+  },
 ];
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -109,9 +120,11 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div
         className={`flex items-center mb-10 ${collapsed ? "justify-center" : "px-6 gap-3"}`}
       >
-        <div className="flex-shrink-0 w-12 h-12 bg-[#eaceb0] rounded-[18px] flex items-center justify-center shadow-lg shadow-[#c6a676]/20">
-          <Box size={24} className="text-[#1b140d]" fill="#1b140d" />
-        </div>
+        <img
+          src="/favicon.png"
+          alt="ZorHire"
+          className="flex-shrink-0 w-14 h-14 object-contain"
+        />
         {!collapsed && (
           <div>
             <p className="text-xl font-black text-amber-100 tracking-tight leading-none">

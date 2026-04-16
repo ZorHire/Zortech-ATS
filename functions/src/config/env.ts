@@ -16,6 +16,11 @@ export const env = {
   SMTP_USER: process.env.SERVER_SMTP_USER || "",
   SMTP_PASS: process.env.SERVER_SMTP_PASS || "",
   EMAIL_FROM: process.env.SERVER_EMAIL_FROM || "no-reply@zortech-hosting.local",
+  // Gmail credentials (set via Firebase secret or .env)
+  EMAIL_USER: process.env.SERVER_EMAIL_USER || process.env.EMAIL_USER || "",
+  EMAIL_PASS: process.env.SERVER_EMAIL_PASS || process.env.EMAIL_PASS || "",
+  // AES-256 key used to encrypt per-user SMTP app-passwords at rest
+  EMAIL_ENCRYPTION_KEY: process.env.SERVER_EMAIL_ENCRYPTION_KEY || process.env.EMAIL_ENCRYPTION_KEY || "",
 };
 
 export default env;

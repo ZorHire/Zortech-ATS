@@ -12,7 +12,7 @@ interface AuthContextType {
   user: any | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any | null }>;
+  signIn: (email: string, password: string, role: string) => Promise<{ error: any | null }>;
   signUp: (
     email: string,
     password: string,
@@ -51,9 +51,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, role: string) => {
     try {
-      const data = await api.post("/auth/login", { email, password });
+      const data = await api.post("/auth/login", { email, password, role });
       localStorage.setItem("token", data.token);
       setProfile(data.user);
       setUser(data.user);

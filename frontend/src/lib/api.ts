@@ -1,7 +1,22 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
 
+/**
+ * Structured error thrown for non-2xx API responses.
+ * Carries the full parsed response body so callers can read `code`, `message`, etc.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly data: Record<string, any>,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export const api = {
-  async request(endpoint: string, options: RequestInit = {}, retry = true) {
+  async request(endpoint: string, options: RequestInit = {}, retry = true): Promise<any> {
     const token = localStorage.getItem("token");
     const body = options.body as any;
 
@@ -31,7 +46,7 @@ export const api = {
         const errorBody = await response
           .json()
           .catch(() => ({ message: "Token expired" }));
-        throw new Error(errorBody.message || "Token expired");
+        throw new ApiError(errorBody.message || "Token expired", 401, errorBody);
       }
 
       if (!response.ok) {
@@ -39,10 +54,15 @@ export const api = {
           return this.request(endpoint, options, false);
         }
 
-        const error = await response
+        const errorData = await response
           .json()
           .catch(() => ({ message: "An error occurred" }));
-        throw new Error(error.message || "An error occurred");
+        // Throw ApiError — preserves `code`, `message`, and any other fields
+        throw new ApiError(
+          errorData.message || "An error occurred",
+          response.status,
+          errorData,
+        );
       }
 
       return response.json();

@@ -1,10 +1,22 @@
 import { useState } from "react";
-import { Briefcase, Eye, EyeOff, ArrowRight, Shield } from "lucide-react";
+import { Briefcase, Eye, EyeOff, ArrowRight, Shield, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+
+const ROLE_OPTIONS = [
+  { value: "super_admin", label: "Super Admin" },
+  { value: "ats_admin", label: "ATS Admin" },
+  { value: "senior_recruiter", label: "Senior Recruiter" },
+  { value: "recruiter", label: "Recruiter" },
+  { value: "sourcing_specialist", label: "Sourcing Specialist" },
+  { value: "vendor_manager", label: "Vendor Manager" },
+  { value: "client_user", label: "Client User" },
+  { value: "vendor_user", label: "Vendor User" },
+] as const;
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState("recruiter");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,7 +27,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(email, password, role);
       if (error)
         setError(
           error.message || "Login failed. Please check your credentials.",
@@ -136,6 +148,33 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#7d6651] uppercase tracking-wider mb-1.5 ml-1">
+                Sign in as
+              </label>
+              <div className="relative">
+                <select
+                  required
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full appearance-none px-4 py-3 bg-[#fff5ea] border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-10 text-[#3a230f]"
+                >
+                  {ROLE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#7d6651]"
+                />
+              </div>
+              <p className="mt-1.5 ml-1 text-[10px] text-[#9e8472] leading-tight">
+                Must match the role assigned to your account by the administrator.
+              </p>
             </div>
 
             <button

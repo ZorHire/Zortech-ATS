@@ -20,10 +20,11 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
 import { useResumeSearchStore } from "../store/resumeSearchStore";
 import { resumeSearchService } from "../services/resumeSearch.service";
 import { Candidate, Job, PipelineStage } from "../types";
+import { useSendEmail } from "../hooks/useSendEmail";
+import EmailToast from "../components/ui/EmailToast";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -450,31 +451,17 @@ function ResultCard({
   isSelected,
   onToggle,
   onAddToPipeline,
+  onSendEmail,
+  emailSending,
 }: {
   candidate: Candidate;
   score: number;
   isSelected: boolean;
   onToggle: () => void;
   onAddToPipeline: (candidate: Candidate) => void;
+  onSendEmail: (candidate: Candidate) => void;
+  emailSending: boolean;
 }) {
-  const [emailSending, setEmailSending] = useState(false);
-
-  const handleEmail = async () => {
-    setEmailSending(true);
-    try {
-      const body = `Hi ${candidate.first_name},\n\nI came across your profile and would love to connect regarding an exciting opportunity.\n\nBest regards,\nRecruiter`;
-      await api.post("/email/send-single", {
-        to: candidate.email,
-        subject: "Quick catch-up - ZorHire",
-        body,
-      });
-      alert("Email sent successfully!");
-    } catch {
-      alert("Failed to send email.");
-    } finally {
-      setEmailSending(false);
-    }
-  };
 
   return (
     <>
@@ -595,6 +582,15 @@ function ResultCard({
               Save
             </button>
             <button
+              onClick={() => onSendEmail(candidate)}
+              disabled={emailSending}
+              title="Send email"
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Mail size={12} />
+              {emailSending ? "Sending…" : "Email"}
+            </button>
+            <button
               onClick={() => onAddToPipeline(candidate)}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
@@ -654,6 +650,7 @@ export default function ResumeSearchPage() {
   const [wizardCandidates, setWizardCandidates] = useState<Candidate[] | null>(
     null,
   );
+  const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -675,20 +672,9 @@ export default function ResumeSearchPage() {
     const selected = results
       .filter((r) => selectedIds.has(r.candidate.id))
       .map((r) => r.candidate);
-    try {
-      await Promise.all(
-        selected.map((c) =>
-          api.post("/email/send-single", {
-            to: c.email,
-            subject: "Quick catch-up - ZorHire",
-            body: `Hi ${c.first_name},\n\nI came across your profile and would love to connect regarding an exciting opportunity.\n\nBest regards,\nRecruiter`,
-          }),
-        ),
-      );
-      alert(`Email sent to ${selected.length} candidate(s)`);
-    } catch {
-      alert("Failed to send some emails.");
-    }
+    await Promise.all(
+      selected.map((c) => sendEmail(c.email, { firstName: c.first_name })),
+    );
   };
 
   const handleBulkPipeline = () => {
@@ -1024,6 +1010,10 @@ export default function ResumeSearchPage() {
                     isSelected={selectedIds.has(candidate.id)}
                     onToggle={() => toggleSelect(candidate.id)}
                     onAddToPipeline={(c) => setWizardCandidates([c])}
+                    onSendEmail={(c) =>
+                      sendEmail(c.email, { firstName: c.first_name })
+                    }
+                    emailSending={emailSending}
                   />
                 ))}
 
@@ -1054,6 +1044,8 @@ export default function ResumeSearchPage() {
           onClose={() => setWizardCandidates(null)}
         />
       )}
+
+      {emailToast && <EmailToast {...emailToast} />}
     </div>
   );
 }

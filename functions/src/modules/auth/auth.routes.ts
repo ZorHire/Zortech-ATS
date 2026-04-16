@@ -8,6 +8,9 @@ const router = Router();
 const loginSchema = { required: ["email", "password"] };
 const changePasswordSchema = { required: ["currentPassword", "newPassword"] };
 
+// One-time bootstrap: create first super_admin when none exists (protected by SETUP_TOKEN env var)
+router.post("/setup", validate({ required: ["email", "password", "full_name", "setupToken"] }), authController.setupAdmin);
+
 router.post("/login", validate(loginSchema), authController.login);
 router.post(
   "/register",

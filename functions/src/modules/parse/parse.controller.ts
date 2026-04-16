@@ -54,11 +54,11 @@ export const parseResume = async (req: AuthRequest, res: Response) => {
     });
 
     const content = await extractFileText(file);
-    console.log("Extracted text:", content.slice(0, 500));
+    console.log("Extracted text length:", content.length, "| preview:", content.slice(0, 200));
 
     if (!content || content.trim().length < 20) {
-      console.warn("Empty or invalid parsed content");
-      return res.status(200).json(defaultResumeResponse);
+      console.warn("Empty or invalid parsed content from file:", file.originalname);
+      return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text (not a scanned image) and try again." });
     }
 
     const parsed = parseResumeText(content);
@@ -131,10 +131,11 @@ export const parseJobDescription = async (req: AuthRequest, res: Response) => {
     }
 
     const content = await extractFileText(file);
+    console.log("[JD] Extracted text length:", content.length);
 
     if (!content || content.trim().length < 20) {
-      console.warn("Empty or invalid parsed content");
-      return res.status(200).json(defaultJobResponse);
+      console.warn("[JD] Empty or invalid parsed content from file:", file.originalname);
+      return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text and try again." });
     }
 
     const parsed = parseJobDescriptionText(content);
@@ -186,10 +187,11 @@ export const parseVendor = async (req: AuthRequest, res: Response) => {
     }
 
     const content = await extractFileText(file);
+    console.log("[Vendor] Extracted text length:", content.length);
 
     if (!content || content.trim().length < 20) {
-      console.warn("Empty or invalid parsed content");
-      return res.status(200).json(defaultVendorResponse);
+      console.warn("[Vendor] Empty or invalid parsed content from file:", file.originalname);
+      return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text and try again." });
     }
 
     const parsed = parseVendorText(content);

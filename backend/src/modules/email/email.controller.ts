@@ -22,19 +22,35 @@ const templateMap = {
   },
 };
 
-const transporter = (env.EMAIL_USER && env.EMAIL_PASS)
-  ? nodemailer.createTransport({
-      service: "gmail",
-      auth: { user: env.EMAIL_USER, pass: env.EMAIL_PASS }
-    })
-  : env.SMTP_HOST
-    ? nodemailer.createTransport({
-        host: env.SMTP_HOST,
-        port: Number(env.SMTP_PORT) || 587,
-        secure: env.SMTP_SECURE === "true",
-        auth: env.SMTP_USER && env.SMTP_PASS ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
-      })
-    : nodemailer.createTransport({ jsonTransport: true });
+/**
+ * ✅ FIXED TRANSPORTER (Zoho SMTP ONLY - no Gmail override)
+ */
+const transporter = nodemailer.createTransport({
+  host: env.SMTP_HOST,
+  port: Number(env.SMTP_PORT) || 465,
+  secure: env.SMTP_SECURE === "true", // true for 465
+  auth: {
+    type: "LOGIN",   // Zoho India (smtppro.zoho.in) requires LOGIN, not PLAIN
+    user: env.SMTP_USER,
+    pass: env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: true,
+    minVersion: "TLSv1.2",
+  },
+});
+
+/**
+ * ✅ OPTIONAL DEBUG (runs once on startup)
+ */
+(async () => {
+  try {
+    await transporter.verify();
+    console.log("✅ SMTP server is ready to send emails");
+  } catch (err) {
+    console.error("❌ SMTP configuration error:", err);
+  }
+})();
 
 const renderTemplate = (template: string, data: Record<string, string>) => {
   return template.replace(
@@ -47,12 +63,14 @@ export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
   const { to, subject, body } = req.body;
 
   if (!to || !subject || !body) {
-    return res.status(400).json({ message: "To, subject, and body are required" });
+    return res
+      .status(400)
+      .json({ message: "To, subject, and body are required" });
   }
 
   try {
     await transporter.sendMail({
-      from: env.EMAIL_USER || env.EMAIL_FROM || "no-reply@zorhire.com",
+      from: env.SMTP_USER, // ✅ MUST match Zoho authenticated email
       to,
       subject,
       text: body,
@@ -62,7 +80,7 @@ export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
     res.json({ message: "Email sent successfully" });
   } catch (error) {
     console.error("Send single email error:", error);
-    res.status(500).json({ message: "Unable to send email" });
+    res.status(500).json({ message: "Unable to send email", error });
   }
 };
 
@@ -77,6 +95,7 @@ export const listTemplates = async (_req: AuthRequest, res: Response) => {
 
 export const sendEmail = async (req: AuthRequest, res: Response) => {
   const { subject, body, recipients } = req.body;
+
   if (
     !subject ||
     !body ||
@@ -95,7 +114,7 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
     const sendResults = await Promise.allSettled(
       recipients.map((recipient: any) =>
         transporter.sendMail({
-          from: env.EMAIL_FROM,
+          from: env.SMTP_USER, // ✅ FIXED
           to: recipient.email,
           subject,
           text: body,
@@ -130,6 +149,6 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
     });
   } catch (error) {
     console.error("Send email error:", error);
-    res.status(500).json({ message: "Unable to send email" });
+    res.status(500).json({ message: "Unable to send email", error });
   }
 };
