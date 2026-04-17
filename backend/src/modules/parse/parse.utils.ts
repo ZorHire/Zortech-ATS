@@ -120,7 +120,18 @@ const findSectionText = (content: string, label: RegExp) => {
   return sectionLines.join(" ");
 };
 
+// Common job-title keywords — used to avoid misidentifying a title line as the name
+const JOB_TITLE_WORD_RE =
+  /\b(senior|junior|lead|principal|staff|associate|chief|head|vp|director|manager|officer|executive|specialist|consultant|analyst|architect|engineer|developer|designer|scientist|researcher|strategist|coordinator|administrator|advisor|intern|trainee)\b/i;
+
+const isTitleCase = (text: string): boolean =>
+  text
+    .trim()
+    .split(/\s+/)
+    .every((w) => /^[A-Z]/.test(w));
+
 const parseName = (content: string) => {
+  // 1. Explicit "Name:" label
   const nameLabel = content.match(
     /(?:name|candidate name)[:\s]*([A-Za-z][A-Za-z ,.'-]{1,80})/i,
   );
@@ -130,14 +141,31 @@ const parseName = (content: string) => {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+
+  // 2. First title-cased line (2-4 words, no digits/@ , not a section heading, not a job title)
+  for (const line of lines.slice(0, 8)) {
+    if (/[0-9@]/.test(line)) continue;
+    if (
+      /^(Skills|Experience|Education|Summary|Profile|Contact|Objective|References|Certifications)/i.test(
+        line,
+      )
+    )
+      continue;
+    if (JOB_TITLE_WORD_RE.test(line)) continue; // skip job-title-like lines
+    const wordCount = line.split(/\s+/).length;
+    if (wordCount >= 2 && wordCount <= 4 && isTitleCase(line)) return line;
+  }
+
+  // 3. Relaxed fallback — any short line from first 5
   for (const line of lines.slice(0, 5)) {
     if (/[0-9@]/.test(line)) continue;
-    if (/^(Skills|Experience|Education|Summary|Profile|Contact)/i.test(line))
+    if (
+      /^(Skills|Experience|Education|Summary|Profile|Contact)/i.test(line)
+    )
       continue;
-    if (line.split(" ").length <= 5) {
-      return line;
-    }
+    if (line.split(" ").length <= 5) return line;
   }
+
   return "";
 };
 
@@ -355,6 +383,153 @@ const parseLocation = (content: string) => {
   return remoteMatch ? remoteMatch[1] : "";
 };
 
+// ---------------------------------------------------------------------------
+// Headingless-resume heuristics
+// These run as fallbacks when labeled-section parsing finds nothing.
+// ---------------------------------------------------------------------------
+
+/**
+ * Infer current job title from free-form text.
+ * Strategies (in order):
+ *  1. "I am a/an [Title]", "working as [Title]", "as a [Title]", "role: [Title]"
+ *  2. First short line in the opening block that contains a title keyword
+ */
+const parseCurrentTitleFromContent = (content: string): string => {
+  // Inline role declaration
+  const roleMatch = content.match(
+    /(?:i(?:'m| am) (?:a |an )?|working as (?:a |an )?|as (?:a |an )?|currently (?:a |an )?|position[:\s]+(?:a |an )?)([A-Za-z][A-Za-z /\-]{3,60}?)(?:\s+at\s|\s+with\s|\s+for\s|\s+@\s|[,.\n]|$)/i,
+  );
+  if (roleMatch?.[1]) {
+    const candidate = roleMatch[1].trim();
+    if (JOB_TITLE_WORD_RE.test(candidate)) return candidate;
+  }
+
+  // Standalone title line near the top
+  const lines = content
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  for (const line of lines.slice(0, 12)) {
+    if (/[0-9@+]/.test(line) && !/[A-Za-z]{4,}/.test(line)) continue;
+    if (
+      /^(Skills|Experience|Education|Summary|Profile|Contact|Objective)/i.test(
+        line,
+      )
+    )
+      continue;
+    const wordCount = line.split(/\s+/).length;
+    if (
+      wordCount >= 1 &&
+      wordCount <= 8 &&
+      line.length < 80 &&
+      JOB_TITLE_WORD_RE.test(line)
+    ) {
+      return line;
+    }
+  }
+
+  return "";
+};
+
+/**
+ * Infer current company from free-form text.
+ * Strategies:
+ *  1. "at [Company]" / "with [Company]" / "for [Company]" patterns
+ *  2. Corporate suffix — "[Name] Inc / Ltd / LLC / Corp …"
+ */
+const parseCurrentCompanyFromContent = (content: string): string => {
+  // "at / with / for [Company]" — company starts with capital letter
+  const atMatch = content.match(
+    /(?:\bat\b|\bwith\b|\bfor\b)\s+([A-Z][A-Za-z0-9 &.,'-]{1,60}?)(?:\s+(?:Inc|Ltd|LLC|Corp|Limited|Technologies|Tech|Solutions|Systems|Services|International|Global|Group)\.?)?(?=[,.\n]|$|\s+(?:as|where|since|from|and|in\b))/,
+  );
+  if (atMatch?.[1]) {
+    const company = atMatch[1].trim();
+    // Skip common false positives
+    if (
+      !/^(the|a|an|my|our|your|this|that|which|who|what|where|when|how|present|least|most)\b/i.test(
+        company,
+      )
+    ) {
+      return company;
+    }
+  }
+
+  // Corporate suffix anywhere in text
+  const corpMatch = content.match(
+    /([A-Z][A-Za-z0-9 &'-]{1,40}?)\s+(?:Inc|Ltd|LLC|Corp|Limited|Technologies|Tech|Solutions|Systems|Services)\.?(?=[^A-Za-z]|$)/,
+  );
+  if (corpMatch?.[1]) return corpMatch[1].trim();
+
+  return "";
+};
+
+/**
+ * Extract a summary/profile from free-form text (no "Summary:" heading).
+ * Takes the first paragraph that looks like a professional bio.
+ */
+const parseSummaryFromContent = (content: string): string => {
+  // Try paragraph-based split first
+  const paragraphs = content.split(/\n{2,}/);
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (trimmed.length < 60) continue;
+    if (/@/.test(trimmed) || /^\+?\d/.test(trimmed)) continue;
+    // Skip skill-list-only paragraphs (mostly short comma-separated tokens)
+    const lines = trimmed.split("\n");
+    const avgLen =
+      lines.reduce((s, l) => s + l.length, 0) / (lines.length || 1);
+    if (lines.length <= 3 && avgLen < 40) continue;
+    return trimmed.slice(0, 500);
+  }
+
+  // Fallback: first sentence longer than 60 chars that isn't contact info
+  const sentences = content.split(/(?<=[.!?])\s+/);
+  const bio = sentences.find(
+    (s) => s.trim().length > 60 && !/@/.test(s) && !/^\+?\d/.test(s.trim()),
+  );
+  return bio ? bio.trim().slice(0, 500) : "";
+};
+
+/**
+ * Calculate total years of experience from date ranges found in text.
+ * Handles formats like "2018 - 2023", "Jan 2019 – Present", "2019 to 2024".
+ * Returns undefined when no date ranges are found.
+ */
+const calculateExperienceFromDates = (content: string): number | undefined => {
+  const currentYear = new Date().getFullYear();
+  const ranges: Array<[number, number]> = [];
+
+  const rangeRe =
+    /(\d{4})\s*[-–—]|to\s+(\d{4}|present|current|now|till\s+date|till\s+now)/gi;
+
+  // Simpler full-range scan: "YYYY … YYYY|present"
+  const fullRangeRe =
+    /(\d{4})\s*(?:[-–—]|to)\s*(\d{4}|present|current|now|till\s*date|till\s*now)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = fullRangeRe.exec(content)) !== null) {
+    const start = parseInt(m[1], 10);
+    const endRaw = m[2];
+    const end = /\d{4}/.test(endRaw) ? parseInt(endRaw, 10) : currentYear;
+    if (
+      start >= 1970 &&
+      start <= currentYear &&
+      end >= start &&
+      end <= currentYear + 1
+    ) {
+      ranges.push([start, end]);
+    }
+  }
+  // Suppress unused variable warning
+  void rangeRe;
+
+  if (ranges.length === 0) return undefined;
+
+  // Use min-start → max-end as a conservative total span
+  const minStart = Math.min(...ranges.map((r) => r[0]));
+  const maxEnd = Math.max(...ranges.map((r) => r[1]));
+  return maxEnd - minStart || undefined;
+};
+
 // Parse a number string that may use Indian (1,00,000) or Western (100,000) comma formatting
 const parseNumericString = (s: string): number => {
   // Remove all commas then parse — handles both 1,00,000 and 1,000,000
@@ -411,28 +586,36 @@ export const extractFileText = async (file?: Express.Multer.File) => {
 
 export const parseResumeText = (content: string): ParsedResumeData => {
   const normalized = normalizeText(content);
+
+  // --- Labeled-section parsing (works for resumes with headings) ---
+  const labeledTitle = findSectionText(
+    normalized,
+    /(?:current title|title|designation)[:\s]*/i,
+  );
+  const labeledCompany = findSectionText(
+    normalized,
+    /(?:current company|company|organization|employer)[:\s]*/i,
+  );
+  const labeledSummary = findSectionText(
+    normalized,
+    /(?:summary|profile|about me|professional summary|objective)[:\s]*/i,
+  );
+
+  // --- Experience: explicit mention wins; date-range calc as backup ---
+  const expFromText = parseExperience(normalized).min;
+  const expFromDates = calculateExperienceFromDates(normalized);
+
   return {
     name: parseName(normalized),
     email: parseEmail(normalized),
     phone: parsePhone(normalized),
     skills: parseSkills(normalized),
-    experience_years: parseExperience(normalized).min,
-    current_title:
-      findSectionText(
-        normalized,
-        /(?:current title|title|designation)[:\s]*/i,
-      ) || "",
-    current_company:
-      findSectionText(
-        normalized,
-        /(?:current company|company|organization|employer)[:\s]*/i,
-      ) || "",
+    experience_years: expFromText ?? expFromDates,
+    // Headingless fallback: infer from free-form text when no label found
+    current_title: labeledTitle || parseCurrentTitleFromContent(normalized),
+    current_company: labeledCompany || parseCurrentCompanyFromContent(normalized),
     current_location: parseLocation(normalized),
-    summary:
-      findSectionText(
-        normalized,
-        /(?:summary|profile|about me|professional summary)[:\s]*/i,
-      ) || "",
+    summary: labeledSummary || parseSummaryFromContent(normalized),
   };
 };
 
