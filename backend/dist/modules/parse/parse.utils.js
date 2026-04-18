@@ -10,19 +10,17 @@ const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
 const tika_service_1 = require("../../services/tika.service");
 // ---------------------------------------------------------------------------
-// Helpers
+// Text normalisation
 // ---------------------------------------------------------------------------
 const normalizeText = (value) => value
     .replace(/\r/g, "\n")
     .replace(/\t/g, " ")
     .replace(/[ ]{2,}/g, " ")
     .trim();
-/**
- * Local fallback extractor — used when Tika is unreachable.
- * Supports PDF (pdf-parse), DOCX/DOC (mammoth), and plain text.
- */
+// ---------------------------------------------------------------------------
+// File text extraction
+// ---------------------------------------------------------------------------
 const readFileTextFallback = async (file) => {
-    // file.buffer is populated by multer memoryStorage
     const buffer = file.buffer;
     const extension = file.originalname
         ? (file.originalname.split(".").pop()?.toLowerCase() ?? "")
@@ -43,7 +41,7 @@ const readFileTextFallback = async (file) => {
                 return data.value;
         }
         catch {
-            // fall through to clear error message below
+            // fall through
         }
         throw new Error("Legacy .doc not supported. Please upload .docx or PDF.");
     }
@@ -52,417 +50,16 @@ const readFileTextFallback = async (file) => {
     }
     throw new Error("Unsupported file type. Please upload PDF, DOCX, or TXT.");
 };
-const splitListText = (value) => value
-    .split(/[\n,•\-\*]+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-const findSectionText = (content, label) => {
-    const match = content.match(label);
-    if (!match || match.index === undefined)
-        return "";
-    const start = match.index + match[0].length;
-    const remainder = content.slice(start).trim();
-    const lines = remainder.split(/\r?\n/).map((line) => line.trim());
-    const sectionLines = [];
-    for (const line of lines) {
-        if (!line) {
-            if (sectionLines.length > 0)
-                break;
-            continue;
-        }
-        if (/^[A-Za-z ]{1,30}:/.test(line) && sectionLines.length > 0) {
-            break;
-        }
-        sectionLines.push(line);
-        if (sectionLines.length >= 8)
-            break;
-    }
-    return sectionLines.join(" ");
-};
-// Common job-title keywords — used to avoid misidentifying a title line as the name
-const JOB_TITLE_WORD_RE = /\b(senior|junior|lead|principal|staff|associate|chief|head|vp|director|manager|officer|executive|specialist|consultant|analyst|architect|engineer|developer|designer|scientist|researcher|strategist|coordinator|administrator|advisor|intern|trainee)\b/i;
-const isTitleCase = (text) => text
-    .trim()
-    .split(/\s+/)
-    .every((w) => /^[A-Z]/.test(w));
-const parseName = (content) => {
-    // 1. Explicit "Name:" label
-    const nameLabel = content.match(/(?:name|candidate name)[:\s]*([A-Za-z][A-Za-z ,.'-]{1,80})/i);
-    if (nameLabel?.[1])
-        return nameLabel[1].trim();
-    const lines = content
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-    // 2. First title-cased line (2-4 words, no digits/@ , not a section heading, not a job title)
-    for (const line of lines.slice(0, 8)) {
-        if (/[0-9@]/.test(line))
-            continue;
-        if (/^(Skills|Experience|Education|Summary|Profile|Contact|Objective|References|Certifications)/i.test(line))
-            continue;
-        if (JOB_TITLE_WORD_RE.test(line))
-            continue; // skip job-title-like lines
-        const wordCount = line.split(/\s+/).length;
-        if (wordCount >= 2 && wordCount <= 4 && isTitleCase(line))
-            return line;
-    }
-    // 3. Relaxed fallback — any short line from first 5
-    for (const line of lines.slice(0, 5)) {
-        if (/[0-9@]/.test(line))
-            continue;
-        if (/^(Skills|Experience|Education|Summary|Profile|Contact)/i.test(line))
-            continue;
-        if (line.split(" ").length <= 5)
-            return line;
-    }
-    return "";
-};
-const parseEmail = (content) => {
-    const match = content.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-    return match?.[0] || "";
-};
-const parsePhone = (content) => {
-    const match = content.match(/(\+?\d[\d\s\-().]{7,}\d)/);
-    if (!match)
-        return "";
-    const cleaned = match[0].replace(/[\s().-]/g, "");
-    return cleaned.length >= 9 ? cleaned : "";
-};
-const parseExperience = (content) => {
-    // Handle range: "4-7 years" or "4 to 7 years"
-    const rangeMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(?:\+)?\s*(?:years|yrs|year)\b/i);
-    if (rangeMatch) {
-        return {
-            min: Number(parseFloat(rangeMatch[1])),
-            max: Number(parseFloat(rangeMatch[2])),
-        };
-    }
-    // Handle single value: "5+ years"
-    const singleMatch = content.match(/(\d+(?:\.\d+)?)\s*(?:\+)?\s*(?:years|yrs|year)\b/i);
-    if (singleMatch) {
-        const val = Number(parseFloat(singleMatch[1]));
-        return { min: val, max: val };
-    }
-    const underExp = content.match(/experience[:\s]*([0-9]+)/i);
-    if (underExp) {
-        const val = Number(parseFloat(underExp[1]));
-        return { min: val, max: val };
-    }
-    return {};
-};
-// Broad keyword list used as a fallback when section parsing yields nothing
-const KNOWN_SKILLS = [
-    // Languages
-    "javascript",
-    "typescript",
-    "python",
-    "java",
-    "c++",
-    "c#",
-    "c",
-    "go",
-    "golang",
-    "rust",
-    "ruby",
-    "php",
-    "swift",
-    "kotlin",
-    "scala",
-    "r",
-    "matlab",
-    "perl",
-    "bash",
-    "shell",
-    // Frontend
-    "react",
-    "vue",
-    "angular",
-    "next.js",
-    "nextjs",
-    "nuxt",
-    "svelte",
-    "html",
-    "css",
-    "sass",
-    "less",
-    "tailwind",
-    "bootstrap",
-    "jquery",
-    "redux",
-    "mobx",
-    "zustand",
-    "graphql",
-    "rest",
-    "websocket",
-    // Backend
-    "node",
-    "node.js",
-    "nodejs",
-    "express",
-    "fastapi",
-    "django",
-    "flask",
-    "spring",
-    "laravel",
-    "rails",
-    "nestjs",
-    "fastify",
-    "hapi",
-    "koa",
-    // Databases
-    "sql",
-    "mysql",
-    "postgresql",
-    "postgres",
-    "mongodb",
-    "redis",
-    "elasticsearch",
-    "cassandra",
-    "dynamodb",
-    "sqlite",
-    "oracle",
-    "mssql",
-    "firestore",
-    "supabase",
-    // Cloud & DevOps
-    "aws",
-    "azure",
-    "gcp",
-    "docker",
-    "kubernetes",
-    "terraform",
-    "ansible",
-    "jenkins",
-    "ci/cd",
-    "github actions",
-    "gitlab ci",
-    "linux",
-    "nginx",
-    "apache",
-    // Data & ML
-    "machine learning",
-    "deep learning",
-    "tensorflow",
-    "pytorch",
-    "keras",
-    "pandas",
-    "numpy",
-    "scikit-learn",
-    "spark",
-    "hadoop",
-    "tableau",
-    "power bi",
-    "data analysis",
-    "nlp",
-    // Mobile
-    "react native",
-    "flutter",
-    "ios",
-    "android",
-    "xamarin",
-    // Tools
-    "git",
-    "jira",
-    "figma",
-    "postman",
-    "webpack",
-    "vite",
-    "babel",
-    "eslint",
-];
-const parseSkills = (content) => {
-    // First try to find a skills section
-    const section = findSectionText(content, /(?:skills|technical skills|key skills|core competencies|core skills|technologies)[:\s]*/i);
-    if (section && section.length > 10) {
-        const items = splitListText(section);
-        const filtered = items.filter((skill) => skill.length > 1 && skill.length < 60);
-        if (filtered.length > 0)
-            return filtered;
-    }
-    // Fallback: scan the whole text for known skill keywords
-    const lower = content.toLowerCase();
-    return KNOWN_SKILLS.filter((skill) => {
-        // Use word-boundary-like check to avoid false positives (e.g. "c" matching "catch")
-        const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i").test(lower);
-    });
-};
-const parseJobTitle = (content) => {
-    const match = content.match(/(?:job title|position|role)[:\s]*([A-Za-z0-9 &\-\/+]{3,100})/i);
-    if (match)
-        return match[1].trim();
-    const lines = content
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean);
-    if (lines.length > 0 && lines[0].length < 80) {
-        return lines[0];
-    }
-    return "";
-};
-const parseLocation = (content) => {
-    const match = content.match(/location[:\s]*([A-Za-z0-9 ,\-]+)/i);
-    if (match)
-        return match[1].trim();
-    const remoteMatch = content.match(/\b(remote|work from home|hybrid|onsite)\b/i);
-    return remoteMatch ? remoteMatch[1] : "";
-};
-// ---------------------------------------------------------------------------
-// Headingless-resume heuristics
-// These run as fallbacks when labeled-section parsing finds nothing.
-// ---------------------------------------------------------------------------
-/**
- * Infer current job title from free-form text.
- * Strategies (in order):
- *  1. "I am a/an [Title]", "working as [Title]", "as a [Title]", "role: [Title]"
- *  2. First short line in the opening block that contains a title keyword
- */
-const parseCurrentTitleFromContent = (content) => {
-    // Inline role declaration
-    const roleMatch = content.match(/(?:i(?:'m| am) (?:a |an )?|working as (?:a |an )?|as (?:a |an )?|currently (?:a |an )?|position[:\s]+(?:a |an )?)([A-Za-z][A-Za-z /\-]{3,60}?)(?:\s+at\s|\s+with\s|\s+for\s|\s+@\s|[,.\n]|$)/i);
-    if (roleMatch?.[1]) {
-        const candidate = roleMatch[1].trim();
-        if (JOB_TITLE_WORD_RE.test(candidate))
-            return candidate;
-    }
-    // Standalone title line near the top
-    const lines = content
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-    for (const line of lines.slice(0, 12)) {
-        if (/[0-9@+]/.test(line) && !/[A-Za-z]{4,}/.test(line))
-            continue;
-        if (/^(Skills|Experience|Education|Summary|Profile|Contact|Objective)/i.test(line))
-            continue;
-        const wordCount = line.split(/\s+/).length;
-        if (wordCount >= 1 &&
-            wordCount <= 8 &&
-            line.length < 80 &&
-            JOB_TITLE_WORD_RE.test(line)) {
-            return line;
-        }
-    }
-    return "";
-};
-/**
- * Infer current company from free-form text.
- * Strategies:
- *  1. "at [Company]" / "with [Company]" / "for [Company]" patterns
- *  2. Corporate suffix — "[Name] Inc / Ltd / LLC / Corp …"
- */
-const parseCurrentCompanyFromContent = (content) => {
-    // "at / with / for [Company]" — company starts with capital letter
-    const atMatch = content.match(/(?:\bat\b|\bwith\b|\bfor\b)\s+([A-Z][A-Za-z0-9 &.,'-]{1,60}?)(?:\s+(?:Inc|Ltd|LLC|Corp|Limited|Technologies|Tech|Solutions|Systems|Services|International|Global|Group)\.?)?(?=[,.\n]|$|\s+(?:as|where|since|from|and|in\b))/);
-    if (atMatch?.[1]) {
-        const company = atMatch[1].trim();
-        // Skip common false positives
-        if (!/^(the|a|an|my|our|your|this|that|which|who|what|where|when|how|present|least|most)\b/i.test(company)) {
-            return company;
-        }
-    }
-    // Corporate suffix anywhere in text
-    const corpMatch = content.match(/([A-Z][A-Za-z0-9 &'-]{1,40}?)\s+(?:Inc|Ltd|LLC|Corp|Limited|Technologies|Tech|Solutions|Systems|Services)\.?(?=[^A-Za-z]|$)/);
-    if (corpMatch?.[1])
-        return corpMatch[1].trim();
-    return "";
-};
-/**
- * Extract a summary/profile from free-form text (no "Summary:" heading).
- * Takes the first paragraph that looks like a professional bio.
- */
-const parseSummaryFromContent = (content) => {
-    // Try paragraph-based split first
-    const paragraphs = content.split(/\n{2,}/);
-    for (const para of paragraphs) {
-        const trimmed = para.trim();
-        if (trimmed.length < 60)
-            continue;
-        if (/@/.test(trimmed) || /^\+?\d/.test(trimmed))
-            continue;
-        // Skip skill-list-only paragraphs (mostly short comma-separated tokens)
-        const lines = trimmed.split("\n");
-        const avgLen = lines.reduce((s, l) => s + l.length, 0) / (lines.length || 1);
-        if (lines.length <= 3 && avgLen < 40)
-            continue;
-        return trimmed.slice(0, 500);
-    }
-    // Fallback: first sentence longer than 60 chars that isn't contact info
-    const sentences = content.split(/(?<=[.!?])\s+/);
-    const bio = sentences.find((s) => s.trim().length > 60 && !/@/.test(s) && !/^\+?\d/.test(s.trim()));
-    return bio ? bio.trim().slice(0, 500) : "";
-};
-/**
- * Calculate total years of experience from date ranges found in text.
- * Handles formats like "2018 - 2023", "Jan 2019 – Present", "2019 to 2024".
- * Returns undefined when no date ranges are found.
- */
-const calculateExperienceFromDates = (content) => {
-    const currentYear = new Date().getFullYear();
-    const ranges = [];
-    const rangeRe = /(\d{4})\s*[-–—]|to\s+(\d{4}|present|current|now|till\s+date|till\s+now)/gi;
-    // Simpler full-range scan: "YYYY … YYYY|present"
-    const fullRangeRe = /(\d{4})\s*(?:[-–—]|to)\s*(\d{4}|present|current|now|till\s*date|till\s*now)/gi;
-    let m;
-    while ((m = fullRangeRe.exec(content)) !== null) {
-        const start = parseInt(m[1], 10);
-        const endRaw = m[2];
-        const end = /\d{4}/.test(endRaw) ? parseInt(endRaw, 10) : currentYear;
-        if (start >= 1970 &&
-            start <= currentYear &&
-            end >= start &&
-            end <= currentYear + 1) {
-            ranges.push([start, end]);
-        }
-    }
-    // Suppress unused variable warning
-    void rangeRe;
-    if (ranges.length === 0)
-        return undefined;
-    // Use min-start → max-end as a conservative total span
-    const minStart = Math.min(...ranges.map((r) => r[0]));
-    const maxEnd = Math.max(...ranges.map((r) => r[1]));
-    return maxEnd - minStart || undefined;
-};
-// Parse a number string that may use Indian (1,00,000) or Western (100,000) comma formatting
-const parseNumericString = (s) => {
-    // Remove all commas then parse — handles both 1,00,000 and 1,000,000
-    return Number(s.replace(/,/g, ""));
-};
-const parseBudget = (content) => {
-    const match = content.match(/(?:budget|salary|compensation|ctc)[:\s]*([^\n]+)/i);
-    if (!match)
-        return { budget_text: "", salary_min: undefined, salary_max: undefined };
-    const budgetText = match[1].trim();
-    // Match full numbers including commas (Indian/Western format), then optional range
-    const valueMatch = budgetText.match(/([\d,]+)\s*(?:-\s*([\d,]+))?/);
-    if (!valueMatch) {
-        return {
-            budget_text: budgetText,
-            salary_min: undefined,
-            salary_max: undefined,
-        };
-    }
-    const min = parseNumericString(valueMatch[1]);
-    const max = valueMatch[2] ? parseNumericString(valueMatch[2]) : undefined;
-    return {
-        budget_text: budgetText,
-        salary_min: min || undefined,
-        salary_max: max ?? min,
-    };
-};
 const extractFileText = async (file) => {
     if (!file || !file.buffer)
         return "";
     console.log("[Parse] File:", file.originalname, "| MIME:", file.mimetype);
-    // 1. Try Apache Tika (most reliable — handles PDF, DOCX, DOC, TXT and more)
     const tikaText = await (0, tika_service_1.extractTextWithTika)(file);
     if (tikaText !== null) {
         const normalized = normalizeText(tikaText);
         console.log(`[Parse] Tika extracted ${normalized.length} chars`);
         return normalized;
     }
-    // 2. Tika unavailable — fall back to local parsers
     console.log("[Parse] Using local fallback parsers");
     const text = await readFileTextFallback(file);
     const normalized = normalizeText(text);
@@ -470,69 +67,623 @@ const extractFileText = async (file) => {
     return normalized;
 };
 exports.extractFileText = extractFileText;
+// ---------------------------------------------------------------------------
+// Section map — the core of robust parsing
+//
+// Instead of scanning for one label at a time (which breaks on blank lines,
+// stops after 8 lines, and misses aliases), we walk the document ONCE and
+// build a map of canonical-section-name → full section content.
+// Every field parser then queries this map by canonical name.
+// ---------------------------------------------------------------------------
+// All recognised heading aliases grouped by canonical name.
+// Add more aliases here to handle new resume styles — nothing else needs changing.
+const SECTION_ALIASES = {
+    contact: [
+        "contact", "contact information", "contact info", "contact details",
+        "personal information", "personal info", "personal details",
+        "basic information", "basic info", "details",
+    ],
+    summary: [
+        "summary", "professional summary", "executive summary", "career summary",
+        "career objective", "objective", "career objective summary",
+        "about me", "about", "profile", "professional profile", "career profile",
+        "personal profile", "overview", "professional overview",
+        "introduction", "bio", "personal statement", "statement",
+        "who i am", "background",
+    ],
+    skills: [
+        "skills", "technical skills", "key skills", "core skills",
+        "core competencies", "competencies", "technologies", "tech stack",
+        "tools", "tools & technologies", "tools and technologies",
+        "tools & frameworks", "tools and frameworks",
+        "expertise", "technical expertise", "areas of expertise",
+        "relevant skills", "programming skills", "programming languages",
+        "technical proficiencies", "proficiencies", "technical strengths",
+        "it skills", "digital skills", "computer skills", "software skills",
+        "software", "frameworks", "languages and frameworks",
+        "technical abilities", "abilities", "capabilities",
+    ],
+    experience: [
+        "experience", "work experience", "professional experience",
+        "employment history", "work history", "career history",
+        "relevant experience", "employment", "positions held",
+        "professional background", "work background", "career experience",
+        "experience & projects", "work & experience", "professional work",
+        "professional history", "job history", "previous experience",
+    ],
+    education: [
+        "education", "educational background", "academic background",
+        "academic history", "educational history", "academics",
+        "academic qualifications", "educational qualifications", "schooling",
+        "degrees", "academic credentials",
+    ],
+    projects: [
+        "projects", "personal projects", "key projects", "notable projects",
+        "project experience", "academic projects", "side projects",
+        "open source", "portfolio",
+    ],
+    certifications: [
+        "certifications", "certification", "certificates", "certificate",
+        "professional certifications", "licenses", "licenses & certifications",
+        "credentials", "accreditations", "courses", "training",
+    ],
+    achievements: [
+        "achievements", "awards", "honors", "accomplishments",
+        "recognition", "awards & achievements", "honors & awards",
+    ],
+    languages: ["languages", "language skills", "spoken languages", "foreign languages"],
+    interests: ["interests", "hobbies", "activities", "personal interests", "extracurricular"],
+    references: ["references", "referees", "references available upon request"],
+    volunteer: ["volunteer", "volunteering", "volunteer experience", "community involvement"],
+};
+// Build fast lookup: normalised alias → canonical name
+const HEADING_LOOKUP = new Map();
+for (const [canonical, aliases] of Object.entries(SECTION_ALIASES)) {
+    for (const alias of aliases) {
+        HEADING_LOOKUP.set(alias.toLowerCase(), canonical);
+    }
+}
+/**
+ * Decide whether a line is a section heading.
+ * Strips decorative characters, trailing colons/dashes, then checks the
+ * heading lookup. The line must also be short enough (≤ 60 chars) to rule
+ * out sentences that happen to start with a keyword.
+ */
+const toHeadingKey = (line) => line
+    .replace(/^[\s•\-\*#=_~>|]+/, "") // leading decorators
+    .replace(/[\s\-:_=~|]+$/, "") // trailing decorators
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+const isHeadingLine = (line) => {
+    if (line.trim().length === 0 || line.trim().length > 60)
+        return null;
+    const key = toHeadingKey(line);
+    return HEADING_LOOKUP.get(key) ?? null;
+};
+/**
+ * Walk the document once and return a map of canonical-name → section content.
+ * Content before the first recognised heading is stored as "__header__" and
+ * typically contains name + contact info.
+ */
+const buildSectionMap = (content) => {
+    const map = new Map();
+    const lines = content.split("\n");
+    let currentSection = "__header__";
+    map.set(currentSection, "");
+    for (const rawLine of lines) {
+        const canonical = isHeadingLine(rawLine);
+        if (canonical) {
+            currentSection = canonical;
+            if (!map.has(currentSection))
+                map.set(currentSection, "");
+            continue;
+        }
+        map.set(currentSection, (map.get(currentSection) ?? "") + rawLine + "\n");
+    }
+    return map;
+};
+/** Return the first non-empty section matching any of the given canonical names. */
+const getSection = (map, ...names) => {
+    for (const name of names) {
+        const val = map.get(name);
+        if (val && val.trim())
+            return val.trim();
+    }
+    return "";
+};
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+// Sub-label prefixes inside skill blocks: "Languages: ", "Frameworks: ", etc.
+const SUB_LABEL_RE = /^[A-Za-z][A-Za-z ,&/]{0,30}:\s*/;
+const dedupeStr = (items) => [...new Map(items.map((s) => [s.toLowerCase().trim(), s.trim()])).values()].filter(Boolean);
+/** Split a block by common list delimiters and strip sub-labels / empties. */
+const extractListItems = (block) => block
+    .split(/[\n,•\-\*|;◆◇▪▸►✓✔●○·→]+/)
+    .map((tok) => tok.replace(SUB_LABEL_RE, "").trim())
+    .filter((tok) => tok.length > 1 && tok.length < 60 && !/^\d+$/.test(tok));
+// Regex that matches common job-title words — distinguishes title lines from name lines
+const JOB_TITLE_WORD_RE = /\b(senior|junior|lead|principal|staff|associate|chief|head|vp|vice president|director|manager|officer|executive|specialist|consultant|analyst|architect|engineer|developer|designer|scientist|researcher|strategist|coordinator|administrator|advisor|intern|trainee|technician|programmer|coder)\b/i;
+const isTitleCase = (text) => text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => /^[A-Z]/.test(w));
+// ---------------------------------------------------------------------------
+// Name
+// ---------------------------------------------------------------------------
+const parseName = (map) => {
+    const header = getSection(map, "__header__") || map.get("__header__") || "";
+    const allContent = map.get("__header__") ?? "";
+    // 1. Explicit "Name:" label anywhere in header or contact section
+    const contactSection = getSection(map, "contact");
+    const nameSearchIn = (header || allContent) + "\n" + contactSection;
+    const nameLabel = nameSearchIn.match(/(?:^|\n)\s*(?:name|candidate name|full name|applicant name)\s*[:\-]\s*([A-Za-z][A-Za-z ,.'-]{1,80})/im);
+    if (nameLabel?.[1])
+        return nameLabel[1].trim();
+    // 2. Scan first lines of header for a title-cased 2-4 word name
+    const headerLines = (map.get("__header__") ?? "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+    for (const line of headerLines.slice(0, 10)) {
+        if (/[0-9@]/.test(line))
+            continue;
+        if (/^(skills|experience|education|summary|profile|contact|objective|references|certifications|about)/i.test(line))
+            continue;
+        if (JOB_TITLE_WORD_RE.test(line))
+            continue;
+        // Skip lines that look like company names or locations (contain corporate keywords or commas)
+        if (/\b(inc|ltd|llc|corp|limited|consultancy|services|technologies|systems|solutions|pvt|private)\b/i.test(line))
+            continue;
+        if (line.includes(","))
+            continue; // "Company, City" or "City, Country" patterns
+        const words = line.split(/\s+/);
+        if (words.length >= 2 && words.length <= 5 && isTitleCase(line))
+            return line;
+    }
+    // 3. Relaxed: any short non-numeric line from the first few header lines
+    for (const line of headerLines.slice(0, 6)) {
+        if (/[0-9@]/.test(line))
+            continue;
+        if (/^(skills|experience|education|summary|profile|contact)/i.test(line))
+            continue;
+        if (/\b(inc|ltd|llc|corp|limited|consultancy|services|technologies|systems|solutions|pvt|private)\b/i.test(line))
+            continue;
+        if (line.includes(","))
+            continue;
+        const words = line.split(/\s+/);
+        if (words.length >= 2 && words.length <= 5)
+            return line;
+    }
+    return "";
+};
+// ---------------------------------------------------------------------------
+// Email
+// ---------------------------------------------------------------------------
+const parseEmail = (content) => {
+    const match = content.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
+    return match?.[0] ?? "";
+};
+// ---------------------------------------------------------------------------
+// Phone
+// ---------------------------------------------------------------------------
+const parsePhone = (content) => {
+    // Covers: +91 98765 43210, (123) 456-7890, 123-456-7890, +1234567890, etc.
+    const match = content.match(/(?:\+?\d{1,3}[\s\-.]?)?\(?\d{2,4}\)?[\s\-.]?\d{3,5}[\s\-.]?\d{3,5}(?:[\s\-.]?\d{1,4})?/);
+    if (!match)
+        return "";
+    const cleaned = match[0].replace(/[\s().\-]/g, "");
+    return cleaned.length >= 7 ? cleaned : "";
+};
+// ---------------------------------------------------------------------------
+// Location
+// ---------------------------------------------------------------------------
+const parseLocation = (map, rawContent) => {
+    // 1. Explicit label in contact or header
+    const searchIn = getSection(map, "contact") + "\n" + (map.get("__header__") ?? "");
+    const labelMatch = searchIn.match(/(?:location|address|city|based in|residing in|residence|located in)\s*[:\-]\s*([A-Za-z0-9 ,.\-]+)/i);
+    if (labelMatch?.[1])
+        return labelMatch[1].trim().split("\n")[0].trim();
+    // 2. Remote / hybrid / onsite keywords
+    const workModeMatch = rawContent.match(/\b(remote|work from home|wfh|hybrid|onsite|on-site|on site)\b/i);
+    if (workModeMatch)
+        return workModeMatch[1];
+    // 3. "City, State" or "City, Country" pattern near email/phone in header
+    const headerLines = (map.get("__header__") ?? "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+    for (const line of headerLines) {
+        // Skip lines that are clearly email or phone
+        if (/@/.test(line) || /^\+?\d/.test(line))
+            continue;
+        // City, Country/State pattern: two capitalised words separated by comma
+        const cityMatch = line.match(/^([A-Z][A-Za-z\s]{1,30}),\s*([A-Z][A-Za-z\s]{1,30})$/);
+        if (cityMatch)
+            return line.trim();
+    }
+    return "";
+};
+// ---------------------------------------------------------------------------
+// Skills
+// ---------------------------------------------------------------------------
+const parseSkills = (map, rawContent) => {
+    // ── 1. From labeled skills section (most reliable) ────────────────────────
+    const skillsBlock = getSection(map, "skills");
+    if (skillsBlock) {
+        const items = extractListItems(skillsBlock);
+        if (items.length >= 1)
+            return dedupeStr(items);
+    }
+    // ── 2. Proficiency phrases in any section ─────────────────────────────────
+    const profRe = /(?:proficient in|experience (?:in|with)|familiar with|knowledge of|skilled in|expertise in|worked with|working with|hands[\s\-]?on (?:with|in)|specializ(?:e|ing) in|adept (?:at|in))\s+([^.!?\n]{5,300})/gi;
+    const fromPhrases = [];
+    for (const m of rawContent.matchAll(profRe)) {
+        m[1]
+            .split(/[,;|•]+/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 1 && s.length < 50)
+            .forEach((s) => fromPhrases.push(s));
+    }
+    if (fromPhrases.length >= 3)
+        return dedupeStr(fromPhrases);
+    // ── 3. Dense-enumeration lines (headingless resumes) ─────────────────────
+    // A line with ≥3 comma/pipe/bullet-separated short tokens that don't look
+    // like prose is almost certainly a skill list.
+    const enumSkills = [];
+    for (const line of rawContent.split("\n").map((l) => l.trim()).filter(Boolean)) {
+        const tokens = line
+            .split(/[,;|•*\/◆◇▪]+/)
+            .map((t) => t.replace(SUB_LABEL_RE, "").trim())
+            .filter((t) => t.length > 1);
+        if (tokens.length < 3)
+            continue;
+        const allShort = tokens.every((t) => t.length <= 35);
+        const avgWords = tokens.reduce((s, t) => s + t.split(/\s+/).length, 0) / tokens.length;
+        if (allShort && avgWords <= 3) {
+            tokens
+                .filter((t) => t.length > 1 && t.length < 50)
+                .forEach((t) => enumSkills.push(t));
+        }
+    }
+    if (enumSkills.length >= 2)
+        return dedupeStr(enumSkills);
+    return [];
+};
+// ---------------------------------------------------------------------------
+// Experience years
+// ---------------------------------------------------------------------------
+const MONTH_MAP = {
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+    january: 1, february: 2, march: 3, april: 4, june: 6,
+    july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+};
+const parseExperienceYears = (map, rawContent) => {
+    // 1. Explicit "X years" statement
+    const rangeMatch = rawContent.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs|year)\b/i);
+    if (rangeMatch)
+        return Number(parseFloat(rangeMatch[1]));
+    const singleMatch = rawContent.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs|year)\s+(?:of\s+)?(?:total\s+)?(?:work\s+|professional\s+|industry\s+|overall\s+)?experience/i);
+    if (singleMatch)
+        return Number(parseFloat(singleMatch[1]));
+    const expLabel = rawContent.match(/experience\s*[:\-]\s*(\d+)/i);
+    if (expLabel)
+        return Number(parseFloat(expLabel[1]));
+    // 2. Calculate from date ranges in experience section
+    const expBlock = getSection(map, "experience") ||
+        getSection(map, "projects") ||
+        rawContent;
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth() + 1;
+    const ranges = []; // [startMonth, endMonth] as total months
+    // Pattern: "Month YYYY – Month YYYY|Present"
+    const fullMonthYearRe = /(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)[.,]?\s*(\d{4})\s*[-–—to]+\s*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|present|current|now|till\s*date)[.,]?\s*(\d{4})?/gi;
+    let m;
+    while ((m = fullMonthYearRe.exec(expBlock)) !== null) {
+        const startMon = MONTH_MAP[m[1].toLowerCase().slice(0, 3)] ?? 1;
+        const startYr = parseInt(m[2], 10);
+        const endWord = m[3].toLowerCase();
+        const endMon = /present|current|now|till/.test(endWord)
+            ? currentMonth
+            : (MONTH_MAP[endWord.slice(0, 3)] ?? 12);
+        const endYr = /present|current|now|till/.test(endWord)
+            ? currentYear
+            : parseInt(m[4] ?? String(currentYear), 10);
+        if (startYr >= 1970 && startYr <= currentYear) {
+            const startTotal = startYr * 12 + startMon;
+            const endTotal = endYr * 12 + endMon;
+            if (endTotal >= startTotal)
+                ranges.push([startTotal, endTotal]);
+        }
+    }
+    // Pattern: "YYYY – YYYY|Present"
+    const yearOnlyRe = /(\d{4})\s*[-–—to]+\s*(\d{4}|present|current|now|till\s*date)/gi;
+    while ((m = yearOnlyRe.exec(expBlock)) !== null) {
+        const startYr = parseInt(m[1], 10);
+        const endRaw = m[2].toLowerCase();
+        const endYr = /\d{4}/.test(endRaw) ? parseInt(endRaw, 10) : currentYear;
+        if (startYr >= 1970 &&
+            startYr <= currentYear &&
+            endYr >= startYr &&
+            endYr <= currentYear + 1) {
+            ranges.push([startYr * 12, endYr * 12]);
+        }
+    }
+    if (ranges.length === 0)
+        return undefined;
+    // Merge overlapping ranges to avoid double-counting concurrent positions
+    ranges.sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const r of ranges) {
+        const last = merged[merged.length - 1];
+        if (last && r[0] <= last[1]) {
+            last[1] = Math.max(last[1], r[1]);
+        }
+        else {
+            merged.push([r[0], r[1]]);
+        }
+    }
+    const totalMonths = merged.reduce((s, r) => s + (r[1] - r[0]), 0);
+    const years = Math.round(totalMonths / 12);
+    return years > 0 ? years : undefined;
+};
+// ---------------------------------------------------------------------------
+// Work history — extract most recent title & company from experience section
+// ---------------------------------------------------------------------------
+const parseWorkHistory = (map, rawContent) => {
+    const expBlock = getSection(map, "experience") || rawContent;
+    // ── Pattern A: "Title at Company" / "Title @ Company" ────────────────────
+    const atMatch = expBlock.match(/([A-Za-z][A-Za-z /\-]{3,60}?)\s+(?:at|@)\s+([A-Z][A-Za-z0-9 &.,'\-]{1,60}?)(?:\s*[\(,|\n]|\s*\d{4}|$)/);
+    if (atMatch) {
+        const t = atMatch[1].trim();
+        const c = atMatch[2].trim();
+        if (JOB_TITLE_WORD_RE.test(t))
+            return { title: t, company: c };
+    }
+    // ── Pattern B: "Company | Title | dates" or "Title | Company | dates" ─────
+    const pipeMatch = expBlock.match(/([A-Za-z][A-Za-z0-9 &.,'\-]{1,60}?)\s*\|\s*([A-Za-z][A-Za-z0-9 &.,'\-]{1,60}?)\s*(?:\||\d{4})/);
+    if (pipeMatch) {
+        const first = pipeMatch[1].trim();
+        const second = pipeMatch[2].trim();
+        if (JOB_TITLE_WORD_RE.test(first) && !JOB_TITLE_WORD_RE.test(second))
+            return { title: first, company: second };
+        if (JOB_TITLE_WORD_RE.test(second) && !JOB_TITLE_WORD_RE.test(first))
+            return { title: second, company: first };
+        // Default order: Company | Title
+        return { title: second, company: first };
+    }
+    // ── Pattern C: Multi-line entry — scan first job block ────────────────────
+    const entryLines = expBlock
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+    let title = "";
+    let company = "";
+    for (const line of entryLines.slice(0, 8)) {
+        // Stop when we hit bullet points (job duties)
+        if (/^[•\-\*◆▪►✓]/.test(line))
+            break;
+        // Skip pure date lines
+        if (/^\d{4}\s*[-–—]/.test(line) || /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(line))
+            continue;
+        if (line.length > 100)
+            continue;
+        if (!title && JOB_TITLE_WORD_RE.test(line)) {
+            title = line;
+        }
+        else if (title && !company && /^[A-Z]/.test(line) && !JOB_TITLE_WORD_RE.test(line)) {
+            company = line;
+        }
+        else if (!title && !company && /^[A-Z]/.test(line)) {
+            // Could be company or title — store as company tentatively
+            company = line;
+        }
+        else if (company && !title && JOB_TITLE_WORD_RE.test(line)) {
+            title = line;
+        }
+        if (title && company)
+            break;
+    }
+    return { title, company };
+};
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+const parseSummary = (map, rawContent) => {
+    // 1. From a labeled summary section
+    const summaryBlock = getSection(map, "summary", "contact");
+    if (summaryBlock && summaryBlock.length > 40) {
+        // Take up to 500 chars; skip lines that are purely contact info
+        const lines = summaryBlock
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l && !/@/.test(l) && !/^\+?\d/.test(l));
+        const joined = lines.join(" ").trim();
+        if (joined.length > 40)
+            return joined.slice(0, 500);
+    }
+    // 2. From header section — look for a paragraph-like block
+    const header = map.get("__header__") ?? "";
+    const paragraphs = header.split(/\n{2,}/);
+    for (const para of paragraphs) {
+        const trimmed = para.trim();
+        if (trimmed.length < 60)
+            continue;
+        if (/@/.test(trimmed) || /^\+?\d/.test(trimmed))
+            continue;
+        const lines = trimmed.split("\n");
+        const avgLen = lines.reduce((s, l) => s + l.length, 0) / (lines.length || 1);
+        if (avgLen > 30)
+            return trimmed.slice(0, 500);
+    }
+    // 3. First long sentence from raw content that looks like a bio
+    const sentences = rawContent.split(/(?<=[.!?])\s+/);
+    const bio = sentences.find((s) => s.trim().length > 60 && !/@/.test(s) && !/^\+?\d/.test(s.trim()));
+    return bio ? bio.trim().slice(0, 500) : "";
+};
+// ---------------------------------------------------------------------------
+// Job title and company (current)
+// ---------------------------------------------------------------------------
+const parseCurrentTitle = (map, workHistory, rawContent) => {
+    // 1. Labeled field
+    const header = map.get("__header__") ?? "";
+    const labelMatch = header.match(/(?:current title|job title|designation|position|role)\s*[:\-]\s*([A-Za-z][A-Za-z /\-]{3,80})/i);
+    if (labelMatch?.[1])
+        return labelMatch[1].trim();
+    // 2. From work history extraction
+    if (workHistory.title)
+        return workHistory.title;
+    // 3. Inline pattern in header or summary
+    const searchIn = header + "\n" + getSection(map, "summary");
+    const roleMatch = searchIn.match(/(?:i(?:'m| am) (?:a |an )?|working as (?:a |an )?|currently (?:a |an )?|serve(?:d|s)? as (?:a |an )?)([A-Za-z][A-Za-z /\-]{3,60}?)(?:\s+at\s|\s+with\s|\s+@\s|[,.\n]|$)/i);
+    if (roleMatch?.[1] && JOB_TITLE_WORD_RE.test(roleMatch[1]))
+        return roleMatch[1].trim();
+    // 4. Second non-contact line in header that contains a title keyword
+    const headerLines = header.split("\n").map((l) => l.trim()).filter(Boolean);
+    for (const line of headerLines.slice(0, 12)) {
+        if (/[0-9@+]/.test(line) && !/[A-Za-z]{4,}/.test(line))
+            continue;
+        if (/^(Skills|Experience|Education|Summary|Profile|Contact|Objective)/i.test(line))
+            continue;
+        const wc = line.split(/\s+/).length;
+        if (wc >= 1 && wc <= 8 && line.length < 80 && JOB_TITLE_WORD_RE.test(line))
+            return line;
+    }
+    void rawContent;
+    return "";
+};
+const parseCurrentCompany = (map, workHistory, rawContent) => {
+    // 1. Labeled field
+    const header = map.get("__header__") ?? "";
+    const labelMatch = header.match(/(?:current company|current employer|company|employer|organization)\s*[:\-]\s*([A-Z][A-Za-z0-9 &.,'\-]{1,80})/i);
+    if (labelMatch?.[1]) {
+        const c = labelMatch[1].trim();
+        if (!/^(the|a |an |my |our )/i.test(c))
+            return c;
+    }
+    // 2. From work history extraction
+    if (workHistory.company)
+        return workHistory.company;
+    // 3. "at/with/for [Company]" anywhere in header or summary
+    const searchIn = header + "\n" + getSection(map, "summary");
+    const atMatch = searchIn.match(/(?:\bat\b|\bwith\b)\s+([A-Z][A-Za-z0-9 &.,'\-]{1,60}?)(?:\s+(?:Inc|Ltd|LLC|Corp|Limited|Technologies|Tech|Solutions|Systems|Services|Global|Group)\.?)?(?=[,.\n]|$|\s+(?:as|where|since|from|and)\b)/);
+    if (atMatch?.[1]) {
+        const c = atMatch[1].trim();
+        if (!/^(the|a |an |my |our |present|least|most)/i.test(c))
+            return c;
+    }
+    // 4. Corporate suffix
+    const corpMatch = rawContent.match(/([A-Z][A-Za-z0-9 &'\-]{1,40}?)\s+(?:Inc|Ltd|LLC|Corp|Limited|Technologies|Tech|Solutions|Systems|Services)\.?(?=[^A-Za-z]|$)/);
+    if (corpMatch?.[1])
+        return corpMatch[1].trim();
+    return "";
+};
+// ---------------------------------------------------------------------------
+// Job description helpers
+// ---------------------------------------------------------------------------
+const parseJobTitle = (map, rawContent) => {
+    // Labeled field
+    const labelMatch = rawContent.match(/(?:job title|position title|role|designation)\s*[:\-]\s*([A-Za-z0-9 &\-\/+]{3,100})/i);
+    if (labelMatch)
+        return labelMatch[1].trim();
+    // Header section first line (JDs often start with the title)
+    const headerLines = (map.get("__header__") ?? "")
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+    if (headerLines.length > 0 && headerLines[0].length < 100)
+        return headerLines[0];
+    return "";
+};
+const parseBudget = (rawContent) => {
+    const match = rawContent.match(/(?:budget|salary|compensation|ctc|package|remuneration)\s*[:\-]?\s*([^\n]{3,80})/i);
+    if (!match)
+        return { budget_text: "", salary_min: undefined, salary_max: undefined };
+    const budgetText = match[1].trim();
+    const numRe = /([\d,]+(?:\.\d+)?)/g;
+    const nums = [];
+    let nm;
+    while ((nm = numRe.exec(budgetText)) !== null) {
+        const v = Number(nm[1].replace(/,/g, ""));
+        if (v > 0)
+            nums.push(v);
+    }
+    return {
+        budget_text: budgetText,
+        salary_min: nums[0],
+        salary_max: nums[1] ?? nums[0],
+    };
+};
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 const parseResumeText = (content) => {
     const normalized = normalizeText(content);
-    // --- Labeled-section parsing (works for resumes with headings) ---
-    const labeledTitle = findSectionText(normalized, /(?:current title|title|designation)[:\s]*/i);
-    const labeledCompany = findSectionText(normalized, /(?:current company|company|organization|employer)[:\s]*/i);
-    const labeledSummary = findSectionText(normalized, /(?:summary|profile|about me|professional summary|objective)[:\s]*/i);
-    // --- Experience: explicit mention wins; date-range calc as backup ---
-    const expFromText = parseExperience(normalized).min;
-    const expFromDates = calculateExperienceFromDates(normalized);
+    const map = buildSectionMap(normalized);
+    const workHistory = parseWorkHistory(map, normalized);
     return {
-        name: parseName(normalized),
+        name: parseName(map),
         email: parseEmail(normalized),
         phone: parsePhone(normalized),
-        skills: parseSkills(normalized),
-        experience_years: expFromText ?? expFromDates,
-        // Headingless fallback: infer from free-form text when no label found
-        current_title: labeledTitle || parseCurrentTitleFromContent(normalized),
-        current_company: labeledCompany || parseCurrentCompanyFromContent(normalized),
-        current_location: parseLocation(normalized),
-        summary: labeledSummary || parseSummaryFromContent(normalized),
+        skills: parseSkills(map, normalized),
+        experience_years: parseExperienceYears(map, normalized),
+        current_title: parseCurrentTitle(map, workHistory, normalized),
+        current_company: parseCurrentCompany(map, workHistory, normalized),
+        current_location: parseLocation(map, normalized),
+        summary: parseSummary(map, normalized),
     };
 };
 exports.parseResumeText = parseResumeText;
 const parseVendorText = (content) => {
     const normalized = normalizeText(content);
+    const map = buildSectionMap(normalized);
     const resume = (0, exports.parseResumeText)(normalized);
-    const companySection = findSectionText(normalized, /(?:company|organization|agency|vendor|firm|business)[:\s]*/i) ||
-        resume.current_company ||
-        "";
+    const companySection = resume.current_company || "";
     const contactName = resume.name ||
-        normalized
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .find((line) => !/[0-9@]/.test(line) &&
-            !/^(Skills|Experience|Education|Summary|Profile|Contact|Company)/i.test(line)) ||
+        (map.get("__header__") ?? "")
+            .split("\n")
+            .map((l) => l.trim())
+            .filter((l) => l &&
+            !/[0-9@]/.test(l) &&
+            !/^(Skills|Experience|Education|Summary|Profile|Contact|Company)/i.test(l))[0] ||
         "";
-    const geographyText = findSectionText(normalized, /(?:locations|geographies|operating in|territories)[:\s]*/i) || "";
+    const geoBlock = getSection(map, "contact") || "";
+    const geographies = geoBlock
+        ? geoBlock
+            .split(/[\n,•\-\*|;]+/)
+            .map((t) => t.trim())
+            .filter((t) => t.length > 1 && t.length < 60)
+        : [];
     return {
         company_name: companySection,
         primary_contact_name: contactName,
         primary_contact_email: resume.email,
         primary_contact_phone: resume.phone,
         industry_specializations: resume.skills || [],
-        geographies: geographyText ? splitListText(geographyText) : [],
+        geographies,
     };
 };
 exports.parseVendorText = parseVendorText;
 const parseJobDescriptionText = (content) => {
     const normalized = normalizeText(content);
-    const skills = parseSkills(normalized);
-    const experience = parseExperience(normalized);
+    const map = buildSectionMap(normalized);
+    const skills = parseSkills(map, normalized);
+    const exp = parseExperienceYears(map, normalized);
     const budget = parseBudget(normalized);
+    // For JDs experience_min/max may differ — check for range text
+    const rangeMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs|year)\b/i);
     return {
-        title: parseJobTitle(normalized),
-        location: parseLocation(normalized),
+        title: parseJobTitle(map, normalized),
+        location: parseLocation(map, normalized),
         required_skills: skills,
-        experience_min: experience.min,
-        experience_max: experience.max,
+        experience_min: rangeMatch ? Number(parseFloat(rangeMatch[1])) : exp,
+        experience_max: rangeMatch ? Number(parseFloat(rangeMatch[2])) : exp,
         budget_text: budget.budget_text,
         salary_min: budget.salary_min,
         salary_max: budget.salary_max,
-        // Cap description at 3000 chars — enough context without flooding the textarea
         description: normalized.slice(0, 3000),
     };
 };

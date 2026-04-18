@@ -226,6 +226,30 @@ export const addToPipeline = async (req: AuthRequest, res: Response) => {
   }
 };
 
+export const getCandidateApplications = async (req: AuthRequest, res: Response) => {
+  const { candidateId } = req.params;
+  const tenantId = req.user?.tenant_id;
+
+  try {
+    const result = await pool.query(
+      `SELECT ja.*, json_build_object(
+          'id', j.id,
+          'title', j.title,
+          'department', j.department
+        ) AS job
+       FROM job_applications ja
+       JOIN jobs j ON j.id = ja.job_id
+       WHERE ja.candidate_id = $1 AND ja.tenant_id = $2
+       ORDER BY ja.updated_at DESC`,
+      [candidateId, tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get candidate applications error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const getApplicationHistory = async (
   req: AuthRequest,
   res: Response,

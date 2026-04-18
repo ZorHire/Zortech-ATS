@@ -37,13 +37,14 @@ const express_1 = require("express");
 const emailController = __importStar(require("./email.controller"));
 const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
+const EMAIL_ROLES = ["super_admin", "ats_admin", "recruiter", "vendor_manager"];
+// ─── Per-user SMTP config ─────────────────────────────────────────────────────
+router.get("/config", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.getEmailConfig);
+router.post("/config", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.saveEmailConfig);
+router.delete("/config", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.removeEmailConfig);
+router.post("/config/test", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.testEmailConfig);
+// ─── Email sending ────────────────────────────────────────────────────────────
 router.get("/templates", auth_1.authMiddleware, auth_1.tenantIsolation, emailController.listTemplates);
-router.post("/send-single", auth_1.authMiddleware, auth_1.tenantIsolation, emailController.sendSingleEmail);
-router.post("/send", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
-    "super_admin",
-    "ats_admin",
-    "vendor_manager",
-    "recruiter",
-    "sourcing_specialist",
-]), emailController.sendEmail);
+router.post("/send-single", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.sendSingleEmail);
+router.post("/send", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.sendEmail);
 exports.default = router;

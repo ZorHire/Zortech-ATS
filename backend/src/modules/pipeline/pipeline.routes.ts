@@ -23,6 +23,12 @@ router.post(
 );
 
 router.get(
+  "/candidates/:candidateId/applications",
+  authMiddleware,
+  tenantIsolation,
+  pipelineController.getCandidateApplications,
+);
+router.get(
   "/jobs/:jobId/applications",
   authMiddleware,
   tenantIsolation,

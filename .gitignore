@@ -70,3 +70,13 @@ node_modules/
 
 # Local error/solution log
 errors.md
+
+# Agent logs/settings
+.agent
+.claude
+.cursor
+.trae
+.windsurfrules
+CLAUDE.md
+GEMINI.md
+AGENTS.md

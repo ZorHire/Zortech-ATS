@@ -44,6 +44,7 @@ router.post("/add", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.au
     "recruiter",
     "sourcing_specialist",
 ]), pipelineController.addToPipeline);
+router.get("/candidates/:candidateId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, pipelineController.getCandidateApplications);
 router.get("/jobs/:jobId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, pipelineController.getJobApplications);
 router.post("/jobs/:jobId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",

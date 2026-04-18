@@ -8,16 +8,56 @@ import {
 
 const router = Router();
 
+const EMAIL_ROLES = ["super_admin", "ats_admin", "recruiter", "vendor_manager"];
+
+// ─── Per-user SMTP config ─────────────────────────────────────────────────────
+
+router.get(
+  "/config",
+  authMiddleware,
+  tenantIsolation,
+  authorize(EMAIL_ROLES),
+  emailController.getEmailConfig,
+);
+
+router.post(
+  "/config",
+  authMiddleware,
+  tenantIsolation,
+  authorize(EMAIL_ROLES),
+  emailController.saveEmailConfig,
+);
+
+router.delete(
+  "/config",
+  authMiddleware,
+  tenantIsolation,
+  authorize(EMAIL_ROLES),
+  emailController.removeEmailConfig,
+);
+
+router.post(
+  "/config/test",
+  authMiddleware,
+  tenantIsolation,
+  authorize(EMAIL_ROLES),
+  emailController.testEmailConfig,
+);
+
+// ─── Email sending ────────────────────────────────────────────────────────────
+
 router.get(
   "/templates",
   authMiddleware,
   tenantIsolation,
   emailController.listTemplates,
 );
+
 router.post(
   "/send-single",
   authMiddleware,
   tenantIsolation,
+  authorize(EMAIL_ROLES),
   emailController.sendSingleEmail,
 );
 
@@ -25,13 +65,7 @@ router.post(
   "/send",
   authMiddleware,
   tenantIsolation,
-  authorize([
-    "super_admin",
-    "ats_admin",
-    "vendor_manager",
-    "recruiter",
-    "sourcing_specialist",
-  ]),
+  authorize(EMAIL_ROLES),
   emailController.sendEmail,
 );
 

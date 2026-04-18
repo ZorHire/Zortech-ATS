@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getApplicationHistory = exports.addToPipeline = exports.moveApplicationStage = exports.createApplication = exports.getJobApplications = void 0;
+exports.getApplicationHistory = exports.getCandidateApplications = exports.addToPipeline = exports.moveApplicationStage = exports.createApplication = exports.getJobApplications = void 0;
 const db_1 = __importDefault(require("../../db"));
 const allowedStages = [
     "new",
@@ -164,6 +164,27 @@ const addToPipeline = async (req, res) => {
     }
 };
 exports.addToPipeline = addToPipeline;
+const getCandidateApplications = async (req, res) => {
+    const { candidateId } = req.params;
+    const tenantId = req.user?.tenant_id;
+    try {
+        const result = await db_1.default.query(`SELECT ja.*, json_build_object(
+          'id', j.id,
+          'title', j.title,
+          'department', j.department
+        ) AS job
+       FROM job_applications ja
+       JOIN jobs j ON j.id = ja.job_id
+       WHERE ja.candidate_id = $1 AND ja.tenant_id = $2
+       ORDER BY ja.updated_at DESC`, [candidateId, tenantId]);
+        res.json(result.rows);
+    }
+    catch (error) {
+        console.error("Get candidate applications error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+exports.getCandidateApplications = getCandidateApplications;
 const getApplicationHistory = async (req, res) => {
     const { id } = req.params;
     const tenantId = req.user?.tenant_id;

@@ -18,6 +18,8 @@ import { jobStatusLabels } from "../lib/mockData";
 import { Job } from "../types";
 import api from "../lib/api";
 import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
+import ClientInfoModal from "../components/clients/ClientInfoModal";
+import ClientDetailModal from "../components/clients/ClientDetailModal";
 
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-200",
@@ -150,6 +152,8 @@ export default function JobsPage() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isPipelineSelectorOpen, setIsPipelineSelectorOpen] = useState(false);
+  const [isClientInfoOpen, setIsClientInfoOpen] = useState(false);
+  const [viewingClient, setViewingClient] = useState<any | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     client_id: "",
@@ -322,6 +326,13 @@ export default function JobsPage() {
               View Pipeline
             </button>
             <button
+              onClick={() => setIsClientInfoOpen(true)}
+              className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+            >
+              <Building2 size={16} />
+              Client Info
+            </button>
+            <button
               onClick={() => setIsAddModalOpen(true)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
@@ -429,12 +440,96 @@ export default function JobsPage() {
             ))}
           </div>
         )}
+
+        {clients.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center gap-2">
+              <Building2 size={16} className="text-gray-400" />
+              <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wider">
+                Clients ({clients.length})
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {clients.map((client: any) => (
+                <button
+                  key={client.id}
+                  onClick={() => setViewingClient(client)}
+                  className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md hover:border-violet-200 transition-all text-left group"
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center text-white font-bold text-base flex-shrink-0">
+                      {(client.name || "?").charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 group-hover:text-violet-700 transition-colors truncate">
+                        {client.name}
+                      </h3>
+                      <p className="text-xs text-gray-500 truncate">{client.industry || "—"}</p>
+                    </div>
+                    {client.client_priority && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border flex-shrink-0 ${
+                        client.client_priority === "High"
+                          ? "bg-red-50 text-red-700 border-red-100"
+                          : client.client_priority === "Medium"
+                          ? "bg-amber-50 text-amber-700 border-amber-100"
+                          : "bg-green-50 text-green-700 border-green-100"
+                      }`}>
+                        {client.client_priority}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 text-xs text-gray-500">
+                    {client.primary_contact_name && (
+                      <span className="flex items-center gap-1.5">
+                        <Users size={11} className="text-gray-400" />
+                        {client.primary_contact_name}
+                      </span>
+                    )}
+                    {client.primary_contact_email && (
+                      <span className="flex items-center gap-1.5 truncate">
+                        <MapPin size={11} className="text-gray-400 flex-shrink-0" />
+                        {client.primary_contact_email}
+                      </span>
+                    )}
+                    {client.headquarters_location && (
+                      <span className="flex items-center gap-1.5">
+                        <Building2 size={11} className="text-gray-400" />
+                        {client.headquarters_location}
+                      </span>
+                    )}
+                  </div>
+                  {client.client_type && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">
+                        {client.client_type}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {isPipelineSelectorOpen && (
         <PipelineJobSelector
           jobs={jobs}
           onClose={() => setIsPipelineSelectorOpen(false)}
+        />
+      )}
+
+      {isClientInfoOpen && (
+        <ClientInfoModal
+          onClose={() => setIsClientInfoOpen(false)}
+          onSuccess={fetchClients}
+        />
+      )}
+
+      {viewingClient && (
+        <ClientDetailModal
+          client={viewingClient}
+          onClose={() => setViewingClient(null)}
         />
       )}
 

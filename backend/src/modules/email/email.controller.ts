@@ -1,8 +1,226 @@
+import crypto from "crypto";
 import { Response } from "express";
 import nodemailer from "nodemailer";
 import pool from "../../db";
 import env from "../../config/env";
 import { AuthRequest } from "../../middleware/auth";
+
+// ─── Encryption helpers ──────────────────────────────────────────────────────
+// Passwords are stored as AES-256-GCM ciphertext: "<iv_hex>:<tag_hex>:<ct_hex>"
+// SERVER_ENCRYPTION_KEY must be a 64-char hex string (32 bytes) in your .env.
+
+function getEncryptionKey(): Buffer {
+  const hex = env.ENCRYPTION_KEY;
+  if (!hex || hex.length < 64) {
+    throw new Error(
+      "EMAIL_ENCRYPTION_KEY is not set or too short. " +
+        "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    );
+  }
+  return Buffer.from(hex.slice(0, 64), "hex");
+}
+
+function encrypt(plaintext: string): string {
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString("hex")}:${tag.toString("hex")}:${ct.toString("hex")}`;
+}
+
+function decrypt(stored: string): string {
+  const key = getEncryptionKey();
+  const parts = stored.split(":");
+  if (parts.length !== 3) throw new Error("Malformed encrypted value");
+  const [ivHex, tagHex, ctHex] = parts;
+  const decipher = crypto.createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(ivHex, "hex"),
+  );
+  decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+  return (
+    decipher.update(Buffer.from(ctHex, "hex")).toString("utf8") +
+    decipher.final("utf8")
+  );
+}
+
+// ─── SMTP transporter factory ─────────────────────────────────────────────────
+
+const PROVIDER_SMTP: Record<
+  string,
+  { host: string; port: number; secure: boolean }
+> = {
+  zoho:             { host: "smtppro.zoho.in",  port: 465, secure: true  },
+  google_workspace: { host: "smtp.gmail.com",   port: 587, secure: false },
+};
+
+function buildTransporter(email: string, password: string, provider: string) {
+  const smtp = PROVIDER_SMTP[provider] ?? PROVIDER_SMTP.zoho;
+  return nodemailer.createTransport({
+    host:   smtp.host,
+    port:   smtp.port,
+    secure: smtp.secure,
+    auth:   { type: "LOGIN", user: email, pass: password },
+    tls:    { rejectUnauthorized: true, minVersion: "TLSv1.2" },
+  });
+}
+
+// ─── Shared helper: fetch + build transporter for a user ─────────────────────
+
+async function getUserTransporter(userId: string): Promise<{
+  transporter: nodemailer.Transporter;
+  fromEmail: string;
+} | null> {
+  const result = await pool.query(
+    `SELECT email, encrypted_password, provider
+     FROM user_email_config
+     WHERE user_id = $1 AND is_active = true`,
+    [userId],
+  );
+  if (result.rows.length === 0) return null;
+  const { email, encrypted_password, provider } = result.rows[0];
+  let password: string;
+  try {
+    password = decrypt(encrypted_password);
+  } catch {
+    throw new Error(
+      "Stored credentials are corrupt. Please reconnect your email in Settings → Email.",
+    );
+  }
+  return { transporter: buildTransporter(email, password, provider), fromEmail: email };
+}
+
+// ─── GET /email/config ────────────────────────────────────────────────────────
+
+export const getEmailConfig = async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.id;
+  try {
+    const result = await pool.query(
+      `SELECT email, provider, updated_at
+       FROM user_email_config
+       WHERE user_id = $1`,
+      [userId],
+    );
+    if (result.rows.length === 0) {
+      return res.json({ configured: false });
+    }
+    const { email, provider, updated_at } = result.rows[0];
+    return res.json({ configured: true, email, provider, updated_at });
+  } catch (error) {
+    console.error("Get email config error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── POST /email/config ───────────────────────────────────────────────────────
+
+export const saveEmailConfig = async (req: AuthRequest, res: Response) => {
+  const userId   = req.user!.id;
+  const tenantId = req.user!.tenant_id;
+  const { email, appPassword, provider = "zoho" } = req.body;
+
+  if (!email?.trim() || !appPassword?.trim()) {
+    return res
+      .status(400)
+      .json({ message: "Email and app password are required." });
+  }
+  if (!["zoho", "google_workspace"].includes(provider)) {
+    return res.status(400).json({ message: "Unsupported provider." });
+  }
+
+  const cleanPassword = (appPassword as string).replace(/\s+/g, "");
+  let encryptedPassword: string;
+  try {
+    encryptedPassword = encrypt(cleanPassword);
+  } catch (err: any) {
+    console.error("Encryption key error:", err.message);
+    return res
+      .status(500)
+      .json({ message: "Encryption not configured on server. Contact admin." });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO user_email_config
+         (user_id, tenant_id, email, encrypted_password, provider)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, tenant_id) DO UPDATE SET
+         email              = EXCLUDED.email,
+         encrypted_password = EXCLUDED.encrypted_password,
+         provider           = EXCLUDED.provider,
+         is_active          = true,
+         updated_at         = now()`,
+      [userId, tenantId, email.trim(), encryptedPassword, provider],
+    );
+    res.json({
+      configured: true,
+      email: email.trim(),
+      provider,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Save email config error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── DELETE /email/config ─────────────────────────────────────────────────────
+
+export const removeEmailConfig = async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.id;
+  try {
+    await pool.query(
+      `DELETE FROM user_email_config WHERE user_id = $1`,
+      [userId],
+    );
+    res.json({ configured: false });
+  } catch (error) {
+    console.error("Remove email config error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── POST /email/config/test ──────────────────────────────────────────────────
+
+export const testEmailConfig = async (req: AuthRequest, res: Response) => {
+  const userId = req.user!.id;
+  try {
+    const result = await pool.query(
+      `SELECT email, encrypted_password, provider
+       FROM user_email_config
+       WHERE user_id = $1`,
+      [userId],
+    );
+    if (result.rows.length === 0) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "No email configured." });
+    }
+    const { email, encrypted_password, provider } = result.rows[0];
+    let password: string;
+    try {
+      password = decrypt(encrypted_password);
+    } catch {
+      return res.status(400).json({
+        ok: false,
+        message: "Stored credentials are corrupt. Please reconnect your email.",
+      });
+    }
+    const transporter = buildTransporter(email, password, provider);
+    await transporter.verify();
+    res.json({ ok: true, message: `Connected successfully as ${email}` });
+  } catch (error: any) {
+    console.error("Test email config error:", error);
+    res.status(400).json({
+      ok: false,
+      message: error?.message ?? "Connection failed. Check your credentials.",
+    });
+  }
+};
+
+// ─── Email templates ──────────────────────────────────────────────────────────
 
 const templateMap = {
   outreach: {
@@ -22,46 +240,16 @@ const templateMap = {
   },
 };
 
-/**
- * ✅ FIXED TRANSPORTER (Zoho SMTP ONLY - no Gmail override)
- */
-const transporter = nodemailer.createTransport({
-  host: env.SMTP_HOST,
-  port: Number(env.SMTP_PORT) || 465,
-  secure: env.SMTP_SECURE === "true", // true for 465
-  auth: {
-    type: "LOGIN",   // Zoho India (smtppro.zoho.in) requires LOGIN, not PLAIN
-    user: env.SMTP_USER,
-    pass: env.SMTP_PASS,
-  },
-  tls: {
-    rejectUnauthorized: true,
-    minVersion: "TLSv1.2",
-  },
-});
-
-/**
- * ✅ OPTIONAL DEBUG (runs once on startup)
- */
-(async () => {
-  try {
-    await transporter.verify();
-    console.log("✅ SMTP server is ready to send emails");
-  } catch (err) {
-    console.error("❌ SMTP configuration error:", err);
-  }
-})();
-
-const renderTemplate = (template: string, data: Record<string, string>) => {
-  return template.replace(
-    /{{\s*([A-Za-z0-9_]+)\s*}}/g,
-    (_, key) => data[key] || "",
+export const listTemplates = async (_req: AuthRequest, res: Response) => {
+  res.json(
+    Object.entries(templateMap).map(([key, template]) => ({ key, ...template })),
   );
 };
 
+// ─── POST /email/send-single ──────────────────────────────────────────────────
+
 export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
   const { to, subject, body } = req.body;
-
   if (!to || !subject || !body) {
     return res
       .status(400)
@@ -69,33 +257,33 @@ export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    await transporter.sendMail({
-      from: env.SMTP_USER, // ✅ MUST match Zoho authenticated email
+    const userMail = await getUserTransporter(req.user!.id);
+    if (!userMail) {
+      return res.status(400).json({
+        message:
+          "Email not configured. Go to Settings → Email to connect your email.",
+      });
+    }
+    await userMail.transporter.sendMail({
+      from: userMail.fromEmail,
       to,
       subject,
       text: body,
-      html: `<div style="font-family: sans-serif; white-space: pre-wrap;">${body}</div>`,
+      html: `<div style="font-family:sans-serif;white-space:pre-wrap">${body}</div>`,
     });
-
     res.json({ message: "Email sent successfully" });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Send single email error:", error);
-    res.status(500).json({ message: "Unable to send email", error });
+    res
+      .status(500)
+      .json({ message: error?.message ?? "Unable to send email" });
   }
 };
 
-export const listTemplates = async (_req: AuthRequest, res: Response) => {
-  res.json(
-    Object.entries(templateMap).map(([key, template]) => ({
-      key,
-      ...template,
-    })),
-  );
-};
+// ─── POST /email/send ─────────────────────────────────────────────────────────
 
 export const sendEmail = async (req: AuthRequest, res: Response) => {
   const { subject, body, recipients } = req.body;
-
   if (
     !subject ||
     !body ||
@@ -107,15 +295,23 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
       .json({ message: "Subject, body, and recipients are required" });
   }
 
-  const tenantId = req.user?.tenant_id;
-  const createdBy = req.user?.id;
+  const tenantId  = req.user!.tenant_id;
+  const createdBy = req.user!.id;
 
   try {
+    const userMail = await getUserTransporter(createdBy);
+    if (!userMail) {
+      return res.status(400).json({
+        message:
+          "Email not configured. Go to Settings → Email to connect your email.",
+      });
+    }
+
     const sendResults = await Promise.allSettled(
       recipients.map((recipient: any) =>
-        transporter.sendMail({
-          from: env.SMTP_USER, // ✅ FIXED
-          to: recipient.email,
+        userMail.transporter.sendMail({
+          from: userMail.fromEmail,
+          to:   recipient.email,
           subject,
           text: body,
           html: `<pre style="font-family:inherit;white-space:pre-wrap">${body}</pre>`,
@@ -124,11 +320,12 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
     );
 
     const deliveredCount = sendResults.filter(
-      (result) => result.status === "fulfilled",
+      (r) => r.status === "fulfilled",
     ).length;
 
     await pool.query(
-      `INSERT INTO email_campaigns (tenant_id, name, subject, body, status, recipient_count, delivered_count, created_by)
+      `INSERT INTO email_campaigns
+         (tenant_id, name, subject, body, status, recipient_count, delivered_count, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         tenantId,
@@ -143,12 +340,12 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
     );
 
     res.json({
-      message: "Emails processed",
+      message:         "Emails processed",
       delivered_count: deliveredCount,
-      recipients: recipients.length,
+      recipients:      recipients.length,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Send email error:", error);
-    res.status(500).json({ message: "Unable to send email", error });
+    res.status(500).json({ message: error?.message ?? "Unable to send email" });
   }
 };
