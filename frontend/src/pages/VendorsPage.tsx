@@ -355,6 +355,7 @@ function VendorCard({
   vendor,
   onSendEmail,
   onViewDetails,
+  onDelete,
   emailSending,
   isSelected,
   onToggleSelect,
@@ -362,6 +363,7 @@ function VendorCard({
   vendor: Vendor;
   onSendEmail: (email: string) => void;
   onViewDetails: (vendor: Vendor) => void;
+  onDelete: (id: string) => void;
   emailSending: boolean;
   isSelected: boolean;
   onToggleSelect: (id: string) => void;
@@ -511,6 +513,13 @@ function VendorCard({
           >
             View
           </button>
+          <button
+            onClick={() => onDelete(vendor.id)}
+            title="Delete vendor"
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm"
+          >
+            🗑️
+          </button>
         </div>
       </div>
     </div>
@@ -654,6 +663,17 @@ export default function VendorsPage() {
       );
     } finally {
       setFormLoading(false);
+    }
+  };
+
+  const handleDeleteVendor = async (id: string) => {
+    if (!window.confirm("Delete this vendor? This cannot be undone.")) return;
+    try {
+      await api.delete(`/vendors/${id}`);
+      setVendors((prev) => prev.filter((v) => v.id !== id));
+      if (selectedVendor?.id === id) setSelectedVendor(null);
+    } catch {
+      alert("Failed to delete vendor");
     }
   };
 
@@ -873,6 +893,7 @@ export default function VendorsPage() {
                   sendEmail(email, { subject: "Job Opportunity from ZorHire" })
                 }
                 onViewDetails={setSelectedVendor}
+                onDelete={handleDeleteVendor}
                 emailSending={emailSending}
                 isSelected={selectedIds.has(vendor.id)}
                 onToggleSelect={toggleSelect}

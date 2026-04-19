@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Dependencies — kept for fallback when Tika server is unavailable
+// Dependencies
 // ---------------------------------------------------------------------------
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require("pdf-parse") as (
@@ -9,8 +9,6 @@ const pdfParse = require("pdf-parse") as (
 const mammoth = require("mammoth") as {
   extractRawText: (opts: { buffer: Buffer }) => Promise<{ value: string }>;
 };
-
-import { extractTextWithTika } from "../../services/tika.service";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,6 +23,8 @@ export type ParsedResumeData = {
   current_company?: string;
   current_location?: string;
   summary?: string;
+  parsed?: boolean;
+  raw_text?: string;
 };
 
 export type ParsedJobData = {
@@ -37,17 +37,37 @@ export type ParsedJobData = {
   salary_min?: number;
   salary_max?: number;
   description?: string;
+  parsed?: boolean;
+  raw_text?: string;
 };
 
 // ---------------------------------------------------------------------------
 // Text normalisation
 // ---------------------------------------------------------------------------
+
+/**
+ * Fix PDFs where characters are extracted individually: "J o h n D o e" → "JohnDoe".
+ * Matches 3+ single letters each separated by exactly one space (word-boundary guarded).
+ */
+const fixSpacedText = (text: string): string =>
+  text.replace(
+    /(?<![A-Za-z])((?:[A-Za-z] ){2,}[A-Za-z])(?![A-Za-z])/g,
+    (match) => match.replace(/ /g, ""),
+  );
+
 const normalizeText = (value: string) =>
   value
     .replace(/\r/g, "\n")
     .replace(/\t/g, " ")
+    .replace(/[^\x00-\x7F]/g, " ") // remove non-ASCII artifacts from PDF extraction
     .replace(/[ ]{2,}/g, " ")
     .trim();
+
+/**
+ * Full pre-processing pipeline applied to raw extracted text before any parsing.
+ * Fixes spaced characters first, then normalizes whitespace and strips non-ASCII.
+ */
+const cleanText = (text: string): string => normalizeText(fixSpacedText(text));
 
 // ---------------------------------------------------------------------------
 // File text extraction
@@ -94,17 +114,9 @@ export const extractFileText = async (file?: Express.Multer.File) => {
   if (!file || !file.buffer) return "";
   console.log("[Parse] File:", file.originalname, "| MIME:", file.mimetype);
 
-  const tikaText = await extractTextWithTika(file);
-  if (tikaText !== null) {
-    const normalized = normalizeText(tikaText);
-    console.log(`[Parse] Tika extracted ${normalized.length} chars`);
-    return normalized;
-  }
-
-  console.log("[Parse] Using local fallback parsers");
   const text = await readFileTextFallback(file);
-  const normalized = normalizeText(text);
-  console.log(`[Parse] Fallback extracted ${normalized.length} chars`);
+  const normalized = cleanText(text);
+  console.log(`[Parse] Extracted ${normalized.length} chars`);
   return normalized;
 };
 
@@ -222,13 +234,15 @@ const buildSectionMap = (content: string): SectionMap => {
   map.set(currentSection, "");
 
   for (const rawLine of lines) {
-    const canonical = isHeadingLine(rawLine);
+    const trimmed = rawLine.trim();
+    if (trimmed.length < 2) continue; // skip noise lines
+    const canonical = isHeadingLine(trimmed);
     if (canonical) {
       currentSection = canonical;
       if (!map.has(currentSection)) map.set(currentSection, "");
       continue;
     }
-    map.set(currentSection, (map.get(currentSection) ?? "") + rawLine + "\n");
+    map.set(currentSection, (map.get(currentSection) ?? "") + trimmed + "\n");
   }
 
   return map;
@@ -410,7 +424,25 @@ const parseSkills = (map: SectionMap, rawContent: string): string[] => {
   }
   if (fromPhrases.length >= 3) return dedupeStr(fromPhrases);
 
-  // ── 3. Dense-enumeration lines (headingless resumes) ─────────────────────
+  // ── 3. Tech-keyword scan across entire text ──────────────────────────────
+  // Used when no skills section and no proficiency phrases were found.
+  const TECH_KEYWORDS = [
+    "javascript","typescript","python","java","c#","c++","go","rust","ruby","php","swift","kotlin",
+    "react","next.js","nextjs","angular","vue","svelte","redux","tailwind","bootstrap",
+    "node.js","nodejs","express","fastapi","django","flask","spring","laravel","nestjs",
+    "html","css","sass","graphql","rest","grpc","websocket",
+    "postgresql","mysql","mongodb","redis","sqlite","elasticsearch","dynamodb","firebase",
+    "aws","azure","gcp","docker","kubernetes","terraform","ansible","jenkins","github actions",
+    "git","linux","bash","nginx","apache",
+    "machine learning","deep learning","tensorflow","pytorch","scikit-learn","pandas","numpy",
+    "sql","nosql","microservices","ci/cd","agile","scrum","jira",
+  ];
+
+  const lowerContent = rawContent.toLowerCase();
+  const fromKeywords = TECH_KEYWORDS.filter((kw) => lowerContent.includes(kw));
+  if (fromKeywords.length >= 2) return dedupeStr(fromKeywords);
+
+  // ── 4. Dense-enumeration lines (headingless resumes) ─────────────────────
   // A line with ≥3 comma/pipe/bullet-separated short tokens that don't look
   // like prose is almost certainly a skill list.
   const enumSkills: string[] = [];
@@ -771,11 +803,12 @@ const parseBudget = (rawContent: string) => {
 // ---------------------------------------------------------------------------
 
 export const parseResumeText = (content: string): ParsedResumeData => {
-  const normalized = normalizeText(content);
+  console.log("[Parse] Resume parsing started");
+  const normalized = cleanText(content);
   const map = buildSectionMap(normalized);
   const workHistory = parseWorkHistory(map, normalized);
 
-  return {
+  const result: ParsedResumeData = {
     name: parseName(map),
     email: parseEmail(normalized),
     phone: parsePhone(normalized),
@@ -786,10 +819,21 @@ export const parseResumeText = (content: string): ParsedResumeData => {
     current_location: parseLocation(map, normalized),
     summary: parseSummary(map, normalized),
   };
+
+  const hasKeyFields = !!(result.name || result.email || result.phone);
+  if (!hasKeyFields) {
+    console.log("[Parse] Resume: key fields missing — attaching raw fallback");
+    return { ...result, parsed: false, raw_text: normalized };
+  }
+
+  result.parsed = true;
+  console.log("[Parse] Resume parsed:", JSON.stringify({ name: result.name, email: result.email, skills_count: result.skills?.length }));
+  return result;
 };
 
 export const parseVendorText = (content: string) => {
-  const normalized = normalizeText(content);
+  console.log("[Parse] Vendor parsing started");
+  const normalized = cleanText(content);
   const map = buildSectionMap(normalized);
   const resume = parseResumeText(normalized);
 
@@ -827,19 +871,26 @@ export const parseVendorText = (content: string) => {
 };
 
 export const parseJobDescriptionText = (content: string): ParsedJobData => {
-  const normalized = normalizeText(content);
+  console.log("[Parse] JD parsing started");
+  const normalized = cleanText(content);
   const map = buildSectionMap(normalized);
   const skills = parseSkills(map, normalized);
   const exp = parseExperienceYears(map, normalized);
   const budget = parseBudget(normalized);
 
-  // For JDs experience_min/max may differ — check for range text
   const rangeMatch = normalized.match(
     /(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs|year)\b/i,
   );
 
-  return {
-    title: parseJobTitle(map, normalized),
+  const title = parseJobTitle(map, normalized);
+  if (!title) {
+    console.log("[Parse] JD: title missing — attaching raw fallback");
+    const empty: ParsedJobData = { title: "", location: "", required_skills: [], description: normalized.slice(0, 3000) };
+    return { ...empty, parsed: false, raw_text: normalized };
+  }
+
+  const result: ParsedJobData = {
+    title,
     location: parseLocation(map, normalized),
     required_skills: skills,
     experience_min: rangeMatch ? Number(parseFloat(rangeMatch[1])) : exp,
@@ -848,5 +899,9 @@ export const parseJobDescriptionText = (content: string): ParsedJobData => {
     salary_min: budget.salary_min,
     salary_max: budget.salary_max,
     description: normalized.slice(0, 3000),
+    parsed: true,
   };
+
+  console.log("[Parse] JD parsed:", JSON.stringify({ title: result.title, skills_count: result.required_skills?.length }));
+  return result;
 };

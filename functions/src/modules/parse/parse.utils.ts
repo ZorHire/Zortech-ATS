@@ -9,6 +9,12 @@ const mammoth = require("mammoth") as {
 };
 
 import { extractTextWithTika } from "../../services/tika.service";
+import {
+  parseResumeWithGemini,
+  parseJobDescriptionWithGemini,
+  parseVendorWithGemini,
+} from "../../services/gemini.service";
+import env from "../../config/env";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -327,7 +333,7 @@ export const extractFileText = async (file?: Express.Multer.File) => {
   return normalized;
 };
 
-export const parseResumeText = (content: string): ParsedResumeData => {
+const parseResumeTextRegex = (content: string): ParsedResumeData => {
   const normalized = normalizeText(content);
   return {
     name: parseName(normalized),
@@ -342,6 +348,19 @@ export const parseResumeText = (content: string): ParsedResumeData => {
   };
 };
 
+export const parseResumeText = async (content: string): Promise<ParsedResumeData> => {
+  if (env.GEMINI_API_KEY) {
+    try {
+      const result = await parseResumeWithGemini(content);
+      console.log("[Parse] Gemini resume parse succeeded");
+      return result;
+    } catch (err) {
+      console.warn("[Parse] Gemini resume parse failed, falling back to regex:", err instanceof Error ? err.message : err);
+    }
+  }
+  return parseResumeTextRegex(content);
+};
+
 export type ParsedVendorData = {
   company_name?: string;
   email?: string;
@@ -351,7 +370,7 @@ export type ParsedVendorData = {
   summary?: string;
 };
 
-export const parseVendorText = (content: string): ParsedVendorData => {
+const parseVendorTextRegex = (content: string): ParsedVendorData => {
   const normalized = normalizeText(content);
   return {
     company_name:
@@ -366,7 +385,20 @@ export const parseVendorText = (content: string): ParsedVendorData => {
   };
 };
 
-export const parseJobDescriptionText = (content: string): ParsedJobData => {
+export const parseVendorText = async (content: string): Promise<ParsedVendorData> => {
+  if (env.GEMINI_API_KEY) {
+    try {
+      const result = await parseVendorWithGemini(content);
+      console.log("[Parse] Gemini vendor parse succeeded");
+      return result;
+    } catch (err) {
+      console.warn("[Parse] Gemini vendor parse failed, falling back to regex:", err instanceof Error ? err.message : err);
+    }
+  }
+  return parseVendorTextRegex(content);
+};
+
+const parseJobDescriptionTextRegex = (content: string): ParsedJobData => {
   const normalized = normalizeText(content);
   const skills = parseSkills(normalized);
   const experience = parseExperience(normalized);
@@ -383,4 +415,17 @@ export const parseJobDescriptionText = (content: string): ParsedJobData => {
     salary_max: budget.salary_max,
     description: normalized.slice(0, 3000),
   };
+};
+
+export const parseJobDescriptionText = async (content: string): Promise<ParsedJobData> => {
+  if (env.GEMINI_API_KEY) {
+    try {
+      const result = await parseJobDescriptionWithGemini(content);
+      console.log("[Parse] Gemini JD parse succeeded");
+      return result;
+    } catch (err) {
+      console.warn("[Parse] Gemini JD parse failed, falling back to regex:", err instanceof Error ? err.message : err);
+    }
+  }
+  return parseJobDescriptionTextRegex(content);
 };

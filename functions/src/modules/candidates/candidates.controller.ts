@@ -77,35 +77,38 @@ export const getCandidateById = async (req: AuthRequest, res: Response) => {
 };
 
 export const createCandidate = async (req: AuthRequest, res: Response) => {
-  const file = req.file;
-  const body = req.body || {};
-  const tenantId = req.user?.tenant_id;
-  const createdBy = req.user?.id;
-
-  const resumeText =
-    (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-  const parsed = parseResumeText(resumeText);
-
-  const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
-  const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";
-  const email = body.email || parsed.email;
-  const phone = body.phone || parsed.phone;
-  const current_title = body.current_title || parsed.current_title || "";
-  const current_company = body.current_company || parsed.current_company || "";
-  const experience_years = Number(body.experience_years || parsed.experience_years || 0);
-  const current_location = body.current_location || parsed.current_location || "";
-  const preferred_location = body.preferred_location || "";
-  const notice_period_days = Number(body.notice_period_days || 30);
-  const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
-  const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
-  const skills = normalizeSkills(body.skills || parsed.skills);
-  const summary = body.summary || parsed.summary || "";
-  const source = body.source || "direct";
-  const gdpr_consent = body.gdpr_consent === "true" || body.gdpr_consent === true;
-  // Firebase Functions has no persistent disk — use body.resume_url if provided
-  const resumeUrl = body.resume_url || null;
-
   try {
+    const file = req.file;
+    const body = req.body || {};
+    const tenantId = req.user?.tenant_id;
+    const createdBy = req.user?.id;
+
+    // extractFileText can throw (pdf-parse/mammoth failures); keep inside try/catch
+    // so errors return 500 rather than reaching the global 400 handler.
+    const resumeText =
+      (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
+    const parsed = await parseResumeText(resumeText);
+
+    const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
+    const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";
+    // Trim and convert empty strings to null so pg never receives undefined
+    const email = (body.email || parsed.email || "").trim() || null;
+    const phone = (body.phone || parsed.phone || "").trim() || null;
+    const current_title = body.current_title || parsed.current_title || "";
+    const current_company = body.current_company || parsed.current_company || "";
+    const experience_years = Number(body.experience_years || parsed.experience_years || 0);
+    const current_location = body.current_location || parsed.current_location || "";
+    const preferred_location = body.preferred_location || "";
+    const notice_period_days = Number(body.notice_period_days || 30);
+    const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
+    const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
+    const skills = normalizeSkills(body.skills || parsed.skills);
+    const summary = body.summary || parsed.summary || "";
+    const source = body.source || "direct";
+    const gdpr_consent = body.gdpr_consent === "true" || body.gdpr_consent === true;
+    // Firebase Functions has no persistent disk — use body.resume_url if provided
+    const resumeUrl = body.resume_url || null;
+
     if (!email && !phone) {
       return res.status(400).json({
         message: "At least email or phone is required for candidate creation",
@@ -113,8 +116,8 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     }
 
     const duplicateResult = await pool.query(
-      `SELECT id FROM candidates WHERE tenant_id = $1 AND deleted_at IS NULL AND (LOWER(email) = LOWER($2) OR (phone IS NOT NULL AND phone = $3)) LIMIT 1`,
-      [tenantId, email, phone],
+      `SELECT id FROM candidates WHERE tenant_id = $1 AND deleted_at IS NULL AND (email IS NOT NULL AND LOWER(email) = LOWER($2) OR phone IS NOT NULL AND phone = $3) LIMIT 1`,
+      [tenantId, email ?? "", phone ?? ""],
     );
     if (duplicateResult.rows.length > 0) {
       return res.status(409).json({ message: "Candidate with this email or phone already exists" });
@@ -131,9 +134,9 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       ],
     );
     res.status(201).json(result.rows[0]);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create candidate error:", error);
-    res.status(500).json({ message: "Internal server error" });
+    res.status(500).json({ message: error?.message || "Internal server error" });
   }
 };
 

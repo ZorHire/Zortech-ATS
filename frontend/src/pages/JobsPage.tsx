@@ -44,7 +44,7 @@ const workModeLabel: Record<string, string> = {
   onsite: "Onsite",
 };
 
-function JobCard({ job }: { job: Job }) {
+function JobCard({ job, onDelete }: { job: Job; onDelete: (id: string) => void }) {
   const salary =
     job.salary_min && job.salary_max
       ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L - INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
@@ -132,7 +132,14 @@ function JobCard({ job }: { job: Job }) {
         </span>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+      <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(job.id); }}
+          title="Delete job"
+          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm"
+        >
+          🗑️
+        </button>
         <Link
           to={`/jobs/${job.id}`}
           className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
@@ -306,6 +313,26 @@ export default function JobsPage() {
     on_hold: jobs.filter((j) => j.status === "on_hold").length,
   };
 
+  const handleDeleteJob = async (id: string) => {
+    if (!window.confirm("Delete this job opening? This cannot be undone.")) return;
+    try {
+      await api.delete(`/jobs/${id}`);
+      setJobs(jobs.filter((j) => j.id !== id));
+    } catch {
+      alert("Failed to delete job");
+    }
+  };
+
+  const handleDeleteClient = async (id: string) => {
+    if (!window.confirm("Delete this client? This cannot be undone.")) return;
+    try {
+      await api.delete(`/clients/${id}`);
+      setClients(clients.filter((c) => c.id !== id));
+    } catch {
+      alert("Failed to delete client");
+    }
+  };
+
   const handleViewPipeline = () => {
     if (jobs.length === 0) return;
     setIsPipelineSelectorOpen(true);
@@ -436,7 +463,7 @@ export default function JobsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((job) => (
-              <JobCard key={job.id} job={job} />
+              <JobCard key={job.id} job={job} onDelete={handleDeleteJob} />
             ))}
           </div>
         )}
@@ -499,10 +526,17 @@ export default function JobsPage() {
                     )}
                   </div>
                   {client.client_type && (
-                    <div className="mt-3 pt-3 border-t border-gray-100">
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
                       <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">
                         {client.client_type}
                       </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteClient(client.id); }}
+                        title="Delete client"
+                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm"
+                      >
+                        🗑️
+                      </button>
                     </div>
                   )}
                 </button>

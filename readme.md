@@ -14,16 +14,16 @@ ZorHire centralizes recruitment operations in a secure, modular environment — 
 - **Forced Password Update** — New users receive a temporary password and must change it on first login.
 - **Role-Based Access Control** — Granular permissions across all API endpoints: Super Admin, ATS Admin, Vendor Manager, Recruiter, Sourcing Specialist.
 - **Multi-Tenant Isolation** — All data is scoped per organization; tenants never access each other's records.
-- **Candidate Management** — Full candidate profiles with professional history, skills, resume upload, inline resume preview, and an immutable activity timeline.
-- **Job Lifecycle** — End-to-end job management: JD intake, skill matching, recruiter assignment, and stage tracking.
+- **Candidate Management** — Full candidate profiles with professional history, skills, resume upload, inline resume preview, and an immutable activity timeline. Candidates can be deleted directly from the card view.
+- **Job Lifecycle** — End-to-end job management: JD intake, skill matching, recruiter assignment, and stage tracking. Jobs can be deleted directly from the card view.
 - **Pipeline View** — Kanban-style pipeline board for visualizing and updating candidate stages across jobs. Supports 11 forward stages: `new → sourced → screened → shortlisted → submitted_to_client → client_interview_scheduled → interview_completed → selected → offer_extended → offer_accepted → joined`, plus `disqualified`.
 - **Application Status Actions** — From the Candidate modal, recruiters can:
   - **Move to Next Stage** — advances the candidate's pipeline stage in one click via the live API.
   - **Send Individual Email** — sends a personalized shortlisting email from the recruiter's own SMTP account.
   - **Schedule Interview** — collects date, time, and interview type (video / phone / in-person) and dispatches a formatted interview invite email.
-- **Client Management** — Create detailed client profiles (contact info, billing model, SLA, contract dates, stakeholders, tags) and view them as cards on the Jobs page. Clicking a card opens a full read-only detail view.
-- **Vendor Management** — Manage staffing vendors with profile parsing and skill indexing.
-- **Document Parsing** — Upload resumes, job descriptions, or vendor profiles (PDF, DOCX, DOC, TXT) and auto-populate structured fields. Uses **Apache Tika** as the primary extractor with a **pdf-parse / mammoth** local fallback.
+- **Client Management** — Create detailed client profiles (contact info, billing model, SLA, contract dates, stakeholders, tags) and view them as cards on the Jobs page. Clicking a card opens a full read-only detail view. Clients can be deleted directly from the card.
+- **Vendor Management** — Manage staffing vendors with profile parsing and skill indexing. Vendors can be deleted individually from the card or in bulk via the selection action bar.
+- **Document Parsing** — Upload resumes, job descriptions, or vendor profiles (PDF, DOCX, DOC, TXT) and auto-populate structured fields. Uses **Gemini AI** (`gemini-2.5-flash-lite`) for cloud-based intelligent parsing with a **local rule-based fallback** (pdf-parse / mammoth + section-map architecture).
 - **Per-User SMTP Email System** — Each user configures their own outbound email credentials (host, port, username, password). Passwords are stored encrypted with **AES-256-GCM**. Emails are sent from the individual user's address, not a shared server account.
 - **Bulk Email Campaigns** — Target candidates by stage or skill with templated bulk email blasts.
 - **Analytics** — Recruitment metrics and reporting dashboard.
@@ -50,10 +50,10 @@ ZorHire centralizes recruitment operations in a secure, modular environment — 
 - **JWT** — stateless session management
 - **bcryptjs** — password hashing
 - **Nodemailer** — transactional email via configurable SMTP
-- **pdf-parse v1** — PDF text extraction fallback
-- **mammoth** — DOCX/DOC text extraction fallback
-- **Apache Tika** — primary document text extractor (PDF, DOCX, DOC, TXT)
-- **busboy** — multipart file upload handling (Cloud Run compatible)
+- **Gemini AI** (`gemini-2.5-flash-lite`) — cloud-based AI document parsing (resumes, JDs, vendor profiles)
+- **pdf-parse v1** — local PDF text extraction (fallback)
+- **mammoth** — local DOCX/DOC text extraction (fallback)
+- **busboy** — multipart file upload handling (Cloud Run compatible; replaces multer)
 
 ### Infrastructure
 
@@ -140,7 +140,6 @@ All configuration lives in a single `.env` at the project root.
 | `SERVER_JWT_SECRET`    | JWT signing secret                                            |
 | `SERVER_NODE_ENV`      | `development` or `production`                                 |
 | `VITE_API_URL`         | Frontend API base URL                                         |
-| `TIKA_URL`             | Apache Tika server URL for document parsing                   |
 | `SERVER_SMTP_HOST`     | Default SMTP host (used as fallback if user has no config)    |
 | `SERVER_SMTP_PORT`     | Default SMTP port                                             |
 | `SERVER_SMTP_SECURE`   | TLS flag (`true`/`false`)                                     |
@@ -192,16 +191,38 @@ Stage transitions are recorded in `pipeline_events` with the actor, timestamp, a
 
 The `/v1/parse` endpoints accept multipart file uploads (PDF, DOCX, DOC, TXT, max 8 MB) and return structured JSON.
 
-| Endpoint                | Returns                                                                                                                              |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /v1/parse/resume` | `name`, `email`, `phone`, `skills`, `experience_years`, `current_title`, `current_company`, `current_location`, `summary`            |
-| `POST /v1/parse/jd`     | `title`, `location`, `required_skills`, `experience_min`, `experience_max`, `budget_text`, `salary_min`, `salary_max`, `description` |
-| `POST /v1/parse/vendor` | `company_name`, `email`, `phone`, `skills`, `location`, `summary`                                                                    |
+| Endpoint                | Returns                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /v1/parse/resume` | `name`, `email`, `phone`, `skills`, `experience_years`, `current_title`, `current_company`, `current_location`, `summary`, `parsed`, `raw_text`     |
+| `POST /v1/parse/jd`     | `title`, `location`, `required_skills`, `experience_min`, `experience_max`, `budget_text`, `salary_min`, `salary_max`, `description`, `parsed`      |
+| `POST /v1/parse/vendor` | `company_name`, `email`, `phone`, `skills`, `location`, `summary`                                                                                   |
+
+> `parsed: false` is returned (with `raw_text` containing the full extracted text) when key fields could not be determined, allowing the frontend to prompt the user for manual input rather than silently returning empty fields.
 
 **Extraction pipeline:**
 
-1. **Apache Tika** (primary) — reliable extraction for all formats including complex PDFs.
-2. **pdf-parse v1 / mammoth** (fallback) — used automatically when Tika is unreachable.
+1. **pdf-parse v1** — PDF text extraction (local)
+2. **mammoth** — DOCX / DOC extraction (local)
+3. **UTF-8 buffer read** — plain TXT (local)
+
+Extracted text is then passed to **Gemini AI** (`gemini-2.5-flash-lite`) for structured field extraction. The local rule-based parser (section-map architecture, see below) serves as the fallback when Gemini is unavailable.
+
+**Pre-processing applied before any field parsing:**
+- **Spaced-character repair** — fixes PDFs where characters are extracted individually (`"J o h n D o e"` → `"JohnDoe"`)
+- **Non-ASCII strip** — removes encoding artifacts (`[^\x00-\x7F]`)
+- **Whitespace normalisation** — collapses tabs, double spaces; strips noise lines (< 2 chars)
+
+**Parsing architecture — section-map + heuristics (no AI):**
+- `buildSectionMap` walks the document once, mapping 60+ heading aliases to canonical sections (`skills`, `experience`, `summary`, etc.)
+- Each field parser queries the map; no repeated full-document scans
+- `parseExperienceYears` calculates from date ranges (`Jan 2019 – Present`) with overlap merging
+- `parseWorkHistory` uses three patterns: inline `"at"`, pipe-separated entries, multi-line blocks
+
+**Skills extraction — four-tier priority:**
+1. Labeled skills section block
+2. Proficiency phrases (`"proficient in"`, `"experience with"`, etc.)
+3. Tech keyword scan — 70+ known technologies matched against full text
+4. Dense-enumeration lines — any line with ≥3 delimited short tokens
 
 Skills parsing handles multi-sub-section formats (`Languages:`, `Frameworks:`, `Tools:`, etc.) and returns a flat deduplicated list.
 

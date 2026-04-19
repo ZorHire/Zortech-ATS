@@ -143,6 +143,12 @@ export default function CandidatesPage() {
 
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!formData.email.trim() && !formData.phone.trim()) {
+      alert("Please provide at least an email or phone number.");
+      return;
+    }
+
     try {
       const formDataToSend = new FormData();
 
@@ -190,8 +196,12 @@ export default function CandidatesPage() {
       });
 
       setResumeFile(null);
-    } catch (error) {
-      alert("Failed to add candidate");
+    } catch (error: any) {
+      const msg =
+        error?.data?.message ||
+        error?.message ||
+        "Failed to add candidate";
+      alert(msg);
     }
   };
 
@@ -504,6 +514,16 @@ export default function CandidatesPage() {
                     </button>
                     <button className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all">
                       <Phone size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(candidate.id);
+                      }}
+                      title="Delete candidate"
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                    >
+                      🗑️
                     </button>
                   </div>
                 </div>

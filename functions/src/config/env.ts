@@ -21,6 +21,8 @@ export const env = {
   EMAIL_PASS: process.env.SERVER_EMAIL_PASS || process.env.EMAIL_PASS || "",
   // AES-256 key used to encrypt per-user SMTP app-passwords at rest
   EMAIL_ENCRYPTION_KEY: process.env.SERVER_EMAIL_ENCRYPTION_KEY || process.env.EMAIL_ENCRYPTION_KEY || "",
+  // Gemini API key for AI-powered document parsing
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
 };
 
 export default env;

@@ -1,4 +1,4 @@
-import { BarChart3, TrendingUp, Users, Clock, Target, Award, ArrowUp, ArrowDown } from 'lucide-react';
+import { Users, Clock, Target, Award, ArrowUp, ArrowDown } from 'lucide-react';
 import Header from '../components/layout/Header';
 
 function BarChart({ data }: { data: { label: string; value: number; color: string }[] }) {
@@ -83,6 +83,17 @@ function MetricRow({ label, value, prev, unit }: { label: string; value: number;
   );
 }
 
+function downloadCSV(filename: string, rows: string[][]) {
+  const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AnalyticsPage() {
   const funnelData = [
     { stage: 'Sourced', count: 248, conv: 100 },
@@ -94,6 +105,52 @@ export default function AnalyticsPage() {
     { stage: 'Offer Extended', count: 22, conv: 9 },
     { stage: 'Offer Accepted', count: 18, conv: 7 },
   ];
+
+  const recruiterData = [
+    { name: 'Ravi Kumar', jobs: 5, sourced: 124, shortlisted: 48, submitted: 31, placed: 12, score: 94 },
+    { name: 'Meera Patel', jobs: 4, sourced: 98, shortlisted: 36, submitted: 22, placed: 9, score: 87 },
+    { name: 'Aakash Singh', jobs: 6, sourced: 156, shortlisted: 52, submitted: 38, placed: 14, score: 96 },
+    { name: 'Pooja Sharma', jobs: 3, sourced: 67, shortlisted: 24, submitted: 15, placed: 6, score: 78 },
+  ];
+
+  const handleExportReport = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const rows: string[][] = [
+      ['ZorHire Analytics Report — Last 30 Days', today],
+      [],
+      ['HIRING FUNNEL'],
+      ['Stage', 'Candidates', 'Conversion %'],
+      ...funnelData.map(r => [r.stage, String(r.count), `${r.conv}%`]),
+      [],
+      ['KEY METRICS'],
+      ['Metric', 'Value', 'Previous', 'Change'],
+      ['Time to Source', '6 days', '8 days', '-25%'],
+      ['Time to Screen', '3 days', '5 days', '-40%'],
+      ['Time to Submit', '9 days', '11 days', '-18%'],
+      ['Interview → Offer', '68%', '62%', '+10%'],
+      ['Offer Accept Rate', '81%', '76%', '+7%'],
+      [],
+      ['SUMMARY STATS'],
+      ['Metric', 'Value'],
+      ['Total Placements', '94'],
+      ['Avg. Time-to-Fill', '18 days'],
+      ['Offer Accept Rate', '81%'],
+      ['Candidate Pipeline', '1247'],
+      [],
+      ['RECRUITER PRODUCTIVITY'],
+      ['Recruiter', 'Assigned Jobs', 'Candidates Sourced', 'Shortlisted', 'Submissions', 'Placements', 'Activity Score'],
+      ...recruiterData.map(r => [r.name, String(r.jobs), String(r.sourced), String(r.shortlisted), String(r.submitted), String(r.placed), String(r.score)]),
+    ];
+    downloadCSV(`zorhire-analytics-${today}.csv`, rows);
+  };
+
+  const handleExportRecruiterCSV = () => {
+    const rows: string[][] = [
+      ['Recruiter', 'Assigned Jobs', 'Candidates Sourced', 'Shortlisted', 'Submissions', 'Placements', 'Activity Score'],
+      ...recruiterData.map(r => [r.name, String(r.jobs), String(r.sourced), String(r.shortlisted), String(r.submitted), String(r.placed), String(r.score)]),
+    ];
+    downloadCSV(`recruiter-productivity-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  };
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -108,11 +165,8 @@ export default function AnalyticsPage() {
               <option>This Quarter</option>
               <option>This Year</option>
             </select>
-            <button 
-              onClick={() => {
-                const token = localStorage.getItem('token');
-                window.open(`${import.meta.env.VITE_API_URL}/admin/analytics/export?token=${token}`, '_blank');
-              }}
+            <button
+              onClick={handleExportReport}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 bg-white"
             >
               Export Report
@@ -235,7 +289,7 @@ export default function AnalyticsPage() {
               <h3 className="font-semibold text-gray-900">Recruiter Productivity</h3>
               <p className="text-xs text-gray-400">This quarter</p>
             </div>
-            <button className="text-sm text-blue-600 hover:underline">Download CSV</button>
+            <button onClick={handleExportRecruiterCSV} className="text-sm text-blue-600 hover:underline">Download CSV</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -247,12 +301,7 @@ export default function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {[
-                  { name: 'Ravi Kumar', jobs: 5, sourced: 124, shortlisted: 48, submitted: 31, placed: 12, score: 94 },
-                  { name: 'Meera Patel', jobs: 4, sourced: 98, shortlisted: 36, submitted: 22, placed: 9, score: 87 },
-                  { name: 'Aakash Singh', jobs: 6, sourced: 156, shortlisted: 52, submitted: 38, placed: 14, score: 96 },
-                  { name: 'Pooja Sharma', jobs: 3, sourced: 67, shortlisted: 24, submitted: 15, placed: 6, score: 78 },
-                ].map(r => (
+                {recruiterData.map(r => (
                   <tr key={r.name} className="hover:bg-gray-50">
                     <td className="py-2.5 px-3 font-medium text-gray-900">{r.name}</td>
                     <td className="py-2.5 px-3 text-gray-600">{r.jobs}</td>

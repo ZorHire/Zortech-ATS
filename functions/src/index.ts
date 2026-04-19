@@ -27,9 +27,11 @@ app.use(
   }),
 );
 
-// CRITICAL: Mount parse routes BEFORE express.json() to prevent stream consumption
-// This allows Multer to handle the multipart/form-data request first
+// CRITICAL: Mount multipart routes BEFORE express.json() to prevent stream consumption.
+// express.json() (body-parser) exhausts the request stream in Cloud Run even for
+// non-JSON content types, so any route using multer MUST be registered here.
 app.use("/v1/parse", parseRoutes);
+app.use("/v1/candidates", candidateRoutes);
 
 app.use(express.json());
 
@@ -50,13 +52,12 @@ const v1Router = express.Router();
 v1Router.use("/auth", authRoutes);
 v1Router.use("/clients", clientRoutes);
 v1Router.use("/jobs", jobRoutes);
-v1Router.use("/candidates", candidateRoutes);
 v1Router.use("/vendors", vendorRoutes);
 v1Router.use("/admin", adminRoutes);
 v1Router.use("/pipeline", pipelineRoutes);
 v1Router.use("/email", emailRoutes);
 v1Router.use("/email-campaigns", emailCampaignRoutes);
-// Note: /parse is now mounted globally before express.json()
+// Note: /parse and /candidates are mounted globally before express.json()
 
 app.use("/v1", v1Router);
 
@@ -79,6 +80,6 @@ app.use(
 );
 
 export const api = onRequest(
-  { secrets: ["SERVER_DATABASE_URL", "SERVER_JWT_SECRET", "SERVER_EMAIL_ENCRYPTION_KEY"] },
+  { secrets: ["SERVER_DATABASE_URL", "SERVER_JWT_SECRET", "SERVER_EMAIL_ENCRYPTION_KEY", "GEMINI_API_KEY"] },
   app,
 );

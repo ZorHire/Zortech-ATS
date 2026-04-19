@@ -61,7 +61,7 @@ export const parseResume = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text (not a scanned image) and try again." });
     }
 
-    const parsed = parseResumeText(content);
+    const parsed = await parseResumeText(content);
 
     const fallbackName =
       parsed.name ||
@@ -138,7 +138,7 @@ export const parseJobDescription = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text and try again." });
     }
 
-    const parsed = parseJobDescriptionText(content);
+    const parsed = await parseJobDescriptionText(content);
 
     return res.json({
       title: parsed.title || "",
@@ -194,7 +194,7 @@ export const parseVendor = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text and try again." });
     }
 
-    const parsed = parseVendorText(content);
+    const parsed = await parseVendorText(content);
 
     return res.json({
       company_name: parsed.company_name || "",

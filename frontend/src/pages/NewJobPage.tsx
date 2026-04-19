@@ -111,8 +111,8 @@ export default function NewJobPage() {
           .filter((s) => s !== ""),
       });
       navigate("/jobs");
-    } catch (error) {
-      alert("Unable to create job. Please verify all fields and try again.");
+    } catch (error: any) {
+      alert(error?.data?.message || error?.message || "Unable to create job. Please verify all fields and try again.");
     }
   };
 
