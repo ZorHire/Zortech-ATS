@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye, FileText, Send, Trash2, ChevronRight, Loader2, Upload } from 'lucide-react';
 import { Candidate } from '../../types';
 import api from '../../lib/api';
+import ComposeEmailModal from './ComposeEmailModal';
 
 const RESUME_API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
@@ -61,7 +62,10 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   const [selectedApp, setSelectedApp] = React.useState<any>(null);
   const [stageSaving, setStageSaving] = React.useState(false);
 
-  // Email states
+  // Compose email modal
+  const [showCompose, setShowCompose] = React.useState(false);
+
+  // Email states (used by schedule interview only now)
   const [emailSending, setEmailSending] = React.useState(false);
   const [emailMsg, setEmailMsg] = React.useState("");
 
@@ -229,6 +233,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
@@ -382,12 +387,11 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   )}
 
                   <button
-                    onClick={handleSendShortlistEmail}
-                    disabled={emailSending}
-                    className="w-full py-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={() => setShowCompose(true)}
+                    className="w-full py-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
                   >
-                    {emailSending ? <Loader2 size={16} className="animate-spin" /> : <Mail size={16} />}
-                    Send individual Email
+                    <Mail size={16} />
+                    Send Email
                   </button>
 
                   <button
@@ -571,6 +575,16 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
         </div>
       </div>
     </div>
+
+    {showCompose && (
+      <ComposeEmailModal
+        to={localCandidate.email}
+        toName={`${localCandidate.first_name} ${localCandidate.last_name}`}
+        positionHint={selectedApp?.job?.title || localCandidate.current_title || "the position"}
+        onClose={() => setShowCompose(false)}
+      />
+    )}
+    </>
   );
 };
 

@@ -17,6 +17,7 @@ import Header from "../components/layout/Header";
 import { Candidate } from "../types";
 import api from "../lib/api";
 import CandidateModal from "../components/candidates/CandidateModal";
+import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
 import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
 
@@ -43,7 +44,8 @@ const sourceBadgeColors: Record<string, string> = {
 };
 
 export default function CandidatesPage() {
-  const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
+  const { emailToast } = useSendEmail();
+  const [composeTarget, setComposeTarget] = useState<Candidate | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -501,14 +503,10 @@ export default function CandidatesPage() {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        sendEmail(candidate.email, {
-                          firstName: candidate.first_name,
-                          subject: "Quick catch-up — ZorHire",
-                        });
+                        setComposeTarget(candidate);
                       }}
-                      disabled={emailSending}
                       title="Send email"
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
                     >
                       <Mail size={14} />
                     </button>
@@ -757,6 +755,15 @@ export default function CandidatesPage() {
       )}
 
       {emailToast && <EmailToast {...emailToast} />}
+
+      {composeTarget && (
+        <ComposeEmailModal
+          to={composeTarget.email}
+          toName={`${composeTarget.first_name} ${composeTarget.last_name}`}
+          positionHint={composeTarget.current_title || "the position"}
+          onClose={() => setComposeTarget(null)}
+        />
+      )}
     </div>
   );
 }
