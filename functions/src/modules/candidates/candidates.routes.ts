@@ -12,6 +12,7 @@ router.get("/search", authMiddleware, tenantIsolation, candidateController.searc
 router.get("/export", authMiddleware, tenantIsolation, candidateController.exportCandidates);
 
 router.get("/", authMiddleware, tenantIsolation, candidateController.getCandidates);
+router.get("/:id/resume", authMiddleware, tenantIsolation, candidateController.getResumeFile);
 router.get("/:id", authMiddleware, tenantIsolation, candidateController.getCandidateById);
 router.post("/", authMiddleware, tenantIsolation, authorize(recruiterRoles), candidateUpload, candidateController.createCandidate);
 router.patch("/:id", authMiddleware, tenantIsolation, authorize(recruiterRoles), candidateUpload, candidateController.updateCandidate);

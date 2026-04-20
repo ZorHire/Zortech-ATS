@@ -106,8 +106,6 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     const summary = body.summary || parsed.summary || "";
     const source = body.source || "direct";
     const gdpr_consent = body.gdpr_consent === "true" || body.gdpr_consent === true;
-    // Firebase Functions has no persistent disk — use body.resume_url if provided
-    const resumeUrl = body.resume_url || null;
 
     if (!email && !phone) {
       return res.status(400).json({
@@ -123,17 +121,29 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       return res.status(409).json({ message: "Candidate with this email or phone already exists" });
     }
 
-    const result = await pool.query(
-      `INSERT INTO candidates (tenant_id, first_name, last_name, email, phone, current_title, current_company, experience_years, current_location, preferred_location, notice_period_days, current_ctc, expected_ctc, skills, summary, resume_url, source, gdpr_consent, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    const insertResult = await pool.query(
+      `INSERT INTO candidates (tenant_id, first_name, last_name, email, phone, current_title, current_company, experience_years, current_location, preferred_location, notice_period_days, current_ctc, expected_ctc, skills, summary, source, gdpr_consent, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
       [
         tenantId, first_name, last_name, email, phone, current_title, current_company,
         experience_years, current_location, preferred_location, notice_period_days,
-        current_ctc, expected_ctc, skills, summary, resumeUrl, source, gdpr_consent, createdBy,
+        current_ctc, expected_ctc, skills, summary, source, gdpr_consent, createdBy,
       ],
     );
-    res.status(201).json(result.rows[0]);
+
+    let candidate = insertResult.rows[0];
+
+    if (file?.buffer) {
+      const resumeUrl = `/candidates/${candidate.id}/resume`;
+      const updated = await pool.query(
+        `UPDATE candidates SET resume_url = $1, resume_data = $2, resume_mime_type = $3 WHERE id = $4 RETURNING *`,
+        [resumeUrl, file.buffer, file.mimetype || "application/octet-stream", candidate.id],
+      );
+      candidate = updated.rows[0];
+    }
+
+    res.status(201).json(candidate);
   } catch (error: any) {
     console.error("Create candidate error:", error);
     res.status(500).json({ message: error?.message || "Internal server error" });
@@ -142,11 +152,11 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
 
 export const updateCandidate = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
+  const file = req.file;
   const body = req.body || {};
   const tenantId = req.user?.tenant_id;
   const skills = normalizeSkills(body.skills);
-  // Firebase Functions has no persistent disk — use body.resume_url if provided
-  const resumeUrl = body.resume_url;
+  const resumeUrl = file?.buffer ? `/candidates/${id}/resume` : body.resume_url;
 
   try {
     const result = await pool.query(
@@ -166,10 +176,12 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
        skills = COALESCE($13, skills),
        summary = COALESCE($14, summary),
        resume_url = COALESCE($15, resume_url),
-       source = COALESCE($16, source),
-       is_active = COALESCE($17, is_active),
+       resume_data = COALESCE($16, resume_data),
+       resume_mime_type = COALESCE($17, resume_mime_type),
+       source = COALESCE($18, source),
+       is_active = COALESCE($19, is_active),
        updated_at = now()
-       WHERE id = $18 AND tenant_id = $19 AND deleted_at IS NULL
+       WHERE id = $20 AND tenant_id = $21 AND deleted_at IS NULL
        RETURNING *`,
       [
         body.first_name, body.last_name, body.email, body.phone, body.current_title,
@@ -179,7 +191,11 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
         body.current_ctc ? Number(body.current_ctc) : undefined,
         body.expected_ctc ? Number(body.expected_ctc) : undefined,
         skills.length > 0 ? skills : undefined,
-        body.summary, resumeUrl, body.source, body.is_active, id, tenantId,
+        body.summary,
+        resumeUrl ?? undefined,
+        file?.buffer ?? undefined,
+        file?.buffer ? (file.mimetype || "application/octet-stream") : undefined,
+        body.source, body.is_active, id, tenantId,
       ],
     );
 
@@ -189,6 +205,27 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update candidate error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getResumeFile = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT resume_data, resume_mime_type FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+      [id, tenantId],
+    );
+    const row = result.rows[0];
+    if (!row || !row.resume_data) {
+      return res.status(404).json({ message: "No resume file stored for this candidate" });
+    }
+    res.setHeader("Content-Type", row.resume_mime_type || "application/pdf");
+    res.setHeader("Content-Disposition", "inline");
+    res.send(row.resume_data);
+  } catch (error) {
+    console.error("Get resume error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

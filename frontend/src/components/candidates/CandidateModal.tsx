@@ -1,7 +1,9 @@
 import React from 'react';
-import { X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye, FileText, Send, Trash2, ChevronRight, Loader2 } from 'lucide-react';
+import { X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye, FileText, Send, Trash2, ChevronRight, Loader2, Upload } from 'lucide-react';
 import { Candidate } from '../../types';
 import api from '../../lib/api';
+
+const RESUME_API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 interface CandidateModalProps {
   candidate: Candidate;
@@ -46,8 +48,12 @@ const STAGE_COLORS: Record<string, string> = {
   disqualified: "bg-red-100 text-red-600",
 };
 
-const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete }) => {
+const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete, onUpdate }) => {
   const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity'>('overview');
+  const [localCandidate, setLocalCandidate] = React.useState<Candidate>(candidate);
+  const [resumeUploading, setResumeUploading] = React.useState(false);
+  const [resumeBlobUrl, setResumeBlobUrl] = React.useState<string | null>(null);
+  const [resumeLoading, setResumeLoading] = React.useState(false);
 
   // Application state
   const [applications, setApplications] = React.useState<any[]>([]);
@@ -162,6 +168,63 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     } finally {
       setScheduleSending(false);
       setTimeout(() => setEmailMsg(""), 4000);
+    }
+  };
+
+  // Fetch resume blob whenever resume_url is set, so iframe, download, and full-screen all work with auth
+  React.useEffect(() => {
+    if (!localCandidate.resume_url) { setResumeBlobUrl(null); return; }
+    let revoked = false;
+    const load = async () => {
+      setResumeLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const r = await fetch(`${RESUME_API}${localCandidate.resume_url}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!r.ok) throw new Error();
+        const blob = await r.blob();
+        if (!revoked) setResumeBlobUrl(URL.createObjectURL(blob));
+      } catch {
+        if (!revoked) setResumeBlobUrl(null);
+      } finally {
+        if (!revoked) setResumeLoading(false);
+      }
+    };
+    load();
+    return () => { revoked = true; };
+  }, [localCandidate.resume_url]);
+
+  // Revoke blob URL on unmount to free memory
+  React.useEffect(() => {
+    return () => { if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl); };
+  }, [resumeBlobUrl]);
+
+  const handleDownload = () => {
+    if (!resumeBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = resumeBlobUrl;
+    a.download = `Resume_${localCandidate.last_name}.pdf`;
+    a.click();
+  };
+
+  const handleFullScreen = () => {
+    if (!resumeBlobUrl) window.open(`${RESUME_API}${localCandidate.resume_url}`, '_blank');
+    else window.open(resumeBlobUrl, '_blank');
+  };
+
+  const handleUploadResume = async (file: File) => {
+    setResumeUploading(true);
+    try {
+      const form = new FormData();
+      form.append('resume', file);
+      const updated = await api.patch(`/candidates/${localCandidate.id}`, form);
+      setLocalCandidate(updated);
+      onUpdate(updated);
+    } catch (err: any) {
+      alert(err?.message || 'Failed to upload resume');
+    } finally {
+      setResumeUploading(false);
     }
   };
 
@@ -403,42 +466,78 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
           {activeTab === 'resume' && (
             <div className="h-full flex flex-col space-y-4">
-              <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
-                    <FileText size={20} />
+              {localCandidate.resume_url ? (
+                <>
+                  <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
+                        <FileText size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">Resume_{localCandidate.last_name}.pdf</p>
+                        <p className="text-[10px] text-gray-400 font-medium">Uploaded resume</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleDownload}
+                        disabled={!resumeBlobUrl || resumeLoading}
+                        className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Download size={14} /> Download
+                      </button>
+                      <button
+                        onClick={handleFullScreen}
+                        disabled={resumeLoading}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Eye size={14} /> Full Screen
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">Resume_{candidate.last_name}.pdf</p>
-                    <p className="text-[10px] text-gray-400 font-medium">Uploaded resume</p>
+                  <div className="flex-1 rounded-2xl overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center" style={{ minHeight: '420px' }}>
+                    {resumeLoading ? (
+                      <Loader2 size={28} className="animate-spin text-blue-400" />
+                    ) : resumeBlobUrl ? (
+                      <iframe
+                        src={resumeBlobUrl}
+                        className="w-full h-full"
+                        style={{ minHeight: '420px' }}
+                        title="Resume Preview"
+                      />
+                    ) : (
+                      <div className="text-center space-y-2">
+                        <FileText size={36} className="mx-auto text-gray-300" />
+                        <p className="text-sm text-gray-400">Preview unavailable</p>
+                      </div>
+                    )}
                   </div>
+                </>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center gap-5 bg-white rounded-2xl border-2 border-dashed border-gray-200 py-16 px-8">
+                  <div className="w-16 h-16 bg-blue-50 text-blue-400 rounded-2xl flex items-center justify-center">
+                    <Upload size={28} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-base font-semibold text-gray-700">No resume uploaded</p>
+                    <p className="text-sm text-gray-400 mt-1">Upload a PDF, DOCX, or DOC file (max 8 MB)</p>
+                  </div>
+                  <label className={`cursor-pointer px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all flex items-center gap-2 ${resumeUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                    {resumeUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                    {resumeUploading ? 'Uploading…' : 'Choose File'}
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      className="hidden"
+                      disabled={resumeUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleUploadResume(file);
+                      }}
+                    />
+                  </label>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { if (candidate.resume_url) window.open(candidate.resume_url, '_blank'); else alert('No resume available'); }}
-                    className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all flex items-center gap-2"
-                  >
-                    <Download size={14} /> Download
-                  </button>
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2">
-                    <Eye size={14} /> Full Screen
-                  </button>
-                </div>
-              </div>
-              <div className="flex-1 bg-gray-200 rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-300">
-                {candidate.resume_url ? (
-                  <div className="text-center space-y-3">
-                    <FileText size={48} className="mx-auto text-gray-400" />
-                    <p className="text-gray-500 font-medium">Resume preview available</p>
-                    <p className="text-xs text-gray-400">(Open in full screen to view)</p>
-                  </div>
-                ) : (
-                  <div className="text-center space-y-3">
-                    <FileText size={48} className="mx-auto text-gray-400" />
-                    <p className="text-gray-500 font-medium">No resume uploaded</p>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
 
@@ -451,7 +550,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                 {applications.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-6">No pipeline activity yet</p>
                 ) : (
-                  applications.map((app, idx) => (
+                  applications.map((app) => (
                     <div key={app.id} className="relative pl-8 before:absolute before:left-[11px] before:top-2 before:bottom-[-24px] before:w-[2px] before:bg-gray-100 last:before:hidden">
                       <div className="absolute left-0 top-1.5 w-[24px] h-[24px] bg-white border-4 border-gray-50 rounded-full flex items-center justify-center">
                         <div className="w-2 h-2 bg-blue-500 rounded-full" />
