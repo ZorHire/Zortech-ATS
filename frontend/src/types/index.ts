@@ -3,7 +3,6 @@ export type UserRole =
   | "ats_admin"
   | "vendor_manager"
   | "recruiter"
-  | "sourcing_specialist"
   | "client_user"
   | "vendor_user";
 

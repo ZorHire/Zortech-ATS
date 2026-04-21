@@ -137,6 +137,34 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
+export const resetPassword = async (req: Request, res: Response) => {
+  const { email, newPassword } = req.body;
+  if (!email || !newPassword) {
+    return res.status(400).json({ message: "Email and new password are required." });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+  try {
+    const userResult = await pool.query(
+      "SELECT id FROM users WHERE email = $1 AND is_active = true",
+      [email.trim().toLowerCase()],
+    );
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "No active account found with that email." });
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      "UPDATE users SET password = $1, must_change_password = false, updated_at = now() WHERE id = $2",
+      [hashedPassword, userResult.rows[0].id],
+    );
+    res.json({ message: "Password reset successfully." });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const changePassword = async (req: any, res: Response) => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.user.id;

@@ -12,7 +12,8 @@ ZorHire centralizes recruitment operations in a secure, modular environment — 
 
 - **Invite-Only Access** — Public registration is disabled. Users are invited and managed by an Administrator only.
 - **Forced Password Update** — New users receive a temporary password and must change it on first login.
-- **Role-Based Access Control** — Granular permissions across all API endpoints: Super Admin, ATS Admin, Vendor Manager, Recruiter, Sourcing Specialist.
+- **Self-Service Password Reset** — Users can reset their password directly from the login page by providing their registered email and a new password (min. 8 characters). No admin intervention required.
+- **Role-Based Access Control** — Granular permissions across all API endpoints: Super Admin, Accounts Manager, Vendor Manager, Recruiter.
 - **Multi-Tenant Isolation** — All data is scoped per organization; tenants never access each other's records.
 - **Candidate Management** — Full candidate profiles with professional history, skills, resume upload, inline resume preview, and an immutable activity timeline. Candidates can be deleted directly from the card view.
 - **Job Lifecycle** — End-to-end job management: JD intake, skill matching, recruiter assignment, and stage tracking. Jobs can be deleted directly from the card view.

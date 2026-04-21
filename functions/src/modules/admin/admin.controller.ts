@@ -27,7 +27,6 @@ const ALLOWED_ROLES = [
   "ats_admin",
   "senior_recruiter",
   "recruiter",
-  "sourcing_specialist",
   "client_user",
   "vendor_user",
   "vendor_manager",

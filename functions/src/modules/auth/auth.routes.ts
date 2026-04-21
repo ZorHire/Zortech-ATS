@@ -12,6 +12,7 @@ const changePasswordSchema = { required: ["currentPassword", "newPassword"] };
 router.post("/setup", validate({ required: ["email", "password", "full_name", "setupToken"] }), authController.setupAdmin);
 
 router.post("/login", validate(loginSchema), authController.login);
+router.post("/reset-password", validate({ required: ["email", "newPassword"] }), authController.resetPassword);
 router.post(
   "/register",
   validate({ required: ["email", "password", "full_name"] }),
