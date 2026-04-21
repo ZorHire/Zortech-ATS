@@ -16,7 +16,10 @@ import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PipelinePage from "./pages/PipelinePage";
 import EmailSettingsPage from "./pages/EmailSettingsPage";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+// vendor_user may access /jobs, /jobs/:id, and /pipeline/:jobId
+const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline"];
+
+function ProtectedRoute({ children, path }: { children: React.ReactNode; path?: string }) {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -36,6 +39,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <ChangePasswordPage />;
   }
 
+  if (user.role === "vendor_user" && path) {
+    const allowed = VENDOR_ALLOWED_PREFIXES.some((p: string) => path === p || path.startsWith(p + "/"));
+    if (!allowed) return <Navigate to="/jobs" replace />;
+  }
+
   return <Layout>{children}</Layout>;
 }
 
@@ -51,7 +59,7 @@ function AppRoutes() {
       <Route
         path="/"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/">
             <DashboardPage />
           </ProtectedRoute>
         }
@@ -59,7 +67,7 @@ function AppRoutes() {
       <Route
         path="/jobs"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/jobs">
             <JobsPage />
           </ProtectedRoute>
         }
@@ -67,7 +75,7 @@ function AppRoutes() {
       <Route
         path="/jobs/new"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/jobs/new">
             <NewJobPage />
           </ProtectedRoute>
         }
@@ -75,7 +83,7 @@ function AppRoutes() {
       <Route
         path="/jobs/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/jobs/:id">
             <JobDetailPage />
           </ProtectedRoute>
         }
@@ -83,7 +91,7 @@ function AppRoutes() {
       <Route
         path="/pipeline/:jobId"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/pipeline/:jobId">
             <PipelinePage />
           </ProtectedRoute>
         }
@@ -91,7 +99,7 @@ function AppRoutes() {
       <Route
         path="/candidates"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/candidates">
             <CandidatesPage />
           </ProtectedRoute>
         }
@@ -99,7 +107,7 @@ function AppRoutes() {
       <Route
         path="/vendors"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/vendors">
             <VendorsPage />
           </ProtectedRoute>
         }
@@ -107,7 +115,7 @@ function AppRoutes() {
       <Route
         path="/search"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/search">
             <ResumeSearchPage />
           </ProtectedRoute>
         }
@@ -115,7 +123,7 @@ function AppRoutes() {
       <Route
         path="/analytics"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/analytics">
             <AnalyticsPage />
           </ProtectedRoute>
         }
@@ -123,7 +131,7 @@ function AppRoutes() {
       <Route
         path="/admin"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/admin">
             <AdminPage />
           </ProtectedRoute>
         }
@@ -131,7 +139,7 @@ function AppRoutes() {
       <Route
         path="/settings/email"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute path="/settings/email">
             <EmailSettingsPage />
           </ProtectedRoute>
         }

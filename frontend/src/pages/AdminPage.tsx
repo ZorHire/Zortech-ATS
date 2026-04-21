@@ -37,13 +37,16 @@ export default function AdminPage() {
   const [newFullName, setNewFullName] = useState("");
   const [newRole, setNewRole] = useState("recruiter");
   const [newPassword, setNewPassword] = useState("");
+  const [newVendorId, setNewVendorId] = useState("");
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [vendors, setVendors] = useState<{ id: string; company_name: string }[]>([]);
 
   const { sendEmail, sending, emailToast } = useSendEmail();
 
   useEffect(() => {
     fetchUsers();
+    api.get("/vendors").then(setVendors).catch(() => {});
   }, []);
 
   const fetchUsers = async () => {
@@ -67,6 +70,7 @@ export default function AdminPage() {
         full_name: newFullName,
         role: newRole,
         password: newPassword,
+        ...(newRole === "vendor_user" && newVendorId ? { vendor_id: newVendorId } : {}),
       });
 
       // Close modal and refresh list before sending email
@@ -161,6 +165,7 @@ export default function AdminPage() {
     setNewFullName("");
     setNewRole("recruiter");
     setNewPassword("");
+    setNewVendorId("");
     setFormError("");
   };
 
@@ -175,6 +180,7 @@ export default function AdminPage() {
     ats_admin: "Accounts Manager",
     vendor_manager: "Vendor Manager",
     recruiter: "Recruiter",
+    vendor_user: "Vendor",
   };
 
   const roleIcons: Record<string, any> = {
@@ -182,6 +188,7 @@ export default function AdminPage() {
     ats_admin: ShieldCheck,
     vendor_manager: UserCheck,
     recruiter: UserPlus,
+    vendor_user: Shield,
   };
 
   return (
@@ -425,16 +432,33 @@ export default function AdminPage() {
                 </label>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
+                  onChange={(e) => { setNewRole(e.target.value); setNewVendorId(""); }}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {Object.entries(roleLabels).map(([val, label]) => (
-                    <option key={val} value={val}>
-                      {label}
-                    </option>
+                    <option key={val} value={val}>{label}</option>
                   ))}
                 </select>
               </div>
+
+              {newRole === "vendor_user" && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">
+                    Linked Vendor Company
+                  </label>
+                  <select
+                    value={newVendorId}
+                    onChange={(e) => setNewVendorId(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">— Select vendor —</option>
+                    {vendors.map((v) => (
+                      <option key={v.id} value={v.id}>{v.company_name}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 ml-1 text-[10px] text-gray-400">This vendor's assigned jobs will be visible to the user.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">

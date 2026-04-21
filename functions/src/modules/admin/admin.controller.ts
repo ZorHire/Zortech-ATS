@@ -33,7 +33,7 @@ const ALLOWED_ROLES = [
 ] as const;
 
 export const createUser = async (req: AuthRequest, res: Response) => {
-  const { email, password, full_name, role } = req.body;
+  const { email, password, full_name, role, vendor_id } = req.body;
   const tenantId = req.user?.tenant_id;
 
   if (!email || !password || !role) {
@@ -74,6 +74,13 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       await client.query(
         "INSERT INTO profiles (id, email, full_name) VALUES ($1, $2, $3)",
         [userId, email, full_name || ""],
+      );
+    }
+
+    if (role === "vendor_user" && vendor_id) {
+      await client.query(
+        "UPDATE profiles SET vendor_id = $1 WHERE id = $2",
+        [vendor_id, userId],
       );
     }
 

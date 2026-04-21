@@ -13,7 +13,7 @@ ZorHire centralizes recruitment operations in a secure, modular environment — 
 - **Invite-Only Access** — Public registration is disabled. Users are invited and managed by an Administrator only.
 - **Forced Password Update** — New users receive a temporary password and must change it on first login.
 - **Self-Service Password Reset** — Users can reset their password directly from the login page by providing their registered email and a new password (min. 8 characters). No admin intervention required.
-- **Role-Based Access Control** — Granular permissions across all API endpoints: Super Admin, Accounts Manager, Vendor Manager, Recruiter.
+- **Role-Based Access Control** — Granular permissions across all API endpoints: Super Admin, Accounts Manager, Vendor Manager, Recruiter, and Vendor (read-only access to assigned jobs only).
 - **Multi-Tenant Isolation** — All data is scoped per organization; tenants never access each other's records.
 - **Candidate Management** — Full candidate profiles with professional history, skills, resume upload, inline resume preview, and an immutable activity timeline. Candidates can be deleted directly from the card view.
 - **Job Lifecycle** — End-to-end job management: JD intake, skill matching, recruiter assignment, and stage tracking. Jobs can be deleted directly from the card view.
@@ -29,7 +29,8 @@ ZorHire centralizes recruitment operations in a secure, modular environment — 
 - **Bulk Email Campaigns** — Target candidates by stage or skill with templated bulk email blasts.
 - **Analytics** — Recruitment metrics and reporting dashboard.
 - **Resume Search** — Cross-candidate skill and keyword search.
-- **Admin Dashboard** — User invitations, role assignment, and account management.
+- **Admin Dashboard** — User invitations, role assignment, and account management. When creating a `Vendor` user, admins select the linked vendor company from a dropdown — the association is stored in `profiles.vendor_id` and embedded in the JWT for zero-overhead filtering on every request.
+- **Vendor Portal (Read-Only)** — Users with the `vendor_user` role see only the Jobs page, filtered to jobs assigned to their vendor (`jobs.assigned_vendor_id`). All action buttons, status filters, and client cards are hidden. They can track the full candidate pipeline for their jobs but cannot mutate any data (pipeline moves, applications, emails).
 
 ---
 

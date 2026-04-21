@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Plus,
   Search,
@@ -44,7 +45,7 @@ const workModeLabel: Record<string, string> = {
   onsite: "Onsite",
 };
 
-function JobCard({ job, onDelete }: { job: Job; onDelete: (id: string) => void }) {
+function JobCard({ job, onDelete, readOnly = false }: { job: Job; onDelete: (id: string) => void; readOnly?: boolean }) {
   const salary =
     job.salary_min && job.salary_max
       ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L - INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
@@ -133,18 +134,20 @@ function JobCard({ job, onDelete }: { job: Job; onDelete: (id: string) => void }
       </div>
 
       <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(job.id); }}
-          title="Delete job"
-          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm"
-        >
-          🗑️
-        </button>
+        {!readOnly && (
+          <button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(job.id); }}
+            title="Delete job"
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm"
+          >
+            🗑️
+          </button>
+        )}
         <Link
           to={`/jobs/${job.id}`}
-          className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          className={`text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors ${readOnly ? "ml-auto" : ""}`}
         >
-          View Job
+          View Details
         </Link>
       </div>
     </div>
@@ -152,6 +155,8 @@ function JobCard({ job, onDelete }: { job: Job; onDelete: (id: string) => void }
 }
 
 export default function JobsPage() {
+  const { profile } = useAuth();
+  const isVendor = profile?.role === "vendor_user";
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -341,32 +346,34 @@ export default function JobsPage() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
-        title="Job Descriptions"
-        subtitle={`${counts.active} active jobs across all clients`}
+        title={isVendor ? "Your Assigned Jobs" : "Job Descriptions"}
+        subtitle={isVendor ? `${jobs.length} job${jobs.length !== 1 ? "s" : ""} assigned to your vendor` : `${counts.active} active jobs across all clients`}
         actions={
-          <div className="flex gap-2">
-            <button
-              onClick={handleViewPipeline}
-              className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
-            >
-              <TrendingUp size={16} />
-              View Pipeline
-            </button>
-            <button
-              onClick={() => setIsClientInfoOpen(true)}
-              className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
-            >
-              <Building2 size={16} />
-              Client Info
-            </button>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              <Plus size={16} />
-              Add JD
-            </button>
-          </div>
+          !isVendor ? (
+            <div className="flex gap-2">
+              <button
+                onClick={handleViewPipeline}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
+              >
+                <TrendingUp size={16} />
+                View Pipeline
+              </button>
+              <button
+                onClick={() => setIsClientInfoOpen(true)}
+                className="flex items-center gap-2 bg-violet-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-violet-700 transition-colors"
+              >
+                <Building2 size={16} />
+                Client Info
+              </button>
+              <button
+                onClick={() => setIsAddModalOpen(true)}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                <Plus size={16} />
+                Add JD
+              </button>
+            </div>
+          ) : undefined
         }
       />
 
@@ -430,25 +437,27 @@ export default function JobsPage() {
           </div>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
-          {["all", "active", "pending_review", "on_hold", "closed_filled"].map(
-            (status) => (
-              <button
-                key={status}
-                onClick={() => setStatusFilter(status)}
-                className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
-                  statusFilter === status
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                }`}
-              >
-                {status === "all"
-                  ? `All (${counts.all})`
-                  : `${jobStatusLabels[status]} (${jobs.filter((j) => j.status === status).length})`}
-              </button>
-            ),
-          )}
-        </div>
+        {!isVendor && (
+          <div className="flex gap-2 flex-wrap">
+            {["all", "active", "pending_review", "on_hold", "closed_filled"].map(
+              (status) => (
+                <button
+                  key={status}
+                  onClick={() => setStatusFilter(status)}
+                  className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
+                    statusFilter === status
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                  }`}
+                >
+                  {status === "all"
+                    ? `All (${counts.all})`
+                    : `${jobStatusLabels[status]} (${jobs.filter((j) => j.status === status).length})`}
+                </button>
+              ),
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -463,12 +472,12 @@ export default function JobsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((job) => (
-              <JobCard key={job.id} job={job} onDelete={handleDeleteJob} />
+              <JobCard key={job.id} job={job} onDelete={handleDeleteJob} readOnly={isVendor} />
             ))}
           </div>
         )}
 
-        {clients.length > 0 && (
+        {!isVendor && clients.length > 0 && (
           <div className="space-y-3 pt-2">
             <div className="flex items-center gap-2">
               <Building2 size={16} className="text-gray-400" />

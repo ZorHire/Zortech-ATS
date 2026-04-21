@@ -42,6 +42,7 @@ const router = (0, express_1.Router)();
 const loginSchema = { required: ["email", "password"] };
 const changePasswordSchema = { required: ["currentPassword", "newPassword"] };
 router.post("/login", (0, validation_1.validate)(loginSchema), authController.login);
+router.post("/reset-password", (0, validation_1.validate)({ required: ["email", "newPassword"] }), authController.resetPassword);
 router.post("/register", (0, validation_1.validate)({ required: ["email", "password", "full_name"] }), authController.register);
 router.post("/change-password", auth_1.authMiddleware, (0, validation_1.validate)(changePasswordSchema), authController.changePassword);
 router.get("/me", auth_1.authMiddleware, authController.getMe);

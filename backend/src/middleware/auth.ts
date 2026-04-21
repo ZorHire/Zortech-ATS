@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
     email: string;
     role: string;
     tenant_id: string;
+    vendor_id?: string;
   };
 }
 

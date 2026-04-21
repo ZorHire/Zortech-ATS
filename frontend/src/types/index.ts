@@ -6,6 +6,7 @@ export type UserRole =
   | "client_user"
   | "vendor_user";
 
+
 export type JobStatus =
   | "draft"
   | "pending_review"
@@ -49,6 +50,7 @@ export interface Profile {
   avatar_url?: string;
   phone?: string;
   department?: string;
+  vendor_id?: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -93,6 +95,7 @@ export interface Job {
   preferred_skills: string[];
   assigned_recruiter_id?: string;
   assigned_recruiter?: Profile;
+  assigned_vendor_id?: string;
   target_start_date?: string;
   sla_deadline?: string;
   created_by?: string;

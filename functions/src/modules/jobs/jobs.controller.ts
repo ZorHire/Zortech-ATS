@@ -5,6 +5,23 @@ import { AuthRequest } from "../../middleware/auth";
 export const getJobs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
+    const isVendor = req.user?.role === "vendor_user";
+    const vendorId = req.user?.vendor_id;
+
+    if (isVendor) {
+      if (!vendorId) return res.json([]);
+      const result = await pool.query(
+        `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
+                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+         FROM jobs j
+         JOIN clients c ON c.id = j.client_id
+         WHERE j.tenant_id = $1 AND j.deleted_at IS NULL AND j.assigned_vendor_id = $2
+         ORDER BY j.created_at DESC`,
+        [tenantId, vendorId],
+      );
+      return res.json(result.rows);
+    }
+
     const result = await pool.query(
       `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
               (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
@@ -24,6 +41,9 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
 export const getJobById = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const tenantId = req.user?.tenant_id;
+  const isVendor = req.user?.role === "vendor_user";
+  const vendorId = req.user?.vendor_id;
+
   try {
     const result = await pool.query(
       `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client
@@ -35,7 +55,11 @@ export const getJobById = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
     }
-    res.json(result.rows[0]);
+    const job = result.rows[0];
+    if (isVendor && job.assigned_vendor_id !== vendorId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    res.json(job);
   } catch (error) {
     console.error("Get job error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -77,7 +101,8 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
   const {
     title, department, location, work_mode, employment_type, experience_min,
     experience_max, salary_min, salary_max, currency, headcount, priority, status,
-    description, mandatory_skills, preferred_skills, assigned_recruiter_id, target_start_date,
+    description, mandatory_skills, preferred_skills, assigned_recruiter_id,
+    target_start_date, assigned_vendor_id,
   } = req.body;
   const tenantId = req.user?.tenant_id;
 
@@ -102,14 +127,15 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
        preferred_skills = COALESCE($16, preferred_skills),
        assigned_recruiter_id = COALESCE($17, assigned_recruiter_id),
        target_start_date = COALESCE($18, target_start_date),
+       assigned_vendor_id = COALESCE($19, assigned_vendor_id),
        updated_at = now()
-       WHERE id = $19 AND tenant_id = $20 AND deleted_at IS NULL
+       WHERE id = $20 AND tenant_id = $21 AND deleted_at IS NULL
        RETURNING *`,
       [
         title, department, location, work_mode, employment_type, experience_min,
         experience_max, salary_min, salary_max, currency, headcount, priority, status,
         description, mandatory_skills, preferred_skills, assigned_recruiter_id,
-        target_start_date, id, tenantId,
+        target_start_date, assigned_vendor_id ?? null, id, tenantId,
       ],
     );
 

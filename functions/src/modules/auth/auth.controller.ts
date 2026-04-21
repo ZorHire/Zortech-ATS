@@ -56,6 +56,7 @@ export const login = async (req: Request, res: Response) => {
         role: primaryMembership?.role,
         tenant_id: primaryMembership?.tenant_id,
         must_change_password: user.must_change_password,
+        vendor_id: profile?.vendor_id ?? null,
       },
       JWT_SECRET,
       { expiresIn: "24h" },
@@ -72,6 +73,7 @@ export const login = async (req: Request, res: Response) => {
         tenant_name: primaryMembership?.tenant_name,
         must_change_password: user.must_change_password,
         avatar_url: profile?.avatar_url,
+        vendor_id: profile?.vendor_id ?? null,
       },
     });
   } catch (error) {
@@ -304,6 +306,7 @@ export const getMe = async (req: any, res: Response) => {
       tenant_name: primaryMembership?.tenant_name,
       must_change_password: user.must_change_password,
       avatar_url: profile?.avatar_url,
+      vendor_id: profile?.vendor_id ?? null,
     });
   } catch (error) {
     console.error("Get me error:", error);

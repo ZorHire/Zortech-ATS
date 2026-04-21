@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMe = exports.changePassword = exports.register = exports.login = void 0;
+exports.getMe = exports.changePassword = exports.resetPassword = exports.register = exports.login = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("../../db"));
@@ -93,6 +93,29 @@ const register = async (req, res) => {
     }
 };
 exports.register = register;
+const resetPassword = async (req, res) => {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) {
+        return res.status(400).json({ message: "Email and new password are required." });
+    }
+    if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters." });
+    }
+    try {
+        const userResult = await db_1.default.query("SELECT id FROM users WHERE email = $1 AND is_active = true", [email.trim().toLowerCase()]);
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ message: "No active account found with that email." });
+        }
+        const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
+        await db_1.default.query("UPDATE users SET password = $1, must_change_password = false, updated_at = now() WHERE id = $2", [hashedPassword, userResult.rows[0].id]);
+        res.json({ message: "Password reset successfully." });
+    }
+    catch (error) {
+        console.error("Reset password error:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+exports.resetPassword = resetPassword;
 const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = req.user.id;

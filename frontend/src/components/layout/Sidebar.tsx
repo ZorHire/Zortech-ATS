@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
   Briefcase,
   Users,
   Building2,
@@ -10,11 +9,8 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
-  Bell,
   LogOut,
-  Wallet,
   LayoutGrid,
-  CircleUser,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -46,6 +42,7 @@ const navItems = [
       "vendor_manager",
       "recruiter",
       "sourcing_specialist",
+      "vendor_user",
     ],
   },
   {
