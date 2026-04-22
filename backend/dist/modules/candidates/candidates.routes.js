@@ -44,23 +44,17 @@ router.get("/", auth_1.authMiddleware, auth_1.tenantIsolation, candidateControll
 router.get("/:id", auth_1.authMiddleware, auth_1.tenantIsolation, candidateController.getCandidateById);
 router.post("/", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), fileUpload_1.upload.single("resume"), candidateController.createCandidate);
 router.patch("/:id", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), fileUpload_1.upload.single("resume"), candidateController.updateCandidate);
 router.delete("/:id", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), candidateController.deleteCandidate);
 exports.default = router;

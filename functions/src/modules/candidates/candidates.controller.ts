@@ -20,7 +20,7 @@ const normalizeSkills = (value: any) => {
 export const getCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const { search, location, skills, min_experience, max_experience } = req.query;
+    const { search, location, skills, min_experience, max_experience, limit, offset } = req.query;
     const filters: string[] = ["tenant_id = $1", "deleted_at IS NULL"];
     const params: any[] = [tenantId];
 
@@ -49,7 +49,10 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
       filters.push(`experience_years <= $${params.length}`);
     }
 
-    const queryStr = `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC`;
+    const limitVal = Math.min(Number(limit) || 500, 500);
+    const offsetVal = Math.max(Number(offset) || 0, 0);
+    params.push(limitVal, offsetVal);
+    const queryStr = `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
     const result = await pool.query(queryStr, params);
     res.json(result.rows);
   } catch (error) {

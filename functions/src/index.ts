@@ -1,6 +1,9 @@
 import { onRequest } from "firebase-functions/v2/https";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import morgan from "morgan";
+import rateLimit from "express-rate-limit";
 
 import authRoutes from "./modules/auth/auth.routes";
 import clientRoutes from "./modules/clients/clients.routes";
@@ -12,8 +15,12 @@ import pipelineRoutes from "./modules/pipeline/pipeline.routes";
 import emailRoutes from "./modules/email/email.routes";
 import emailCampaignRoutes from "./modules/email/emailCampaign.routes";
 import parseRoutes from "./routes/parse.routes";
+import pool from "./db";
 
 const app = express();
+
+// Security headers
+app.use(helmet({ contentSecurityPolicy: false }));
 
 app.use(
   cors({
@@ -27,6 +34,32 @@ app.use(
   }),
 );
 
+// Request logging
+app.use(morgan("combined"));
+
+// Rate limiters
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many attempts. Please try again in 15 minutes." },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests. Please slow down." },
+});
+
+// Apply strict limiter to auth endpoints
+app.use("/v1/auth", authLimiter);
+
+// Apply general limiter to all API routes
+app.use("/v1", apiLimiter);
+
 // CRITICAL: Mount multipart routes BEFORE express.json() to prevent stream consumption.
 // express.json() (body-parser) exhausts the request stream in Cloud Run even for
 // non-JSON content types, so any route using multer MUST be registered here.
@@ -35,15 +68,14 @@ app.use("/v1/candidates", candidateRoutes);
 
 app.use(express.json());
 
-// Debug logging
-app.use((req, _res, next) => {
-  console.log("Route hit:", req.method, req.url);
-  next();
-});
-
-// Health check
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", message: "Firebase Functions API is running" });
+// Health check — verifies DB connectivity
+app.get("/health", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", db: "connected" });
+  } catch {
+    res.status(503).json({ status: "degraded", db: "unreachable" });
+  }
 });
 
 // Mount all routes under /v1

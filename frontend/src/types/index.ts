@@ -1,9 +1,8 @@
 export type UserRole =
   | "super_admin"
-  | "ats_admin"
+  | "accounts_manager"
   | "vendor_manager"
   | "recruiter"
-  | "client_user"
   | "vendor_user";
 
 

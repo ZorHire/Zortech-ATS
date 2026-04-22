@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 import env from "../config/env";
+import { rolePermissions } from "../config/rolePermissions";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -11,6 +12,7 @@ export interface AuthRequest extends Request {
     role: string;
     tenant_id: string;
     vendor_id?: string;
+    permissions: string[];
   };
 }
 
@@ -31,8 +33,12 @@ export const authMiddleware = (
       email: string;
       role: string;
       tenant_id: string;
+      vendor_id?: string;
     };
-    req.user = decoded;
+    req.user = {
+      ...decoded,
+      permissions: rolePermissions[decoded.role] ?? [],
+    };
     next();
   } catch {
     return res.status(401).json({ message: "Invalid or expired token" });

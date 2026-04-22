@@ -153,7 +153,7 @@ export default function AdminPage() {
 
   const roleLabels: Record<string, string> = {
     super_admin: "Super Admin",
-    ats_admin: "Accounts Manager",
+    accounts_manager: "Accounts Manager",
     vendor_manager: "Vendor Manager",
     recruiter: "Recruiter",
     vendor_user: "Vendor",
@@ -161,7 +161,7 @@ export default function AdminPage() {
 
   const roleIcons: Record<string, any> = {
     super_admin: ShieldAlert,
-    ats_admin: ShieldCheck,
+    accounts_manager: ShieldCheck,
     vendor_manager: UserCheck,
     recruiter: UserPlus,
     vendor_user: Shield,

@@ -292,6 +292,23 @@ CREATE TABLE IF NOT EXISTS interviews (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Indexes for performance (tenant isolation, FK lookups, filter columns)
+CREATE INDEX IF NOT EXISTS idx_candidates_tenant_deleted ON candidates(tenant_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email);
+CREATE INDEX IF NOT EXISTS idx_jobs_tenant_status ON jobs(tenant_id, status, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_client ON jobs(client_id);
+CREATE INDEX IF NOT EXISTS idx_clients_tenant_deleted ON clients(tenant_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_job_applications_job ON job_applications(job_id);
+CREATE INDEX IF NOT EXISTS idx_job_applications_candidate ON job_applications(candidate_id);
+CREATE INDEX IF NOT EXISTS idx_job_applications_tenant ON job_applications(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_job_applications_assigned ON job_applications(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_pipeline_events_application ON pipeline_events(application_id);
+CREATE INDEX IF NOT EXISTS idx_interviews_application ON interviews(application_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_memberships_user ON tenant_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant ON tenant_memberships(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_vendors_tenant ON vendors(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_vendor ON profiles(vendor_id);
+
 -- Seed: primary tenant
 INSERT INTO tenants (id, name, slug)
 VALUES

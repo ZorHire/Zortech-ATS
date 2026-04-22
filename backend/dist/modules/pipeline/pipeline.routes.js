@@ -39,26 +39,20 @@ const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
 router.post("/add", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), pipelineController.addToPipeline);
 router.get("/candidates/:candidateId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, pipelineController.getCandidateApplications);
 router.get("/jobs/:jobId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, pipelineController.getJobApplications);
 router.post("/jobs/:jobId/applications", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), pipelineController.createApplication);
 router.patch("/applications/:id/stage", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), pipelineController.moveApplicationStage);
 router.get("/applications/:id/history", auth_1.authMiddleware, auth_1.tenantIsolation, pipelineController.getApplicationHistory);
 exports.default = router;

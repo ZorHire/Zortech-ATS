@@ -4,10 +4,10 @@ import { authMiddleware, authorize, tenantIsolation } from "../../middleware/aut
 
 const router = Router();
 
-router.get("/users", authMiddleware, tenantIsolation, authorize(["super_admin", "ats_admin"]), adminController.listUsers);
-router.post("/users", authMiddleware, tenantIsolation, authorize(["super_admin", "ats_admin"]), adminController.createUser);
-router.patch("/users/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "ats_admin"]), adminController.updateUser);
-router.delete("/users/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "ats_admin"]), adminController.deleteUser);
-router.post("/users/:id/reset-password", authMiddleware, tenantIsolation, authorize(["super_admin", "ats_admin"]), adminController.resetPassword);
+router.get("/users", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), adminController.listUsers);
+router.post("/users", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), adminController.createUser);
+router.patch("/users/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), adminController.updateUser);
+router.delete("/users/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), adminController.deleteUser);
+router.post("/users/:id/reset-password", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), adminController.resetPassword);
 
 export default router;

@@ -37,7 +37,7 @@ const express_1 = require("express");
 const emailController = __importStar(require("./email.controller"));
 const auth_1 = require("../../middleware/auth");
 const router = (0, express_1.Router)();
-const EMAIL_ROLES = ["super_admin", "ats_admin", "recruiter", "vendor_manager"];
+const EMAIL_ROLES = ["super_admin", "accounts_manager", "recruiter", "vendor_manager"];
 // ─── Per-user SMTP config ─────────────────────────────────────────────────────
 router.get("/config", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.getEmailConfig);
 router.post("/config", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.saveEmailConfig);

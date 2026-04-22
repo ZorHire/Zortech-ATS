@@ -14,21 +14,21 @@ router.post(
   "/",
   authMiddleware,
   tenantIsolation,
-  authorize(["super_admin", "ats_admin", "vendor_manager", "recruiter"]),
+  authorize(["super_admin", "accounts_manager", "vendor_manager", "recruiter"]),
   jobController.createJob,
 );
 router.patch(
   "/:id",
   authMiddleware,
   tenantIsolation,
-  authorize(["super_admin", "ats_admin", "vendor_manager", "recruiter"]),
+  authorize(["super_admin", "accounts_manager", "vendor_manager", "recruiter"]),
   jobController.updateJob,
 );
 router.delete(
   "/:id",
   authMiddleware,
   tenantIsolation,
-  authorize(["super_admin", "ats_admin", "vendor_manager", "recruiter"]),
+  authorize(["super_admin", "accounts_manager", "vendor_manager", "recruiter"]),
   jobController.deleteJob,
 );
 

@@ -7,6 +7,8 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
     const tenantId = req.user?.tenant_id;
     const isVendor = req.user?.role === "vendor_user";
     const vendorId = req.user?.vendor_id;
+    const limitVal = Math.min(Number(req.query.limit) || 500, 500);
+    const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
 
     if (isVendor) {
       if (!vendorId) return res.json([]);
@@ -16,8 +18,8 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
          FROM jobs j
          JOIN clients c ON c.id = j.client_id
          WHERE j.tenant_id = $1 AND j.deleted_at IS NULL AND j.assigned_vendor_id = $2
-         ORDER BY j.created_at DESC`,
-        [tenantId, vendorId],
+         ORDER BY j.created_at DESC LIMIT $3 OFFSET $4`,
+        [tenantId, vendorId, limitVal, offsetVal],
       );
       return res.json(result.rows);
     }
@@ -28,8 +30,8 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
        FROM jobs j
        JOIN clients c ON c.id = j.client_id
        WHERE j.tenant_id = $1 AND j.deleted_at IS NULL
-       ORDER BY j.created_at DESC`,
-      [tenantId],
+       ORDER BY j.created_at DESC LIMIT $2 OFFSET $3`,
+      [tenantId, limitVal, offsetVal],
     );
     res.json(result.rows);
   } catch (error) {

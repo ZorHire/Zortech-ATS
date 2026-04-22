@@ -4,7 +4,7 @@ import { authMiddleware, authorize, tenantIsolation } from "../../middleware/aut
 
 const router = Router();
 
-const recruiterRoles = ["super_admin", "ats_admin", "senior_recruiter", "recruiter", "sourcing_specialist"];
+const recruiterRoles = ["super_admin", "accounts_manager", "recruiter"];
 
 router.get("/", authMiddleware, tenantIsolation, emailController.listCampaigns);
 router.post("/", authMiddleware, tenantIsolation, authorize(recruiterRoles), emailController.createCampaign);

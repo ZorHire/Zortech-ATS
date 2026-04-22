@@ -14,10 +14,8 @@ router.post(
   tenantIsolation,
   authorize([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
   ]),
   pipelineController.addToPipeline,
 );
@@ -40,10 +38,8 @@ router.post(
   tenantIsolation,
   authorize([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
   ]),
   pipelineController.createApplication,
 );
@@ -53,10 +49,8 @@ router.patch(
   tenantIsolation,
   authorize([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
   ]),
   pipelineController.moveApplicationStage,
 );

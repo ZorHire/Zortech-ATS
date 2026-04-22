@@ -7,10 +7,8 @@ const router = Router();
 
 const recruiterRoles = [
   "super_admin",
-  "ats_admin",
-  "senior_recruiter",
+  "accounts_manager",
   "recruiter",
-  "sourcing_specialist",
 ];
 
 // ── Per-user SMTP config ────────────────────────────────────────────────────

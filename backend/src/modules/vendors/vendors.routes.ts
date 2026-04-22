@@ -19,21 +19,21 @@ router.post(
   "/",
   authMiddleware,
   tenantIsolation,
-  authorize(["super_admin", "ats_admin", "vendor_manager"]),
+  authorize(["super_admin", "accounts_manager", "vendor_manager"]),
   vendorController.createVendor,
 );
 router.patch(
   "/:id",
   authMiddleware,
   tenantIsolation,
-  authorize(["super_admin", "ats_admin", "vendor_manager"]),
+  authorize(["super_admin", "accounts_manager", "vendor_manager"]),
   vendorController.updateVendor,
 );
 router.delete(
   "/:id",
   authMiddleware,
   tenantIsolation,
-  authorize(["super_admin", "ats_admin", "vendor_manager"]),
+  authorize(["super_admin", "accounts_manager", "vendor_manager"]),
   vendorController.deleteVendor,
 );
 

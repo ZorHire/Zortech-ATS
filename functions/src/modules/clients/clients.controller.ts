@@ -5,9 +5,11 @@ import { AuthRequest } from "../../middleware/auth";
 export const getClients = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
+    const limitVal = Math.min(Number(req.query.limit) || 500, 500);
+    const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
     const result = await pool.query(
-      "SELECT * FROM clients WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY name ASC",
-      [tenantId],
+      "SELECT * FROM clients WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY name ASC LIMIT $2 OFFSET $3",
+      [tenantId, limitVal, offsetVal],
     );
     res.json(result.rows);
   } catch (error) {

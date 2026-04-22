@@ -41,10 +41,8 @@ router.post(
   tenantIsolation,
   authorize([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
   ]),
   upload.single("resume"),
   candidateController.createCandidate,
@@ -55,10 +53,8 @@ router.patch(
   tenantIsolation,
   authorize([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
   ]),
   upload.single("resume"),
   candidateController.updateCandidate,
@@ -69,10 +65,8 @@ router.delete(
   tenantIsolation,
   authorize([
     "super_admin",
-    "ats_admin",
-    "vendor_manager",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
   ]),
   candidateController.deleteCandidate,
 );

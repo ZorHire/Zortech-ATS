@@ -26,10 +26,9 @@ const navItems = [
     path: "/",
     roles: [
       "super_admin",
-      "ats_admin",
+      "accounts_manager",
       "vendor_manager",
       "recruiter",
-      "sourcing_specialist",
     ],
   },
   {
@@ -38,10 +37,9 @@ const navItems = [
     path: "/jobs",
     roles: [
       "super_admin",
-      "ats_admin",
+      "accounts_manager",
       "vendor_manager",
       "recruiter",
-      "sourcing_specialist",
       "vendor_user",
     ],
   },
@@ -51,10 +49,9 @@ const navItems = [
     path: "/candidates",
     roles: [
       "super_admin",
-      "ats_admin",
+      "accounts_manager",
       "vendor_manager",
       "recruiter",
-      "sourcing_specialist",
     ],
   },
   {
@@ -63,29 +60,28 @@ const navItems = [
     path: "/search",
     roles: [
       "super_admin",
-      "ats_admin",
+      "accounts_manager",
       "vendor_manager",
       "recruiter",
-      "sourcing_specialist",
     ],
   },
   {
     icon: Building2,
     label: "Vendors",
     path: "/vendors",
-    roles: ["super_admin", "ats_admin", "vendor_manager"],
+    roles: ["super_admin", "accounts_manager", "vendor_manager"],
   },
   {
     icon: BarChart3,
     label: "Analytics",
     path: "/analytics",
-    roles: ["super_admin", "ats_admin", "vendor_manager"],
+    roles: ["super_admin", "accounts_manager", "vendor_manager"],
   },
   {
     icon: Settings,
     label: "Admin",
     path: "/admin",
-    roles: ["super_admin", "ats_admin"],
+    roles: ["super_admin", "accounts_manager"],
   },
   {
     icon: Mail,
@@ -93,10 +89,8 @@ const navItems = [
     path: "/settings/email",
     roles: [
       "super_admin",
-      "ats_admin",
-      "senior_recruiter",
+      "accounts_manager",
       "recruiter",
-      "sourcing_specialist",
     ],
   },
 ];

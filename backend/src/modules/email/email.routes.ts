@@ -8,7 +8,7 @@ import {
 
 const router = Router();
 
-const EMAIL_ROLES = ["super_admin", "ats_admin", "recruiter", "vendor_manager"];
+const EMAIL_ROLES = ["super_admin", "accounts_manager", "recruiter", "vendor_manager"];
 
 // ─── Per-user SMTP config ─────────────────────────────────────────────────────
 

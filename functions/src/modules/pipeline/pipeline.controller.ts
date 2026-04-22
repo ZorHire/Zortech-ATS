@@ -182,8 +182,8 @@ export const moveApplicationStage = async (req: AuthRequest, res: Response) => {
     }
 
     const updateResult = await pool.query(
-      "UPDATE job_applications SET stage = $1, updated_at = now() WHERE id = $2 RETURNING *",
-      [targetStage, id],
+      "UPDATE job_applications SET stage = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3 RETURNING *",
+      [targetStage, id, tenantId],
     );
 
     await pool.query(

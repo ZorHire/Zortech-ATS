@@ -5,11 +5,11 @@ import { authMiddleware, authorize, tenantIsolation } from '../../middleware/aut
 
 const router = Router();
 
-// Only super_admin and ats_admin can access user management
-router.get('/users', authMiddleware, tenantIsolation, authorize(['super_admin', 'ats_admin']), adminController.listUsers);
-router.post('/users', authMiddleware, tenantIsolation, authorize(['super_admin', 'ats_admin']), adminController.createUser);
-router.patch('/users/:id', authMiddleware, tenantIsolation, authorize(['super_admin', 'ats_admin']), adminController.updateUser);
-router.post('/users/:id/reset-password', authMiddleware, tenantIsolation, authorize(['super_admin', 'ats_admin']), adminController.resetPassword);
+// Only super_admin and accounts_manager can access user management
+router.get('/users', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), adminController.listUsers);
+router.post('/users', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), adminController.createUser);
+router.patch('/users/:id', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), adminController.updateUser);
+router.post('/users/:id/reset-password', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), adminController.resetPassword);
 
 // Analytics
 router.get('/analytics/export', authMiddleware, tenantIsolation, analyticsController.exportAnalytics);

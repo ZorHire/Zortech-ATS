@@ -5,7 +5,7 @@ import { candidateUpload } from "../../middleware/candidateUpload";
 
 const router = Router();
 
-const recruiterRoles = ["super_admin", "ats_admin", "senior_recruiter", "recruiter", "sourcing_specialist"];
+const recruiterRoles = ["super_admin", "accounts_manager", "recruiter"];
 
 // These must come BEFORE /:id to prevent Express matching "search"/"export" as an id param
 router.get("/search", authMiddleware, tenantIsolation, candidateController.searchCandidates);

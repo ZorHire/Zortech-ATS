@@ -7,14 +7,16 @@ import { sendEmailAsUser, EmailServiceError } from "../email/emailConfig.service
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
+    const limitVal = Math.min(Number(req.query.limit) || 500, 500);
+    const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
     const result = await pool.query(
       `SELECT u.id, u.email, u.is_active, u.must_change_password, m.role, p.full_name
        FROM users u
        JOIN tenant_memberships m ON u.id = m.user_id
        LEFT JOIN profiles p ON u.id = p.id
        WHERE m.tenant_id = $1
-       ORDER BY u.created_at DESC`,
-      [tenantId],
+       ORDER BY u.created_at DESC LIMIT $2 OFFSET $3`,
+      [tenantId, limitVal, offsetVal],
     );
     res.json(result.rows);
   } catch (error) {
@@ -25,10 +27,8 @@ export const listUsers = async (req: AuthRequest, res: Response) => {
 
 const ALLOWED_ROLES = [
   "super_admin",
-  "ats_admin",
-  "senior_recruiter",
+  "accounts_manager",
   "recruiter",
-  "client_user",
   "vendor_user",
   "vendor_manager",
 ] as const;
@@ -104,7 +104,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       const senderName = adminProfile.rows[0]?.full_name || undefined;
       const roleLabel: Record<string, string> = {
         super_admin: "Super Admin",
-        ats_admin: "Accounts Manager",
+        accounts_manager: "Accounts Manager",
         vendor_manager: "Vendor Manager",
         recruiter: "Recruiter",
         vendor_user: "Vendor",
