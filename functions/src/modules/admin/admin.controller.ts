@@ -2,6 +2,7 @@ import { Response } from "express";
 import bcrypt from "bcryptjs";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { sendEmailAsUser, EmailServiceError } from "../email/emailConfig.service";
 
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -90,7 +91,70 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     );
 
     await client.query("COMMIT");
-    res.status(201).json({ message: "User created and added to tenant successfully" });
+
+    // Attempt invite email — non-fatal: user is already created
+    let emailSent = false;
+    let emailError: string | undefined;
+    try {
+      const adminId = req.user!.id;
+      const adminProfile = await pool.query<{ full_name: string }>(
+        "SELECT full_name FROM profiles WHERE id = $1",
+        [adminId],
+      );
+      const senderName = adminProfile.rows[0]?.full_name || undefined;
+      const roleLabel: Record<string, string> = {
+        super_admin: "Super Admin",
+        ats_admin: "Accounts Manager",
+        vendor_manager: "Vendor Manager",
+        recruiter: "Recruiter",
+        vendor_user: "Vendor",
+      };
+      await sendEmailAsUser({
+        userId: adminId,
+        tenantId: tenantId!,
+        senderName,
+        to: email,
+        subject: "You've been invited to ZorHire",
+        html: `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">
+            <h2 style="color:#2563eb;margin-bottom:8px">Welcome to ZorHire!</h2>
+            <p>Hi <strong>${full_name || email}</strong>,</p>
+            <p>Your account has been created. Here are your login credentials:</p>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#64748b;width:40%">Email</td>
+                <td style="padding:10px 14px;color:#1e293b">${email}</td>
+              </tr>
+              <tr style="background:#f1f5f9">
+                <td style="padding:10px 14px;font-weight:600;color:#64748b">Temporary Password</td>
+                <td style="padding:10px 14px;color:#1e293b;font-family:monospace">${password}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 14px;font-weight:600;color:#64748b">Role</td>
+                <td style="padding:10px 14px;color:#1e293b">${roleLabel[role] || role}</td>
+              </tr>
+            </table>
+            <p style="color:#ef4444;font-size:13px">You will be required to change your password upon first login.</p>
+            <p style="margin-top:24px;font-size:13px;color:#94a3b8">If you have any questions, contact your administrator.</p>
+          </div>
+        `,
+      });
+      emailSent = true;
+    } catch (emailErr) {
+      emailError =
+        emailErr instanceof EmailServiceError
+          ? emailErr.code === "EMAIL_NOT_CONFIGURED"
+            ? "Email not configured — go to Settings → Email to connect your SMTP."
+            : emailErr.message
+          : "Failed to send invite email.";
+      console.warn("[admin] Invite email failed for", email, "—", emailError);
+    }
+
+    res.status(201).json({
+      message: "User created and added to tenant successfully",
+      emailSent,
+      ...(emailError ? { emailError } : {}),
+    });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("Create user error:", error);

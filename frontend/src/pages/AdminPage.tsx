@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import api from "../lib/api";
-import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
 
 interface ManagedUser {
@@ -41,8 +40,12 @@ export default function AdminPage() {
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const [vendors, setVendors] = useState<{ id: string; company_name: string }[]>([]);
+  const [emailToast, setEmailToast] = useState<{ message: string; type: "success" | "error"; showConfigLink?: boolean } | null>(null);
 
-  const { sendEmail, sending, emailToast } = useSendEmail();
+  const showEmailToast = (toast: typeof emailToast) => {
+    setEmailToast(toast);
+    setTimeout(() => setEmailToast(null), 4500);
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -65,7 +68,7 @@ export default function AdminPage() {
     setFormLoading(true);
     setFormError("");
     try {
-      await api.post("/admin/users", {
+      const result = await api.post("/admin/users", {
         email: newEmail,
         full_name: newFullName,
         role: newRole,
@@ -73,43 +76,16 @@ export default function AdminPage() {
         ...(newRole === "vendor_user" && newVendorId ? { vendor_id: newVendorId } : {}),
       });
 
-      // Close modal and refresh list before sending email
       setShowCreateModal(false);
-      const capturedName = newFullName;
       const capturedEmail = newEmail;
-      const capturedPassword = newPassword;
-      const capturedRole = roleLabels[newRole] || newRole;
       resetForm();
       fetchUsers();
 
-      // Send invite email with credentials
-      await sendEmail(capturedEmail, {
-        firstName: capturedName.split(" ")[0] || capturedName,
-        subject: "You've been invited to ZorHire",
-        body: `
-          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a1a2e">
-            <h2 style="color:#2563eb;margin-bottom:8px">Welcome to ZorHire!</h2>
-            <p>Hi <strong>${capturedName || capturedEmail}</strong>,</p>
-            <p>Your account has been created. Here are your login credentials:</p>
-            <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
-              <tr>
-                <td style="padding:10px 14px;font-weight:600;color:#64748b;width:40%">Email</td>
-                <td style="padding:10px 14px;color:#1e293b">${capturedEmail}</td>
-              </tr>
-              <tr style="background:#f1f5f9">
-                <td style="padding:10px 14px;font-weight:600;color:#64748b">Temporary Password</td>
-                <td style="padding:10px 14px;color:#1e293b;font-family:monospace">${capturedPassword}</td>
-              </tr>
-              <tr>
-                <td style="padding:10px 14px;font-weight:600;color:#64748b">Role</td>
-                <td style="padding:10px 14px;color:#1e293b">${capturedRole}</td>
-              </tr>
-            </table>
-            <p style="color:#ef4444;font-size:13px">You will be required to change your password upon first login.</p>
-            <p style="margin-top:24px;font-size:13px;color:#94a3b8">If you have any questions, contact your administrator.</p>
-          </div>
-        `,
-      });
+      if (result.emailSent) {
+        showEmailToast({ message: `Invite email sent to ${capturedEmail}`, type: "success" });
+      } else if (result.emailError) {
+        showEmailToast({ message: result.emailError, type: "error", showConfigLink: result.emailError.includes("not configured") });
+      }
     } catch (err: any) {
       setFormError(err.message || "Failed to create user");
     } finally {
@@ -484,7 +460,7 @@ export default function AdminPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={formLoading || sending}
+                  disabled={formLoading}
                   className="flex-1 py-3 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   {formLoading ? (
