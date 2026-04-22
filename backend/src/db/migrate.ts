@@ -7,29 +7,85 @@ const migrate = async () => {
   const schemaPath = path.resolve(__dirname, 'schema.sql');
   const sql = fs.readFileSync(schemaPath, 'utf8');
 
-  console.log('Starting database migration (DROP and RECREATE)...');
+  console.log('Starting database migration (additive only — no data loss)...');
   console.log(`Connecting to: ${env.DATABASE_URL.split('@')[1]}`);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    // Drop all tables in public schema to ensure a clean slate for refactor
-    const dropTablesSql = `
-      DO $$ DECLARE
-          r RECORD;
-      BEGIN
-          FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
-              EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
-          END LOOP;
-      END $$;
-    `;
-    await client.query(dropTablesSql);
-    console.log('Existing tables dropped.');
 
+    // Apply base schema (CREATE TABLE IF NOT EXISTS — safe for existing tables)
     await client.query(sql);
+
+    // Additive column migrations — never drops data
+    const columnMigrations = [
+      `ALTER TABLE profiles
+         ADD COLUMN IF NOT EXISTS vendor_id UUID REFERENCES vendors(id) ON DELETE SET NULL`,
+      `ALTER TABLE jobs
+         ADD COLUMN IF NOT EXISTS assigned_vendor_id UUID REFERENCES vendors(id) ON DELETE SET NULL`,
+
+      // Extended client fields
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_type text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS company_size text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS linkedin text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS headquarters_location text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS operating_locations text[] DEFAULT '{}'`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS alternate_contact text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS engagement_type text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS hiring_volume integer`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS active_requirements integer DEFAULT 0`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS client_priority text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS sla text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS working_hours text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS billing_model text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS currency text DEFAULT 'INR'`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS markup text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS payment_terms text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS invoice_cycle text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS billing_contact text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS contract_start date`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS contract_end date`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS msa_signed boolean DEFAULT false`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS nda_signed boolean DEFAULT false`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS preferred_skills text[] DEFAULT '{}'`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS typical_roles text[] DEFAULT '{}'`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS candidate_preference text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS hiring_strategy text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS interview_process text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS evaluation_criteria text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS positions_closed integer DEFAULT 0`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS avg_closure_time numeric`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS interview_ratio numeric`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS offer_acceptance_rate numeric`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS preferred_channel text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS update_frequency text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS auto_report boolean DEFAULT false`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS account_manager text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS delivery_lead text`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS recruiters text[] DEFAULT '{}'`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS tags text[] DEFAULT '{}'`,
+      `ALTER TABLE clients ADD COLUMN IF NOT EXISTS notes text`,
+
+      // Client stakeholders table
+      `CREATE TABLE IF NOT EXISTS client_stakeholders (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        client_id uuid NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name text NOT NULL,
+        role text,
+        email text,
+        phone text,
+        timezone text,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`,
+    ];
+
+    for (const stmt of columnMigrations) {
+      await client.query(stmt);
+    }
+
     await client.query('COMMIT');
-    console.log('Migration completed successfully!');
+    console.log('Migration completed successfully — existing data preserved.');
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Migration failed:', err);
