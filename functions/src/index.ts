@@ -19,6 +19,9 @@ import pool from "./db";
 
 const app = express();
 
+// Trust Firebase/Cloud Run proxy so express-rate-limit reads the real client IP
+app.set("trust proxy", 1);
+
 // Security headers
 app.use(helmet({ contentSecurityPolicy: false }));
 
@@ -37,12 +40,15 @@ app.use(
 // Request logging
 app.use(morgan("combined"));
 
-// Rate limiters
+// Rate limiters — validate.creationStack disabled because Firebase Functions loads
+// modules during the first request's cold-start, which falsely triggers ERR_ERL_CREATED_IN_REQUEST_HANDLER.
+// validate.xForwardedForHeader disabled because trust proxy is set above.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { creationStack: false, xForwardedForHeader: false },
   message: { message: "Too many attempts. Please try again in 15 minutes." },
 });
 
@@ -51,6 +57,7 @@ const apiLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { creationStack: false, xForwardedForHeader: false },
   message: { message: "Too many requests. Please slow down." },
 });
 

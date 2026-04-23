@@ -162,6 +162,19 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
   const resumeUrl = file?.buffer ? `/candidates/${id}/resume` : body.resume_url;
 
   try {
+    // vendor_user can only update candidates linked to their assigned jobs
+    if (req.user?.role === "vendor_user") {
+      const assigned = await pool.query(
+        `SELECT 1 FROM job_applications ja
+         JOIN jobs j ON j.id = ja.job_id
+         WHERE ja.candidate_id = $1 AND j.assigned_vendor_id = $2 AND ja.tenant_id = $3
+         LIMIT 1`,
+        [id, req.user.vendor_id, tenantId],
+      );
+      if (assigned.rows.length === 0) {
+        return res.status(403).json({ message: "Forbidden: Candidate is not on a job assigned to your vendor" });
+      }
+    }
     const result = await pool.query(
       `UPDATE candidates SET
        first_name = COALESCE($1, first_name),
@@ -237,6 +250,20 @@ export const deleteCandidate = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const tenantId = req.user?.tenant_id;
   try {
+    // vendor_user can only delete candidates linked to their assigned jobs
+    if (req.user?.role === "vendor_user") {
+      const assigned = await pool.query(
+        `SELECT 1 FROM job_applications ja
+         JOIN jobs j ON j.id = ja.job_id
+         WHERE ja.candidate_id = $1 AND j.assigned_vendor_id = $2 AND ja.tenant_id = $3
+         LIMIT 1`,
+        [id, req.user.vendor_id, tenantId],
+      );
+      if (assigned.rows.length === 0) {
+        return res.status(403).json({ message: "Forbidden: Candidate is not on a job assigned to your vendor" });
+      }
+    }
+
     const result = await pool.query(
       "UPDATE candidates SET deleted_at = now() WHERE id = $1 AND tenant_id = $2 RETURNING id",
       [id, tenantId],

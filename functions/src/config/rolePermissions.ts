@@ -33,22 +33,23 @@ export const rolePermissions: Record<string, string[]> = {
   ],
 
   // ── Vendor Manager ─────────────────────────────────────────────────────────
-  // Read-only across the platform. No write access on any resource
-  // (not in recruiterRoles, not in client/vendor write authorize lists).
+  // Full CRUD on candidates, clients, and vendors. Read-only on jobs and pipeline.
   vendor_manager: [
-    "candidate:view",
+    "candidate:view", "candidate:create", "candidate:update", "candidate:delete",
     "job:view",
-    "client:view",
-    "vendor:view",
-    "pipeline:view",
+    "client:view", "client:create", "client:update", "client:delete",
+    "vendor:view", "vendor:create", "vendor:update", "vendor:delete",
+    "pipeline:view", "pipeline:create",
   ],
 
   // ── Vendor User (Vendor) ───────────────────────────────────────────────────
-  // Scoped to assigned jobs and their pipeline. Controlled at query level
-  // via assigned_vendor_id filter in jobs.controller.ts.
+  // Full CRUD on candidates — ONLY those linked to jobs assigned to their vendor.
+  // Assignment check enforced in the controller layer for update/delete.
   vendor_user: [
     "job:view",
     "pipeline:view",
+    "candidate:create", "candidate:update", "candidate:delete",
+    "pipeline:create",
   ],
 
 };

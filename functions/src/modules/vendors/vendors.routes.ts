@@ -6,8 +6,8 @@ const router = Router();
 
 router.get("/", authMiddleware, tenantIsolation, vendorController.getVendors);
 router.get("/:id", authMiddleware, tenantIsolation, vendorController.getVendorById);
-router.post("/", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), vendorController.createVendor);
-router.patch("/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), vendorController.updateVendor);
-router.delete("/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), vendorController.deleteVendor);
+router.post("/", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager", "vendor_manager"]), vendorController.createVendor);
+router.patch("/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager", "vendor_manager"]), vendorController.updateVendor);
+router.delete("/:id", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager", "vendor_manager"]), vendorController.deleteVendor);
 
 export default router;

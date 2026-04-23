@@ -26,11 +26,19 @@ export const addToPipeline = async (req: AuthRequest, res: Response) => {
 
   try {
     const jobResult = await pool.query(
-      "SELECT id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      "SELECT id, assigned_vendor_id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
       [jobId, tenantId],
     );
     if (jobResult.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
+    }
+
+    // vendor_user may only add candidates to jobs assigned to their vendor
+    if (req.user?.role === "vendor_user") {
+      const job = jobResult.rows[0];
+      if (!req.user.vendor_id || job.assigned_vendor_id !== req.user.vendor_id) {
+        return res.status(403).json({ message: "Forbidden: Job is not assigned to your vendor" });
+      }
     }
 
     const candidateResult = await pool.query(
@@ -115,11 +123,19 @@ export const createApplication = async (req: AuthRequest, res: Response) => {
 
   try {
     const jobResult = await pool.query(
-      "SELECT id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      "SELECT id, assigned_vendor_id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
       [jobId, tenantId],
     );
     if (jobResult.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
+    }
+
+    // vendor_user may only add candidates to jobs assigned to their vendor
+    if (req.user?.role === "vendor_user") {
+      const job = jobResult.rows[0];
+      if (!req.user.vendor_id || job.assigned_vendor_id !== req.user.vendor_id) {
+        return res.status(403).json({ message: "Forbidden: Job is not assigned to your vendor" });
+      }
     }
 
     const candidateResult = await pool.query(
