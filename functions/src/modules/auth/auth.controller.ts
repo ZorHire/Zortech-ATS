@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../../db";
 import env from "../../config/env";
+import { isTenantActive } from "../tenants/tenantBootstrap.service";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -62,6 +63,15 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: "24h" },
     );
 
+    let subscription = null;
+    if (primaryMembership?.tenant_id) {
+      try {
+        subscription = await isTenantActive(primaryMembership.tenant_id);
+      } catch {
+        // fail open — subscription check is non-fatal at login time
+      }
+    }
+
     res.json({
       token,
       user: {
@@ -75,6 +85,7 @@ export const login = async (req: Request, res: Response) => {
         avatar_url: profile?.avatar_url,
         vendor_id: profile?.vendor_id ?? null,
       },
+      subscription,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -297,6 +308,15 @@ export const getMe = async (req: any, res: Response) => {
     const profile = profileResult.rows[0];
     const primaryMembership = membershipResult.rows[0];
 
+    let subscription = null;
+    if (primaryMembership?.tenant_id) {
+      try {
+        subscription = await isTenantActive(primaryMembership.tenant_id);
+      } catch {
+        // fail open
+      }
+    }
+
     res.json({
       id: userId,
       email: user.email,
@@ -307,6 +327,7 @@ export const getMe = async (req: any, res: Response) => {
       must_change_password: user.must_change_password,
       avatar_url: profile?.avatar_url,
       vendor_id: profile?.vendor_id ?? null,
+      subscription,
     });
   } catch (error) {
     console.error("Get me error:", error);

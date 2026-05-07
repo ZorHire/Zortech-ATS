@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/layout/Layout";
 import LoginPage from "./pages/LoginPage";
+import SubscribePage from "./pages/SubscribePage";
+import PublicPricingPage from "./pages/PublicPricingPage";
 import DashboardPage from "./pages/DashboardPage";
 import JobsPage from "./pages/JobsPage";
 import JobDetailPage from "./pages/JobDetailPage";
@@ -15,12 +17,18 @@ import AdminPage from "./pages/AdminPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import PipelinePage from "./pages/PipelinePage";
 import EmailSettingsPage from "./pages/EmailSettingsPage";
+import EmailCampaignsPage from "./pages/EmailCampaignsPage";
+import SubscriptionPage from "./pages/SubscriptionPage";
+import PricingPage from "./pages/PricingPage";
 
 // vendor_user may access /jobs, /jobs/:id, and /pipeline/:jobId
 const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline"];
 
+// These paths are accessible even when subscription is blocked/expired
+const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription"];
+
 function ProtectedRoute({ children, path }: { children: React.ReactNode; path?: string }) {
-  const { user, loading } = useAuth();
+  const { user, loading, subscription } = useAuth();
 
   if (loading) {
     return (
@@ -44,6 +52,21 @@ function ProtectedRoute({ children, path }: { children: React.ReactNode; path?: 
     if (!allowed) return <Navigate to="/jobs" replace />;
   }
 
+  // Subscription gate: block onboarding companies with no active/trial subscription.
+  // Platform owner (ZorTech) passes through. Fail open when subscription is null.
+  const isSubscriptionExempt = path
+    ? SUBSCRIPTION_EXEMPT_PATHS.some((p) => path === p || path.startsWith(p + "/"))
+    : false;
+
+  if (
+    !isSubscriptionExempt &&
+    subscription !== null &&
+    !subscription.active &&
+    !subscription.isPlatformOwner
+  ) {
+    return <Navigate to="/pricing" replace />;
+  }
+
   return <Layout>{children}</Layout>;
 }
 
@@ -52,9 +75,23 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Public entry points */}
+      <Route
+        path="/subscribe"
+        element={user ? <Navigate to="/" replace /> : <SubscribePage />}
+      />
       <Route
         path="/login"
         element={user ? <Navigate to="/" replace /> : <LoginPage />}
+      />
+      {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}
+      <Route
+        path="/pricing"
+        element={
+          user
+            ? <ProtectedRoute path="/pricing"><PricingPage /></ProtectedRoute>
+            : <PublicPricingPage />
+        }
       />
       <Route
         path="/"
@@ -144,7 +181,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="/campaigns"
+        element={
+          <ProtectedRoute path="/campaigns">
+            <EmailCampaignsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/subscription"
+        element={
+          <ProtectedRoute path="/subscription">
+            <SubscriptionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to={user ? "/" : "/subscribe"} replace />} />
     </Routes>
   );
 }

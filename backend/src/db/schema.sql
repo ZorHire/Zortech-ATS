@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS tenant_memberships (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   tenant_id uuid NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-  role text NOT NULL DEFAULT 'recruiter' CHECK (role IN ('super_admin','ats_admin','senior_recruiter','recruiter','sourcing_specialist','client_user','vendor_user','vendor_manager')),
+  role text NOT NULL DEFAULT 'recruiter' CHECK (role IN ('super_admin','accounts_manager','recruiter','vendor_manager','vendor_user')),
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -292,6 +292,24 @@ CREATE TABLE IF NOT EXISTS interviews (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Tenant subscriptions (one active subscription per tenant)
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                      uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id               uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  plan_type               text        NOT NULL CHECK (plan_type IN ('starter', 'growth', 'enterprise')),
+  status                  text        NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active', 'cancelled', 'expired', 'trial')),
+  billing_cycle           text        NOT NULL DEFAULT 'monthly'
+                            CHECK (billing_cycle IN ('monthly', 'yearly')),
+  razorpay_subscription_id text,
+  razorpay_plan_id         text,
+  start_date              timestamptz NOT NULL DEFAULT now(),
+  end_date                timestamptz,
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id)
+);
+
 -- Indexes for performance (tenant isolation, FK lookups, filter columns)
 CREATE INDEX IF NOT EXISTS idx_candidates_tenant_deleted ON candidates(tenant_id, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email);
@@ -309,11 +327,30 @@ CREATE INDEX IF NOT EXISTS idx_tenant_memberships_tenant ON tenant_memberships(t
 CREATE INDEX IF NOT EXISTS idx_vendors_tenant ON vendors(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_vendor ON profiles(vendor_id);
 
+-- ─── DB Division: Platform Owner vs Onboarding Companies ────────────────────
+-- Run once on existing DB; IF NOT EXISTS / ON CONFLICT make it safe to re-run.
+
+ALTER TABLE tenants
+  ADD COLUMN IF NOT EXISTS is_platform_owner boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS company_email     text,
+  ADD COLUMN IF NOT EXISTS company_phone     text,
+  ADD COLUMN IF NOT EXISTS company_address   text,
+  ADD COLUMN IF NOT EXISTS gst_number        text,
+  ADD COLUMN IF NOT EXISTS country           text NOT NULL DEFAULT 'India',
+  ADD COLUMN IF NOT EXISTS onboarded_by      uuid REFERENCES users(id),
+  ADD COLUMN IF NOT EXISTS onboarded_at      timestamptz;
+
+ALTER TABLE subscriptions
+  ADD COLUMN IF NOT EXISTS trial_ends_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS idx_tenants_platform_owner      ON tenants(is_platform_owner);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_tenant_status ON subscriptions(tenant_id, status);
+
 -- Seed: primary tenant
-INSERT INTO tenants (id, name, slug)
+INSERT INTO tenants (id, name, slug, is_platform_owner)
 VALUES
-  ('77777777-7777-7777-7777-777777777777', 'Zortech Global', 'zortech')
-ON CONFLICT (id) DO NOTHING;
+  ('77777777-7777-7777-7777-777777777777', 'Zortech Global', 'zortech', true)
+ON CONFLICT (id) DO UPDATE SET is_platform_owner = true;
 
 -- Seed: super_admin user (joy@zortechs.in / Training5!@)
 INSERT INTO users (id, email, password, must_change_password, is_active)

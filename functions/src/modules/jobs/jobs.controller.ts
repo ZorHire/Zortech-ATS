@@ -7,6 +7,8 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
     const tenantId = req.user?.tenant_id;
     const isVendor = req.user?.role === "vendor_user";
     const vendorId = req.user?.vendor_id;
+    const isRecruiter = req.user?.role === "recruiter";
+    const userId = req.user?.id;
     const limitVal = Math.min(Number(req.query.limit) || 500, 500);
     const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
 
@@ -20,6 +22,20 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
          WHERE j.tenant_id = $1 AND j.deleted_at IS NULL AND j.assigned_vendor_id = $2
          ORDER BY j.created_at DESC LIMIT $3 OFFSET $4`,
         [tenantId, vendorId, limitVal, offsetVal],
+      );
+      return res.json(result.rows);
+    }
+
+    if (isRecruiter) {
+      if (!userId) return res.json([]);
+      const result = await pool.query(
+        `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
+                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+         FROM jobs j
+         JOIN clients c ON c.id = j.client_id
+         WHERE j.tenant_id = $1 AND j.deleted_at IS NULL AND j.assigned_recruiter_id = $2
+         ORDER BY j.created_at DESC LIMIT $3 OFFSET $4`,
+        [tenantId, userId, limitVal, offsetVal],
       );
       return res.json(result.rows);
     }
@@ -45,6 +61,7 @@ export const getJobById = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
   const isVendor = req.user?.role === "vendor_user";
   const vendorId = req.user?.vendor_id;
+  const isRecruiter = req.user?.role === "recruiter";
 
   try {
     const result = await pool.query(
@@ -59,6 +76,9 @@ export const getJobById = async (req: AuthRequest, res: Response) => {
     }
     const job = result.rows[0];
     if (isVendor && job.assigned_vendor_id !== vendorId) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    if (isRecruiter && job.assigned_recruiter_id !== req.user?.id) {
       return res.status(403).json({ message: "Access denied" });
     }
     res.json(job);

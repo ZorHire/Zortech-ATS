@@ -48,7 +48,7 @@ app.use(
 // This allows Multer to handle the multipart/form-data request first
 const parseRouter = express.Router();
 parseRouter.use("/", parseRoutes);
-app.use("/api/v1/parse", parseRouter);
+app.use("/v1/parse", parseRouter);
 
 app.use(express.json());
 app.use(express.static(uploadsPath));
@@ -76,10 +76,10 @@ v1Router.use("/pipeline", pipelineRoutes);
 v1Router.use("/email", emailRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
-app.use("/api/v1", v1Router);
+app.use("/v1", v1Router);
 
 // Health Check
-app.get("/api/health", (req, res) => {
+app.get("/v1/health", (req, res) => {
   res.json({ status: "ok", message: "Backend is running" });
 });
 

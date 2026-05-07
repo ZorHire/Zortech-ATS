@@ -50,6 +50,7 @@ router.get(
   "/templates",
   authMiddleware,
   tenantIsolation,
+  authorize(recruiterRoles),
   emailController.listTemplates,
 );
 
@@ -67,6 +68,24 @@ router.post(
   tenantIsolation,
   authorize(recruiterRoles),
   emailController.sendSingleEmail,
+);
+
+// Vendor Manager / Accounts Manager assigns a JD to a vendor
+router.post(
+  "/assign-jd",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "vendor_manager", "accounts_manager"]),
+  emailController.assignJd,
+);
+
+// Accounts Manager assigns a JD to a recruiter
+router.post(
+  "/assign-jd-recruiter",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager"]),
+  emailController.assignJdToRecruiter,
 );
 
 export default router;

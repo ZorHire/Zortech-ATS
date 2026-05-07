@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api/v1";
+const API_URL = import.meta.env.VITE_API_URL || "/v1";
 
 /**
  * Structured error thrown for non-2xx API responses.
@@ -47,6 +47,14 @@ export const api = {
           .json()
           .catch(() => ({ message: "Token expired" }));
         throw new ApiError(errorBody.message || "Token expired", 401, errorBody);
+      }
+
+      if (response.status === 402) {
+        window.location.href = "/pricing";
+        const errorBody = await response
+          .json()
+          .catch(() => ({ message: "Subscription required" }));
+        throw new ApiError(errorBody.message || "Subscription required", 402, errorBody);
       }
 
       if (!response.ok) {

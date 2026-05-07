@@ -1,6 +1,6 @@
 import { Response } from "express";
 import pool from "../../db";
-import { AuthRequest } from "../../middleware/auth";
+import { AuthRequest, hasPermission } from "../../middleware/auth";
 import {
   sendEmailAsUser,
   handleEmailError,
@@ -51,6 +51,9 @@ export const listTemplates = async (_req: AuthRequest, res: Response) => {
 // ─── Bulk / campaign send ─────────────────────────────────────────────────────
 
 export const sendEmail = async (req: AuthRequest, res: Response) => {
+  if (!hasPermission(req, "email:send")) {
+    return res.status(403).json({ message: "Forbidden: Insufficient permissions" });
+  }
   const { subject, body, recipients } = req.body;
   if (!subject || !body || !Array.isArray(recipients) || recipients.length === 0) {
     return res
@@ -105,6 +108,9 @@ export const sendEmail = async (req: AuthRequest, res: Response) => {
 // ─── Single email (used by Candidates / Vendors / Resume Search pages) ────────
 
 export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
+  if (!hasPermission(req, "email:send")) {
+    return res.status(403).json({ message: "Forbidden: Insufficient permissions" });
+  }
   const { to, subject, body } = req.body as {
     to?: string;
     subject?: string;
@@ -129,6 +135,125 @@ export const sendSingleEmail = async (req: AuthRequest, res: Response) => {
       html: body || buildOutreachHtml(firstName),
     });
     res.json({ message: "Email sent successfully." });
+  } catch (err) {
+    handleEmailError(err, res);
+  }
+};
+
+// ─── Assign JD email ─────────────────────────────────────────────────────────
+
+export const assignJd = async (req: AuthRequest, res: Response) => {
+  const { vendor_id, job_id, deadline_days, site_url } = req.body;
+  if (!vendor_id || !job_id || !deadline_days) {
+    return res
+      .status(400)
+      .json({ message: "vendor_id, job_id, and deadline_days are required" });
+  }
+  const tenantId = req.user!.tenant_id;
+  const userId = req.user!.id;
+
+  try {
+    const [jobResult, vendorResult] = await Promise.all([
+      pool.query(
+        "SELECT id, title FROM jobs WHERE id = $1 AND tenant_id = $2",
+        [job_id, tenantId],
+      ),
+      pool.query(
+        "SELECT id, company_name, primary_contact_email FROM vendors WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+        [vendor_id, tenantId],
+      ),
+    ]);
+
+    if (jobResult.rows.length === 0)
+      return res.status(404).json({ message: "Job not found" });
+    if (vendorResult.rows.length === 0)
+      return res.status(404).json({ message: "Vendor not found" });
+
+    const job = jobResult.rows[0];
+    const vendor = vendorResult.rows[0];
+
+    const days = Number(deadline_days);
+    const dayLabel = days === 1 ? "1 day" : `${days} days`;
+    const urlPart = site_url ? ` at ${site_url}` : "";
+    const body = `You have been assigned "${job.title}" and you have ${dayLabel} to add candidates to the JD${urlPart}.`;
+
+    await pool.query(
+      "UPDATE jobs SET assigned_vendor_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3",
+      [vendor_id, job_id, tenantId],
+    );
+
+    await sendEmailAsUser({
+      userId,
+      tenantId,
+      to: vendor.primary_contact_email,
+      subject: `JD Assignment: ${job.title}`,
+      html: `<div style="font-family:sans-serif;line-height:1.6">${body}</div>`,
+    });
+
+    res.json({ message: "Assignment email sent successfully" });
+  } catch (err) {
+    handleEmailError(err, res);
+  }
+};
+
+// ─── Assign JD to Recruiter (Accounts Manager flow) ──────────────────────────
+
+export const assignJdToRecruiter = async (req: AuthRequest, res: Response) => {
+  const { recruiter_id, job_id, deadline_days, site_url } = req.body;
+  if (!recruiter_id || !job_id || !deadline_days) {
+    return res
+      .status(400)
+      .json({ message: "recruiter_id, job_id, and deadline_days are required" });
+  }
+  const tenantId = req.user!.tenant_id;
+  const userId = req.user!.id;
+
+  try {
+    const [jobResult, recruiterResult] = await Promise.all([
+      pool.query(
+        "SELECT id, title FROM jobs WHERE id = $1 AND tenant_id = $2",
+        [job_id, tenantId],
+      ),
+      pool.query(
+        `SELECT u.id, u.email, p.full_name
+           FROM users u
+           JOIN tenant_memberships tm ON tm.user_id = u.id
+           LEFT JOIN profiles p ON p.id = u.id
+          WHERE u.id = $1 AND tm.tenant_id = $2 AND tm.role = 'recruiter'`,
+        [recruiter_id, tenantId],
+      ),
+    ]);
+
+    if (jobResult.rows.length === 0)
+      return res.status(404).json({ message: "Job not found" });
+    if (recruiterResult.rows.length === 0)
+      return res.status(404).json({ message: "Recruiter not found" });
+
+    const job = jobResult.rows[0];
+    const recruiter = recruiterResult.rows[0];
+
+    const days = Number(deadline_days);
+    const dayLabel = days === 1 ? "1 day" : `${days} days`;
+    const urlPart = site_url ? ` at ${site_url}` : "";
+    const bodyText = `You have been assigned to "${job.title}" and you have ${dayLabel} to work on this role${urlPart}.`;
+
+    await pool.query(
+      "UPDATE jobs SET assigned_recruiter_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3",
+      [recruiter_id, job_id, tenantId],
+    );
+
+    await sendEmailAsUser({
+      userId,
+      tenantId,
+      to: recruiter.email,
+      subject: `JD Assignment: ${job.title}`,
+      html: `<div style="font-family:sans-serif;line-height:1.6">
+        <p>Hi ${recruiter.full_name || "there"},</p>
+        <p>${bodyText}</p>
+      </div>`,
+    });
+
+    res.json({ message: "Assignment email sent successfully" });
   } catch (err) {
     handleEmailError(err, res);
   }

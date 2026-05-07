@@ -17,12 +17,15 @@ import {
   X,
   TrendingUp,
   Trash2,
+  ClipboardList,
+  Loader2,
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import api from "../lib/api";
 import { Vendor } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
+import { useAuth } from "../contexts/AuthContext";
 
 const tierConfig: Record<
   string,
@@ -65,6 +68,341 @@ function ScoreBar({
       <span className="text-xs font-medium text-gray-700 w-8 text-right">
         {value}%
       </span>
+    </div>
+  );
+}
+
+interface JobOption {
+  id: string;
+  title: string;
+}
+
+interface RecruiterOption {
+  id: string;
+  email: string;
+  full_name: string;
+}
+
+function AssignJdModal({
+  vendors,
+  userRole,
+  onClose,
+}: {
+  vendors: import("../types").Vendor[];
+  userRole: string;
+  onClose: () => void;
+}) {
+  // super_admin can choose; others are locked to their role
+  const canAssignVendor = userRole === "super_admin" || userRole === "vendor_manager" || userRole === "accounts_manager";
+  const canAssignRecruiter = userRole === "super_admin" || userRole === "accounts_manager";
+  const defaultType = "vendor";
+
+  const [assignType, setAssignType] = useState<"recruiter" | "vendor">(defaultType);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(true);
+  const [recruiters, setRecruiters] = useState<RecruiterOption[]>([]);
+  const [loadingRecruiters, setLoadingRecruiters] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState("");
+  const [selectedVendorId, setSelectedVendorId] = useState("");
+  const [selectedRecruiterId, setSelectedRecruiterId] = useState("");
+  const [deadlineDays, setDeadlineDays] = useState(3);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    api
+      .get("/jobs")
+      .then((data: any[]) =>
+        setJobs(data.map((j) => ({ id: j.id, title: j.title }))),
+      )
+      .catch(() => setError("Could not load jobs."))
+      .finally(() => setLoadingJobs(false));
+  }, []);
+
+  useEffect(() => {
+    if (assignType !== "recruiter") return;
+    setLoadingRecruiters(true);
+    api
+      .get("/admin/users")
+      .then((data: any[]) =>
+        setRecruiters(
+          data
+            .filter((u: any) => u.role === "recruiter")
+            .map((u: any) => ({ id: u.id, email: u.email, full_name: u.full_name || u.email })),
+        ),
+      )
+      .catch(() => setError("Could not load recruiters."))
+      .finally(() => setLoadingRecruiters(false));
+  }, [assignType]);
+
+  const handleAssign = async () => {
+    setError("");
+    setSuccess("");
+
+    if (!selectedJobId) {
+      setError("Please select a Job Description.");
+      return;
+    }
+
+    if (assignType === "vendor" && !selectedVendorId) {
+      setError("Please select a vendor.");
+      return;
+    }
+    if (assignType === "recruiter" && !selectedRecruiterId) {
+      setError("Please select a recruiter.");
+      return;
+    }
+
+    setSending(true);
+    try {
+      if (assignType === "vendor") {
+        await api.post("/email/assign-jd", {
+          job_id: selectedJobId,
+          vendor_id: selectedVendorId,
+          deadline_days: deadlineDays,
+          site_url: window.location.origin,
+        });
+      } else {
+        try {
+          await api.post("/email/assign-jd-recruiter", {
+            job_id: selectedJobId,
+            recruiter_id: selectedRecruiterId,
+            deadline_days: deadlineDays,
+            site_url: window.location.origin,
+          });
+        } catch (recruiterAssignError: any) {
+          // Compatibility fallback for environments where the new endpoint is not yet available.
+          const status = recruiterAssignError?.status;
+          if (status !== 404 && status !== 405) {
+            throw recruiterAssignError;
+          }
+
+          const selectedJob = jobs.find((j) => j.id === selectedJobId);
+          const selectedRecruiter = recruiters.find((r) => r.id === selectedRecruiterId);
+          if (!selectedJob || !selectedRecruiter) {
+            throw recruiterAssignError;
+          }
+
+          await api.patch(`/jobs/${selectedJobId}`, {
+            assigned_recruiter_id: selectedRecruiterId,
+          });
+
+          const dayLabel = deadlineDays === 1 ? "1 day" : `${deadlineDays} days`;
+          const emailBody =
+            `Hi ${selectedRecruiter.full_name || selectedRecruiter.email},\n\n` +
+            `You have been assigned "${selectedJob.title}". Please submit candidates within ${dayLabel} at ${window.location.origin}.`;
+
+          await api.post("/email/send-single", {
+            to: selectedRecruiter.email,
+            subject: `JD Assignment: ${selectedJob.title}`,
+            body: emailBody,
+          });
+        }
+      }
+      setSuccess("Assignment email sent successfully.");
+    } catch (err: any) {
+      if (err?.data?.code === "EMAIL_NOT_CONFIGURED") {
+        window.location.href = `/settings/email?returnTo=${encodeURIComponent(window.location.pathname)}`;
+        return;
+      }
+      const errorMessage =
+        err?.data?.message ||
+        err?.message ||
+        "Failed to send assignment email.";
+      setError(errorMessage);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const activeVendors = vendors.filter((v) => v.is_active && v.primary_contact_email);
+  const modalTitle = assignType === "recruiter" ? "Assign JD to Recruiter" : "Assign JD to Vendor";
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <ClipboardList size={18} className="text-blue-600" />
+            <h2 className="text-base font-bold text-gray-900">{modalTitle}</h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 transition-colors p-1 rounded-lg hover:bg-gray-100"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Type toggle — only shown to super_admin who can do both */}
+          {canAssignVendor && canAssignRecruiter && (
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+              <button
+                type="button"
+                onClick={() => { setAssignType("recruiter"); setSelectedRecruiterId(""); setSelectedVendorId(""); }}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors ${
+                  assignType === "recruiter"
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Recruiter
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAssignType("vendor"); setSelectedRecruiterId(""); setSelectedVendorId(""); }}
+                className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors ${
+                  assignType === "vendor"
+                    ? "bg-white text-blue-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Vendor
+              </button>
+            </div>
+          )}
+
+          {/* Select JD */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Select JD
+            </label>
+            {loadingJobs ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                <Loader2 size={14} className="animate-spin" />
+                Loading jobs…
+              </div>
+            ) : (
+              <select
+                value={selectedJobId}
+                onChange={(e) => setSelectedJobId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
+              >
+                <option value="">— Select a Job Description —</option>
+                {jobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.title}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Select Recruiter (accounts_manager / super_admin in recruiter mode) */}
+          {assignType === "recruiter" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Select Recruiter
+              </label>
+              {loadingRecruiters ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                  <Loader2 size={14} className="animate-spin" />
+                  Loading recruiters…
+                </div>
+              ) : (
+                <select
+                  value={selectedRecruiterId}
+                  onChange={(e) => setSelectedRecruiterId(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
+                >
+                  <option value="">— Select a Recruiter —</option>
+                  {recruiters.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.full_name} ({r.email})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Select Vendor (vendor_manager / super_admin in vendor mode) */}
+          {assignType === "vendor" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Select Vendor
+              </label>
+              <select
+                value={selectedVendorId}
+                onChange={(e) => setSelectedVendorId(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
+              >
+                <option value="">— Select a Vendor —</option>
+                {activeVendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.company_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Deadline */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Deadline (days)
+            </label>
+            <select
+              value={deadlineDays}
+              onChange={(e) => setDeadlineDays(Number(e.target.value))}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
+            >
+              {[1, 2, 3, 4, 5, 6, 7].map((d) => (
+                <option key={d} value={d}>
+                  {d} day{d > 1 ? "s" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
+              {success}
+            </p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-6 flex items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleAssign}
+            disabled={sending || !!success}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            {sending ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Sending…
+              </>
+            ) : (
+              <>
+                <ClipboardList size={14} />
+                Assign
+              </>
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -527,6 +865,8 @@ function VendorCard({
 }
 
 export default function VendorsPage() {
+  const { user } = useAuth();
+  const userRole: string = user?.role ?? "";
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -536,6 +876,7 @@ export default function VendorsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
+  const [showAssignJd, setShowAssignJd] = useState(false);
   const [vendorFile, setVendorFile] = useState<File | null>(null);
   const [vendorParsing, setVendorParsing] = useState(false);
   const [vendorParseMessage, setVendorParseMessage] = useState("");
@@ -757,6 +1098,13 @@ export default function VendorsPage() {
         actions={
           <div className="flex gap-2">
             <button
+              onClick={() => setShowAssignJd(true)}
+              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <ClipboardList size={16} />
+              Assign JD
+            </button>
+            <button
               onClick={() => setShowAddVendor(true)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
@@ -904,6 +1252,14 @@ export default function VendorsPage() {
       </div>
 
       {emailToast && <EmailToast {...emailToast} />}
+
+      {showAssignJd && (
+        <AssignJdModal
+          vendors={vendors}
+          userRole={userRole}
+          onClose={() => setShowAssignJd(false)}
+        />
+      )}
 
       {selectedVendor && (
         <VendorDetailModal

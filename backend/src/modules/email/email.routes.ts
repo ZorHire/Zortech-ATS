@@ -69,4 +69,20 @@ router.post(
   emailController.sendEmail,
 );
 
+router.post(
+  "/assign-jd",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager", "vendor_manager"]),
+  emailController.assignJd,
+);
+
+router.post(
+  "/assign-jd-recruiter",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager"]),
+  emailController.assignJdRecruiter,
+);
+
 export default router;

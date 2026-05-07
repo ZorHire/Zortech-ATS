@@ -49,6 +49,12 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
       filters.push(`experience_years <= $${params.length}`);
     }
 
+    if (req.user?.role === "recruiter" && req.user?.id) {
+      params.push(req.user.id);
+      filters.push(
+        `EXISTS (SELECT 1 FROM job_applications ja JOIN jobs j ON j.id = ja.job_id WHERE ja.candidate_id = candidates.id AND j.assigned_recruiter_id = $${params.length} AND j.tenant_id = $1 AND j.deleted_at IS NULL)`,
+      );
+    }
     const limitVal = Math.min(Number(limit) || 500, 500);
     const offsetVal = Math.max(Number(offset) || 0, 0);
     params.push(limitVal, offsetVal);
@@ -175,6 +181,18 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
         return res.status(403).json({ message: "Forbidden: Candidate is not on a job assigned to your vendor" });
       }
     }
+    if (req.user?.role === "recruiter") {
+      const assigned = await pool.query(
+        `SELECT 1 FROM job_applications ja
+         JOIN jobs j ON j.id = ja.job_id
+         WHERE ja.candidate_id = $1 AND j.assigned_recruiter_id = $2 AND ja.tenant_id = $3
+         LIMIT 1`,
+        [id, req.user.id, tenantId],
+      );
+      if (assigned.rows.length === 0) {
+        return res.status(403).json({ message: "Forbidden: Candidate is not on a job assigned to you" });
+      }
+    }
     const result = await pool.query(
       `UPDATE candidates SET
        first_name = COALESCE($1, first_name),
@@ -261,6 +279,18 @@ export const deleteCandidate = async (req: AuthRequest, res: Response) => {
       );
       if (assigned.rows.length === 0) {
         return res.status(403).json({ message: "Forbidden: Candidate is not on a job assigned to your vendor" });
+      }
+    }
+    if (req.user?.role === "recruiter") {
+      const assigned = await pool.query(
+        `SELECT 1 FROM job_applications ja
+         JOIN jobs j ON j.id = ja.job_id
+         WHERE ja.candidate_id = $1 AND j.assigned_recruiter_id = $2 AND ja.tenant_id = $3
+         LIMIT 1`,
+        [id, req.user.id, tenantId],
+      );
+      if (assigned.rows.length === 0) {
+        return res.status(403).json({ message: "Forbidden: Candidate is not on a job assigned to you" });
       }
     }
 
@@ -375,6 +405,13 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const { filters, params } = buildSearchFilters(tenantId, req.query as any);
 
+    if (req.user?.role === "recruiter" && req.user?.id) {
+      params.push(req.user.id);
+      filters.push(
+        `EXISTS (SELECT 1 FROM job_applications ja JOIN jobs j ON j.id = ja.job_id WHERE ja.candidate_id = candidates.id AND j.assigned_recruiter_id = $${params.length} AND j.tenant_id = $1 AND j.deleted_at IS NULL)`,
+      );
+    }
+
     const dbResult = await pool.query(
       `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC`,
       params,
@@ -420,6 +457,110 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ─── create candidate in job context ─────────────────────────────────────────
+
+export const createCandidateForJob = async (req: AuthRequest, res: Response) => {
+  const { jobId } = req.params;
+  const tenantId = req.user?.tenant_id;
+  const createdBy = req.user?.id;
+
+  try {
+    const jobCheck = await pool.query(
+      "SELECT id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      [jobId, tenantId],
+    );
+    if (jobCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Job not found" });
+    }
+
+    if (req.user?.role === "recruiter") {
+      const recruiterCheck = await pool.query(
+        "SELECT id FROM jobs WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND assigned_recruiter_id = $3",
+        [jobId, tenantId, req.user.id],
+      );
+      if (recruiterCheck.rows.length === 0) {
+        return res.status(403).json({ message: "Access denied: Job not assigned to you" });
+      }
+    }
+
+    const file = req.file;
+    const body = req.body || {};
+
+    const resumeText =
+      (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
+    const parsed = await parseResumeText(resumeText);
+
+    const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
+    const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";
+    const email = (body.email || parsed.email || "").trim() || null;
+    const phone = (body.phone || parsed.phone || "").trim() || null;
+    const current_title = body.current_title || parsed.current_title || "";
+    const current_company = body.current_company || parsed.current_company || "";
+    const experience_years = Number(body.experience_years || parsed.experience_years || 0);
+    const current_location = body.current_location || parsed.current_location || "";
+    const preferred_location = body.preferred_location || "";
+    const notice_period_days = Number(body.notice_period_days || 30);
+    const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
+    const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
+    const skills = normalizeSkills(body.skills || parsed.skills);
+    const summary = body.summary || parsed.summary || "";
+    const source = body.source || "direct";
+    const gdpr_consent = body.gdpr_consent === "true" || body.gdpr_consent === true;
+
+    if (!email && !phone) {
+      return res.status(400).json({
+        message: "At least email or phone is required for candidate creation",
+      });
+    }
+
+    const duplicateResult = await pool.query(
+      `SELECT id FROM candidates WHERE tenant_id = $1 AND deleted_at IS NULL AND (email IS NOT NULL AND LOWER(email) = LOWER($2) OR phone IS NOT NULL AND phone = $3) LIMIT 1`,
+      [tenantId, email ?? "", phone ?? ""],
+    );
+    if (duplicateResult.rows.length > 0) {
+      return res.status(409).json({ message: "Candidate with this email or phone already exists" });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO candidates (tenant_id, first_name, last_name, email, phone, current_title, current_company, experience_years, current_location, preferred_location, notice_period_days, current_ctc, expected_ctc, skills, summary, source, gdpr_consent, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+       RETURNING *`,
+      [
+        tenantId, first_name, last_name, email, phone, current_title, current_company,
+        experience_years, current_location, preferred_location, notice_period_days,
+        current_ctc, expected_ctc, skills, summary, source, gdpr_consent, createdBy,
+      ],
+    );
+
+    let candidate = insertResult.rows[0];
+
+    if (file?.buffer) {
+      const resumeUrl = `/candidates/${candidate.id}/resume`;
+      const updated = await pool.query(
+        `UPDATE candidates SET resume_url = $1, resume_data = $2, resume_mime_type = $3 WHERE id = $4 RETURNING *`,
+        [resumeUrl, file.buffer, file.mimetype || "application/octet-stream", candidate.id],
+      );
+      candidate = updated.rows[0];
+    }
+
+    const appResult = await pool.query(
+      `INSERT INTO job_applications (tenant_id, job_id, candidate_id, stage, assigned_to)
+       VALUES ($1, $2, $3, 'new', $4)
+       ON CONFLICT (tenant_id, job_id, candidate_id) DO NOTHING
+       RETURNING *`,
+      [tenantId, jobId, candidate.id, createdBy],
+    );
+
+    res.status(201).json({
+      candidate,
+      application: appResult.rows[0] ?? null,
+    });
+  } catch (error: any) {
+    console.error("createCandidateForJob error:", error);
+    res.status(500).json({ message: error?.message || "Internal server error" });
+  }
+};
+
 // ─── export ──────────────────────────────────────────────────────────────────
 
 export const exportCandidates = async (req: AuthRequest, res: Response) => {
@@ -430,6 +571,13 @@ export const exportCandidates = async (req: AuthRequest, res: Response) => {
 
   try {
     const { filters, params } = buildSearchFilters(tenantId, req.query as any);
+
+    if (req.user?.role === "recruiter" && req.user?.id) {
+      params.push(req.user.id);
+      filters.push(
+        `EXISTS (SELECT 1 FROM job_applications ja JOIN jobs j ON j.id = ja.job_id WHERE ja.candidate_id = candidates.id AND j.assigned_recruiter_id = $${params.length} AND j.tenant_id = $1 AND j.deleted_at IS NULL)`,
+      );
+    }
 
     const dbResult = await pool.query(
       `SELECT first_name, last_name, email, phone, current_title, current_company,

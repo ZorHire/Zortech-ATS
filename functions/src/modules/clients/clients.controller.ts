@@ -7,6 +7,22 @@ export const getClients = async (req: AuthRequest, res: Response) => {
     const tenantId = req.user?.tenant_id;
     const limitVal = Math.min(Number(req.query.limit) || 500, 500);
     const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
+    const isRecruiter = req.user?.role === "recruiter";
+    const userId = req.user?.id;
+
+    if (isRecruiter) {
+      if (!userId) return res.json([]);
+      const result = await pool.query(
+        `SELECT DISTINCT c.* FROM clients c
+         JOIN jobs j ON j.client_id = c.id
+         WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+           AND j.deleted_at IS NULL AND j.assigned_recruiter_id = $2
+         ORDER BY c.name ASC LIMIT $3 OFFSET $4`,
+        [tenantId, userId, limitVal, offsetVal],
+      );
+      return res.json(result.rows);
+    }
+
     const result = await pool.query(
       "SELECT * FROM clients WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY name ASC LIMIT $2 OFFSET $3",
       [tenantId, limitVal, offsetVal],
@@ -22,6 +38,15 @@ export const getClientById = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const tenantId = req.user?.tenant_id;
   try {
+    if (req.user?.role === "recruiter") {
+      const accessible = await pool.query(
+        `SELECT 1 FROM jobs WHERE client_id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND assigned_recruiter_id = $3 LIMIT 1`,
+        [id, tenantId, req.user.id],
+      );
+      if (accessible.rows.length === 0) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+    }
     const result = await pool.query(
       "SELECT * FROM clients WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
       [id, tenantId],

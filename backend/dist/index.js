@@ -45,7 +45,7 @@ app.use((0, cors_1.default)({
 // This allows Multer to handle the multipart/form-data request first
 const parseRouter = express_1.default.Router();
 parseRouter.use("/", parse_routes_1.default);
-app.use("/api/v1/parse", parseRouter);
+app.use("/v1/parse", parseRouter);
 app.use(express_1.default.json());
 app.use(express_1.default.static(uploadsPath));
 app.use((0, morgan_1.default)("dev"));
@@ -68,9 +68,9 @@ v1Router.use("/admin", admin_routes_1.default);
 v1Router.use("/pipeline", pipeline_routes_1.default);
 v1Router.use("/email", email_routes_1.default);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
-app.use("/api/v1", v1Router);
+app.use("/v1", v1Router);
 // Health Check
-app.get("/api/health", (req, res) => {
+app.get("/v1/health", (req, res) => {
     res.json({ status: "ok", message: "Backend is running" });
 });
 // Global error handler — converts thrown/middleware errors to JSON (e.g. multer rejections)

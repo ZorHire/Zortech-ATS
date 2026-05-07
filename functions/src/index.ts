@@ -5,6 +5,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 
+import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
 import clientRoutes from "./modules/clients/clients.routes";
 import jobRoutes from "./modules/jobs/jobs.routes";
@@ -14,8 +15,23 @@ import adminRoutes from "./modules/admin/admin.routes";
 import pipelineRoutes from "./modules/pipeline/pipeline.routes";
 import emailRoutes from "./modules/email/email.routes";
 import emailCampaignRoutes from "./modules/email/emailCampaign.routes";
+import interviewRoutes from "./modules/interviews/interviews.routes";
 import parseRoutes from "./routes/parse.routes";
+import jobCandidateRoutes from "./modules/jobs/jobCandidates.routes";
+import billingRoutes from "./modules/billing/billing.routes";
+import dashboardRoutes from "./modules/dashboard/dashboard.routes";
+import tenantRoutes from "./modules/tenants/tenants.routes";
+import { requireActiveSubscription } from "./middleware/subscriptionCheck";
+import { softAuth } from "./middleware/auth";
 import pool from "./db";
+
+if (!env.EMAIL_ENCRYPTION_KEY) {
+  console.error(
+    "[startup] CRITICAL: SERVER_EMAIL_ENCRYPTION_KEY is not set. " +
+    "All email operations requiring credential decryption will fail. " +
+    "Add this secret in Firebase and redeploy.",
+  );
+}
 
 const app = express();
 
@@ -72,6 +88,7 @@ app.use("/v1", apiLimiter);
 // non-JSON content types, so any route using multer MUST be registered here.
 app.use("/v1/parse", parseRoutes);
 app.use("/v1/candidates", candidateRoutes);
+app.use("/v1/jobs", jobCandidateRoutes);
 
 app.use(express.json());
 
@@ -88,7 +105,20 @@ app.get("/health", async (_req, res) => {
 // Mount all routes under /v1
 const v1Router = express.Router();
 
+// softAuth parses the JWT (if present) and sets req.user without rejecting the
+// request. This must run before requireActiveSubscription so the gate can read
+// the tenant. Per-route authMiddleware still hard-rejects missing/invalid tokens.
+v1Router.use(softAuth);
+
 v1Router.use("/auth", authRoutes);
+v1Router.use("/billing", billingRoutes);       // billing exempt: tenant must be able to subscribe
+v1Router.use("/tenants", tenantRoutes);         // tenant mgmt exempt: ZorTech onboarding flow
+
+// ─── Subscription gate ────────────────────────────────────────────────────────
+// All routes below require an active or in-trial subscription.
+// ZorTech (is_platform_owner) passes through automatically inside the middleware.
+v1Router.use(requireActiveSubscription);
+
 v1Router.use("/clients", clientRoutes);
 v1Router.use("/jobs", jobRoutes);
 v1Router.use("/vendors", vendorRoutes);
@@ -96,6 +126,8 @@ v1Router.use("/admin", adminRoutes);
 v1Router.use("/pipeline", pipelineRoutes);
 v1Router.use("/email", emailRoutes);
 v1Router.use("/email-campaigns", emailCampaignRoutes);
+v1Router.use("/interviews", interviewRoutes);
+v1Router.use("/dashboard", dashboardRoutes);
 // Note: /parse and /candidates are mounted globally before express.json()
 
 app.use("/v1", v1Router);

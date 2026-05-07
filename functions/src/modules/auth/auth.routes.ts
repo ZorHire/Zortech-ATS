@@ -13,11 +13,7 @@ router.post("/setup", validate({ required: ["email", "password", "full_name", "s
 
 router.post("/login", validate(loginSchema), authController.login);
 router.post("/reset-password", validate({ required: ["email", "newPassword"] }), authController.resetPassword);
-router.post(
-  "/register",
-  validate({ required: ["email", "password", "full_name"] }),
-  authController.register,
-);
+// Self-registration is disabled — companies are onboarded by ZorTech via POST /v1/tenants/onboard
 router.post(
   "/change-password",
   authMiddleware,

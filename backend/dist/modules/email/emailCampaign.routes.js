@@ -40,16 +40,12 @@ const router = (0, express_1.Router)();
 router.get("/", auth_1.authMiddleware, auth_1.tenantIsolation, emailController.listCampaigns);
 router.post("/", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "senior_recruiter",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), emailController.createCampaign);
 router.post("/:id/send", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)([
     "super_admin",
-    "ats_admin",
-    "senior_recruiter",
+    "accounts_manager",
     "recruiter",
-    "sourcing_specialist",
 ]), emailController.sendCampaign);
 exports.default = router;

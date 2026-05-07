@@ -10,11 +10,13 @@ import {
   Mail,
   Building2,
   TrendingUp,
+  UserPlus,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { jobStatusLabels } from '../lib/mockData';
 import { Job } from '../types';
 import api from '../lib/api';
+import AddCandidateModal from '../components/candidates/AddCandidateModal';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -44,6 +46,7 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -103,6 +106,13 @@ export default function JobDetailPage() {
               <TrendingUp size={14} />
               View Pipeline
             </Link>
+            <button
+              onClick={() => setIsAddCandidateOpen(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              <UserPlus size={14} />
+              Add Candidate
+            </button>
             <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
               <Mail size={14} />
               Send to Vendors
@@ -247,6 +257,18 @@ export default function JobDetailPage() {
           </Link>
         </div>
       </div>
+      {isAddCandidateOpen && id && (
+        <AddCandidateModal
+          jobId={id}
+          onClose={() => setIsAddCandidateOpen(false)}
+          onSuccess={() => {
+            setJob((prev) => prev
+              ? { ...prev, application_count: (prev.application_count ?? 0) + 1 }
+              : prev
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

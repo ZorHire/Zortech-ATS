@@ -21,12 +21,15 @@ ZorHire centralizes recruitment operations in a secure, modular environment — 
 - **Application Status Actions** — From the Candidate modal, recruiters can:
   - **Move to Next Stage** — advances the candidate's pipeline stage in one click via the live API.
   - **Send Individual Email** — sends a personalized shortlisting email from the recruiter's own SMTP account.
-  - **Schedule Interview** — collects date, time, and interview type (video / phone / in-person) and dispatches a formatted interview invite email.
+  - **Schedule Interview** — collects date, time, interview type (video / phone / in-person), interviewer name, meeting link, and duration; dispatches a formatted invite email and persists the record to the database.
+- **Interview Management** — Full interview lifecycle tracking within the Candidate modal Activity tab. View all scheduled/completed interviews per application, update status (Completed / Cancelled / No Show) with one click, and jump to meeting links directly. Interview count badge visible on the Activity tab.
+- **Activity Timeline** — The Activity tab in the Candidate modal shows a unified view of pipeline stage transitions (with actor, timestamp, and notes) and all interviews for the selected application.
+- **Email Campaigns** — Dedicated Campaigns page (`/campaigns`) for managing bulk outreach. Create campaigns from 4 built-in templates (Outreach, Interview Invite, Offer Update, Follow-up), save as drafts, then select recipients from the full candidate list and send. Tracks recipient count, delivered count, and status (draft / sending / sent / failed) with retry support.
 - **Client Management** — Create detailed client profiles (contact info, billing model, SLA, contract dates, stakeholders, tags) and view them as cards on the Jobs page. Clicking a card opens a full read-only detail view. Clients can be deleted directly from the card.
 - **Vendor Management** — Manage staffing vendors with profile parsing and skill indexing. Vendors can be deleted individually from the card or in bulk via the selection action bar.
 - **Document Parsing** — Upload resumes, job descriptions, or vendor profiles (PDF, DOCX, DOC, TXT) and auto-populate structured fields. Uses **Gemini AI** (`gemini-2.5-flash-lite`) for cloud-based intelligent parsing with a **local rule-based fallback** (pdf-parse / mammoth + section-map architecture).
 - **Per-User SMTP Email System** — Each user configures their own outbound email credentials (host, port, username, password). Passwords are stored encrypted with **AES-256-GCM**. Emails are sent from the individual user's address, not a shared server account.
-- **Bulk Email Campaigns** — Target candidates by stage or skill with templated bulk email blasts.
+- **Bulk Email Campaigns** — Target candidates with templated bulk email blasts. Campaigns are created as drafts, then recipients are selected from the candidate pool and the campaign is dispatched via the sender's personal SMTP config.
 - **Analytics** — Recruitment metrics and reporting dashboard.
 - **Resume Search** — Cross-candidate skill and keyword search.
 - **Admin Dashboard** — User invitations, role assignment, and account management. When creating a `Vendor` user, admins select the linked vendor company from a dropdown — the association is stored in `profiles.vendor_id` and embedded in the JWT for zero-overhead filtering on every request.
@@ -98,6 +101,7 @@ zortech-hosting/
 │       │   ├── AnalyticsPage.tsx
 │       │   ├── ResumeSearchPage.tsx
 │       │   ├── EmailSettingsPage.tsx
+│       │   ├── EmailCampaignsPage.tsx      # Campaign creation, recipient selection, send
 │       │   ├── AdminPage.tsx
 │       │   ├── LoginPage.tsx
 │       │   └── ChangePasswordPage.tsx
@@ -121,6 +125,7 @@ zortech-hosting/
 │           ├── parse/
 │           │   ├── parse.controller.ts  # Resume / JD / Vendor parse endpoints
 │           │   └── parse.utils.ts       # Text extraction & field parsing logic
+│           ├── interviews/     # Interview scheduling & status tracking (CRUD)
 │           ├── pipeline/       # Pipeline stage management & history
 │           └── vendors/        # Vendor management
 │
@@ -163,6 +168,9 @@ ZorHire uses a **per-user SMTP model**:
    - `GET /email/config` — fetch current user's SMTP config (password masked)
    - `POST /email/send-single` — send a single email to a candidate
    - `POST /email/send-bulk` — send templated bulk emails
+   - `POST /email-campaigns` — create a campaign draft
+   - `GET /email-campaigns` — list all campaigns for the tenant
+   - `POST /email-campaigns/:id/send` — dispatch a campaign to selected recipients
 
 ---
 

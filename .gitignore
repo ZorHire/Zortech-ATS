@@ -68,8 +68,9 @@ node_modules/
 # dataconnect generated files
 .dataconnect
 
-# Local error/solution log
+# Local error/solution log/Update log
 errors.md
+ATS_PR_Feature_Gap_Analysis.md
 
 # Agent logs/settings
 .agent

@@ -1,5 +1,9 @@
 import React from 'react';
-import { X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye, FileText, Send, Trash2, ChevronRight, Loader2, Upload } from 'lucide-react';
+import {
+  X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye,
+  FileText, Send, Trash2, ChevronRight, Loader2, Upload,
+  Video, PhoneCall, Users, Link, CheckCircle2, XCircle, AlertCircle,
+} from 'lucide-react';
 import { Candidate } from '../../types';
 import api from '../../lib/api';
 import ComposeEmailModal from './ComposeEmailModal';
@@ -49,6 +53,27 @@ const STAGE_COLORS: Record<string, string> = {
   disqualified: "bg-red-100 text-red-600",
 };
 
+const INTERVIEW_STATUS_COLORS: Record<string, string> = {
+  scheduled: "bg-blue-50 text-blue-700",
+  completed: "bg-emerald-50 text-emerald-700",
+  cancelled: "bg-gray-100 text-gray-500",
+  no_show: "bg-red-50 text-red-600",
+};
+
+const INTERVIEW_STATUS_ICONS: Record<string, React.ReactNode> = {
+  scheduled: <Calendar size={13} />,
+  completed: <CheckCircle2 size={13} />,
+  cancelled: <XCircle size={13} />,
+  no_show: <AlertCircle size={13} />,
+};
+
+const INTERVIEW_TYPE_LABELS: Record<string, string> = {
+  video: "Video Call",
+  phone: "Phone",
+  face_to_face: "In-Person",
+  in_person: "In-Person",
+};
+
 const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete, onUpdate }) => {
   const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity'>('overview');
   const [localCandidate, setLocalCandidate] = React.useState<Candidate>(candidate);
@@ -65,8 +90,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   // Compose email modal
   const [showCompose, setShowCompose] = React.useState(false);
 
-  // Email states (used by schedule interview only now)
-  const [emailSending, setEmailSending] = React.useState(false);
+  // Shared message state
   const [emailMsg, setEmailMsg] = React.useState("");
 
   // Schedule interview state
@@ -74,11 +98,26 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   const [interviewDate, setInterviewDate] = React.useState("");
   const [interviewTime, setInterviewTime] = React.useState("");
   const [interviewType, setInterviewType] = React.useState("video");
+  const [interviewerName, setInterviewerName] = React.useState("");
+  const [meetingLink, setMeetingLink] = React.useState("");
+  const [interviewDuration, setInterviewDuration] = React.useState("60");
   const [scheduleSending, setScheduleSending] = React.useState(false);
+
+  // Activity tab state
+  const [pipelineHistory, setPipelineHistory] = React.useState<any[]>([]);
+  const [interviews, setInterviews] = React.useState<any[]>([]);
+  const [activityLoading, setActivityLoading] = React.useState(false);
+  const [updatingInterview, setUpdatingInterview] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     fetchApplications();
   }, [candidate.id]);
+
+  React.useEffect(() => {
+    if (activeTab === 'activity' && selectedApp) {
+      fetchActivity(selectedApp.id);
+    }
+  }, [activeTab, selectedApp?.id]);
 
   const fetchApplications = async () => {
     setAppLoading(true);
@@ -90,6 +129,22 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       // candidate may not be in any pipeline yet
     } finally {
       setAppLoading(false);
+    }
+  };
+
+  const fetchActivity = async (appId: string) => {
+    setActivityLoading(true);
+    try {
+      const [history, ivs] = await Promise.all([
+        api.get(`/pipeline/applications/${appId}/history`),
+        api.get(`/interviews/applications/${appId}`),
+      ]);
+      setPipelineHistory(Array.isArray(history) ? history : []);
+      setInterviews(Array.isArray(ivs) ? ivs : []);
+    } catch {
+      // silent — keep whatever was loaded before
+    } finally {
+      setActivityLoading(false);
     }
   };
 
@@ -122,25 +177,6 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     }
   };
 
-  const handleSendShortlistEmail = async () => {
-    setEmailSending(true);
-    setEmailMsg("");
-    try {
-      const jobTitle = selectedApp?.job?.title || candidate.current_title || "the position";
-      const body = `Hi ${candidate.first_name},\n\nI hope you are doing well.\n\nAfter reviewing your profile, we are pleased to inform you that you have been shortlisted for the ${jobTitle} role. Your experience and skills are a great match for what we are looking for.\n\nWe would love to connect with you to discuss the opportunity in detail. Please reply to this email or let us know a convenient time for a call.\n\nLooking forward to hearing from you!\n\nBest regards,\nRecruitment Team`;
-      await api.post('/email/send-single', {
-        to: candidate.email,
-        subject: `Shortlisted for ${jobTitle}`,
-        body,
-      });
-      setEmailMsg("Shortlisting email sent!");
-    } catch (err: any) {
-      setEmailMsg(err?.message || "Failed to send email");
-    } finally {
-      setEmailSending(false);
-      setTimeout(() => setEmailMsg(""), 4000);
-    }
-  };
 
   const handleScheduleInterview = async () => {
     if (!interviewDate || !interviewTime) {
@@ -152,21 +188,47 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     setEmailMsg("");
     try {
       const jobTitle = selectedApp?.job?.title || candidate.current_title || "the position";
-      const formattedDate = new Date(`${interviewDate}T${interviewTime}`).toLocaleString("en-IN", {
+      const scheduledAt = new Date(`${interviewDate}T${interviewTime}`);
+      const formattedDate = scheduledAt.toLocaleString("en-IN", {
         weekday: "long", day: "numeric", month: "long", year: "numeric",
         hour: "2-digit", minute: "2-digit",
       });
       const typeLabel = interviewType === "video" ? "Video Call" : interviewType === "phone" ? "Phone Interview" : "In-Person Interview";
-      const body = `Hi ${candidate.first_name},\n\nThank you for your interest in the ${jobTitle} role.\n\nWe would like to schedule a ${typeLabel} with you on:\n\n📅 ${formattedDate}\n\nPlease confirm your availability by replying to this email. If this time does not work for you, kindly suggest an alternate slot.\n\nWe look forward to speaking with you!\n\nBest regards,\nRecruitment Team`;
+      const linkLine = meetingLink ? `\n🔗 Join link: ${meetingLink}` : "";
+      const interviewerLine = interviewerName ? `\nInterviewer: ${interviewerName}` : "";
+      const body = `Hi ${candidate.first_name},\n\nThank you for your interest in the ${jobTitle} role.\n\nWe would like to schedule a ${typeLabel} with you on:\n\n📅 ${formattedDate}${interviewerLine}${linkLine}\n\nPlease confirm your availability by replying to this email. If this time does not work for you, kindly suggest an alternate slot.\n\nWe look forward to speaking with you!\n\nBest regards,\nRecruitment Team`;
+
+      // Send invite email
       await api.post('/email/send-single', {
         to: candidate.email,
         subject: `Interview Invitation – ${jobTitle}`,
         body,
       });
+
+      // Persist interview record (non-blocking failure)
+      if (selectedApp) {
+        try {
+          const dbType = interviewType === "in_person" ? "face_to_face" : interviewType;
+          const created = await api.post('/interviews', {
+            application_id: selectedApp.id,
+            interview_type: dbType,
+            scheduled_at: scheduledAt.toISOString(),
+            duration_minutes: parseInt(interviewDuration),
+            interviewer_name: interviewerName || null,
+            meeting_link: meetingLink || null,
+          });
+          setInterviews(prev => [created, ...prev]);
+        } catch {
+          // email sent successfully, just couldn't persist record
+        }
+      }
+
       setEmailMsg("Interview invite sent!");
       setShowScheduler(false);
       setInterviewDate("");
       setInterviewTime("");
+      setInterviewerName("");
+      setMeetingLink("");
     } catch (err: any) {
       setEmailMsg(err?.message || "Failed to send interview invite");
     } finally {
@@ -175,7 +237,19 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     }
   };
 
-  // Fetch resume blob whenever resume_url is set, so iframe, download, and full-screen all work with auth
+  const handleUpdateInterviewStatus = async (interviewId: string, status: string) => {
+    setUpdatingInterview(interviewId);
+    try {
+      const updated = await api.patch(`/interviews/${interviewId}`, { status });
+      setInterviews(prev => prev.map(iv => iv.id === interviewId ? { ...iv, ...updated } : iv));
+    } catch {
+      // silent
+    } finally {
+      setUpdatingInterview(null);
+    }
+  };
+
+  // Fetch resume blob with auth
   React.useEffect(() => {
     if (!localCandidate.resume_url) { setResumeBlobUrl(null); return; }
     let revoked = false;
@@ -199,7 +273,6 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     return () => { revoked = true; };
   }, [localCandidate.resume_url]);
 
-  // Revoke blob URL on unmount to free memory
   React.useEffect(() => {
     return () => { if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl); };
   }, [resumeBlobUrl]);
@@ -273,6 +346,11 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}>
                 {tab}
+                {tab === 'activity' && interviews.length > 0 && (
+                  <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">
+                    {interviews.length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -280,6 +358,8 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+
+          {/* ── Overview Tab ── */}
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Left Column */}
@@ -406,28 +486,56 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                     <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Interview Details</p>
                       <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="date"
+                            value={interviewDate}
+                            min={new Date().toISOString().split("T")[0]}
+                            onChange={(e) => setInterviewDate(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          />
+                          <input
+                            type="time"
+                            value={interviewTime}
+                            onChange={(e) => setInterviewTime(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            value={interviewType}
+                            onChange={(e) => setInterviewType(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="video">Video Call</option>
+                            <option value="phone">Phone</option>
+                            <option value="in_person">In-Person</option>
+                          </select>
+                          <select
+                            value={interviewDuration}
+                            onChange={(e) => setInterviewDuration(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          >
+                            <option value="30">30 min</option>
+                            <option value="45">45 min</option>
+                            <option value="60">60 min</option>
+                            <option value="90">90 min</option>
+                          </select>
+                        </div>
                         <input
-                          type="date"
-                          value={interviewDate}
-                          min={new Date().toISOString().split("T")[0]}
-                          onChange={(e) => setInterviewDate(e.target.value)}
+                          type="text"
+                          value={interviewerName}
+                          onChange={(e) => setInterviewerName(e.target.value)}
+                          placeholder="Interviewer name (optional)"
                           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         />
                         <input
-                          type="time"
-                          value={interviewTime}
-                          onChange={(e) => setInterviewTime(e.target.value)}
+                          type="url"
+                          value={meetingLink}
+                          onChange={(e) => setMeetingLink(e.target.value)}
+                          placeholder="Meeting link (optional)"
                           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                         />
-                        <select
-                          value={interviewType}
-                          onChange={(e) => setInterviewType(e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                        >
-                          <option value="video">Video Call</option>
-                          <option value="phone">Phone Interview</option>
-                          <option value="in_person">In-Person</option>
-                        </select>
                       </div>
                       <button
                         onClick={handleScheduleInterview}
@@ -435,7 +543,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                         className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         {scheduleSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                        Send Invite
+                        Send Invite & Save
                       </button>
                     </div>
                   )}
@@ -468,6 +576,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
             </div>
           )}
 
+          {/* ── Resume Tab ── */}
           {activeTab === 'resume' && (
             <div className="h-full flex flex-col space-y-4">
               {localCandidate.resume_url ? (
@@ -503,12 +612,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                     {resumeLoading ? (
                       <Loader2 size={28} className="animate-spin text-blue-400" />
                     ) : resumeBlobUrl ? (
-                      <iframe
-                        src={resumeBlobUrl}
-                        className="w-full h-full"
-                        style={{ minHeight: '420px' }}
-                        title="Resume Preview"
-                      />
+                      <iframe src={resumeBlobUrl} className="w-full h-full" style={{ minHeight: '420px' }} title="Resume Preview" />
                     ) : (
                       <div className="text-center space-y-2">
                         <FileText size={36} className="mx-auto text-gray-300" />
@@ -545,31 +649,192 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
             </div>
           )}
 
+          {/* ── Activity Tab ── */}
           {activeTab === 'activity' && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Timeline</h3>
-              </div>
-              <div className="p-5 space-y-6">
-                {applications.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-6">No pipeline activity yet</p>
-                ) : (
-                  applications.map((app) => (
-                    <div key={app.id} className="relative pl-8 before:absolute before:left-[11px] before:top-2 before:bottom-[-24px] before:w-[2px] before:bg-gray-100 last:before:hidden">
-                      <div className="absolute left-0 top-1.5 w-[24px] h-[24px] bg-white border-4 border-gray-50 rounded-full flex items-center justify-center">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-medium mb-1">{new Date(app.updated_at).toLocaleDateString()}</p>
-                        <p className="text-sm text-gray-800">
-                          Application for <span className="font-bold text-blue-600">{app.job?.title || "a job"}</span>
-                          {" "}— Stage: <span className={`font-bold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[app.stage] || "text-gray-600"}`}>{STAGE_LABELS[app.stage] || app.stage}</span>
-                        </p>
-                      </div>
+            <div className="space-y-5">
+              {/* Application selector when multiple */}
+              {applications.length > 1 && (
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Viewing</span>
+                  <select
+                    value={selectedApp?.id || ""}
+                    onChange={(e) => {
+                      const app = applications.find(a => a.id === e.target.value);
+                      setSelectedApp(app);
+                    }}
+                    className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {applications.map(a => (
+                      <option key={a.id} value={a.id}>{a.job?.title || "Job"}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {activityLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 size={24} className="animate-spin text-blue-500" />
+                </div>
+              ) : !selectedApp ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+                  <p className="text-sm text-gray-400">Candidate is not in any pipeline yet</p>
+                </div>
+              ) : (
+                <>
+                  {/* Interviews section */}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                        <Calendar size={14} className="text-blue-500" /> Interviews
+                      </h3>
+                      <span className="text-xs text-gray-400 font-medium">{interviews.length} total</span>
                     </div>
-                  ))
-                )}
-              </div>
+
+                    {interviews.length === 0 ? (
+                      <div className="px-5 py-8 text-center">
+                        <Video size={24} className="mx-auto text-gray-300 mb-2" />
+                        <p className="text-xs text-gray-400">No interviews scheduled yet</p>
+                        <button
+                          onClick={() => { setActiveTab('overview'); setShowScheduler(true); }}
+                          className="mt-3 text-xs text-blue-600 font-bold hover:underline"
+                        >
+                          Schedule one →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-50">
+                        {interviews.map(iv => (
+                          <div key={iv.id} className="px-5 py-4 hover:bg-gray-50/50 transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3 min-w-0">
+                                <div className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                  iv.interview_type === 'video' ? 'bg-blue-50' :
+                                  iv.interview_type === 'phone' ? 'bg-emerald-50' : 'bg-violet-50'
+                                }`}>
+                                  {iv.interview_type === 'video' ? <Video size={14} className="text-blue-600" /> :
+                                   iv.interview_type === 'phone' ? <PhoneCall size={14} className="text-emerald-600" /> :
+                                   <Users size={14} className="text-violet-600" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-bold text-gray-900">
+                                      {INTERVIEW_TYPE_LABELS[iv.interview_type] || iv.interview_type}
+                                    </p>
+                                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full flex items-center gap-1 ${INTERVIEW_STATUS_COLORS[iv.status] || 'bg-gray-100 text-gray-600'}`}>
+                                      {INTERVIEW_STATUS_ICONS[iv.status]}
+                                      {iv.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {new Date(iv.scheduled_at).toLocaleString('en-IN', {
+                                      weekday: 'short', day: 'numeric', month: 'short',
+                                      hour: '2-digit', minute: '2-digit',
+                                    })}
+                                    {iv.duration_minutes ? ` · ${iv.duration_minutes} min` : ''}
+                                  </p>
+                                  {iv.interviewer_name && (
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                      Interviewer: {iv.interviewer_name}
+                                    </p>
+                                  )}
+                                  {iv.meeting_link && (
+                                    <a href={iv.meeting_link} target="_blank" rel="noopener noreferrer"
+                                      className="text-xs text-blue-600 hover:underline mt-0.5 flex items-center gap-1">
+                                      <Link size={10} /> Join Meeting
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                              {/* Status quick-update */}
+                              {iv.status === 'scheduled' && (
+                                <div className="flex gap-1.5 flex-shrink-0">
+                                  <button
+                                    onClick={() => handleUpdateInterviewStatus(iv.id, 'completed')}
+                                    disabled={updatingInterview === iv.id}
+                                    title="Mark completed"
+                                    className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all disabled:opacity-50"
+                                  >
+                                    {updatingInterview === iv.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                  </button>
+                                  <button
+                                    onClick={() => handleUpdateInterviewStatus(iv.id, 'cancelled')}
+                                    disabled={updatingInterview === iv.id}
+                                    title="Cancel"
+                                    className="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50"
+                                  >
+                                    <XCircle size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleUpdateInterviewStatus(iv.id, 'no_show')}
+                                    disabled={updatingInterview === iv.id}
+                                    title="No show"
+                                    className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all disabled:opacity-50"
+                                  >
+                                    <AlertCircle size={12} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pipeline history timeline */}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                        <Clock size={14} className="text-violet-500" /> Pipeline Timeline
+                      </h3>
+                      <span className="text-xs text-gray-400 font-medium">{pipelineHistory.length} events</span>
+                    </div>
+                    <div className="p-5">
+                      {pipelineHistory.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">No stage changes recorded yet</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {pipelineHistory.map((event) => (
+                            <div key={event.id} className="relative pl-8 before:absolute before:left-[11px] before:top-5 before:bottom-[-16px] before:w-[2px] before:bg-gray-100 last:before:hidden">
+                              <div className="absolute left-0 top-1.5 w-6 h-6 bg-white border-2 border-violet-200 rounded-full flex items-center justify-center">
+                                <div className="w-2 h-2 bg-violet-500 rounded-full" />
+                              </div>
+                              <div>
+                                <p className="text-[10px] text-gray-400 font-medium">
+                                  {new Date(event.created_at).toLocaleString('en-IN', {
+                                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                                  })}
+                                  {event.changed_by_email ? ` · ${event.changed_by_email}` : ''}
+                                </p>
+                                <p className="text-sm text-gray-700 mt-0.5">
+                                  {event.from_stage ? (
+                                    <>
+                                      <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[event.from_stage] || 'text-gray-600'}`}>
+                                        {STAGE_LABELS[event.from_stage] || event.from_stage}
+                                      </span>
+                                      <span className="text-gray-400 mx-1.5">→</span>
+                                      <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[event.to_stage] || 'text-gray-600'}`}>
+                                        {STAGE_LABELS[event.to_stage] || event.to_stage}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[event.to_stage] || 'text-gray-600'}`}>
+                                      Added to pipeline: {STAGE_LABELS[event.to_stage] || event.to_stage}
+                                    </span>
+                                  )}
+                                </p>
+                                {event.note && (
+                                  <p className="text-xs text-gray-400 mt-1 italic">"{event.note}"</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>

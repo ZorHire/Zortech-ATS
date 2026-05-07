@@ -47,4 +47,6 @@ router.post("/config/test", auth_1.authMiddleware, auth_1.tenantIsolation, (0, a
 router.get("/templates", auth_1.authMiddleware, auth_1.tenantIsolation, emailController.listTemplates);
 router.post("/send-single", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.sendSingleEmail);
 router.post("/send", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(EMAIL_ROLES), emailController.sendEmail);
+router.post("/assign-jd", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(["super_admin", "accounts_manager", "vendor_manager"]), emailController.assignJd);
+router.post("/assign-jd-recruiter", auth_1.authMiddleware, auth_1.tenantIsolation, (0, auth_1.authorize)(["super_admin", "accounts_manager"]), emailController.assignJdRecruiter);
 exports.default = router;

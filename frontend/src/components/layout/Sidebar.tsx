@@ -11,6 +11,8 @@ import {
   ChevronRight,
   LogOut,
   LayoutGrid,
+  Send,
+  CreditCard,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -84,6 +86,12 @@ const navItems = [
     roles: ["super_admin", "accounts_manager"],
   },
   {
+    icon: Send,
+    label: "Campaigns",
+    path: "/campaigns",
+    roles: ["super_admin", "accounts_manager", "recruiter"],
+  },
+  {
     icon: Mail,
     label: "Email Settings",
     path: "/settings/email",
@@ -92,6 +100,12 @@ const navItems = [
       "accounts_manager",
       "recruiter",
     ],
+  },
+  {
+    icon: CreditCard,
+    label: "Subscription",
+    path: "/subscription",
+    roles: ["super_admin", "accounts_manager"],
   },
 ];
 
@@ -129,7 +143,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Nav Items */}
-      <nav className="flex-1 space-y-4 px-4">
+      <nav className="flex-1 space-y-0.5 px-3">
         {visibleItems.map(({ icon: Icon, label, path }) => {
           const active =
             location.pathname === path ||
@@ -139,7 +153,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               key={path}
               to={path}
               title={collapsed ? label : undefined}
-              className={`flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-200 group relative
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
                 ${
                   active
                     ? "text-amber-100 bg-[#f7e6cd]/20"
@@ -150,13 +164,13 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 <div className="absolute left-[-16px] w-1.5 h-8 bg-amber-200 rounded-r-full" />
               )}
               <Icon
-                size={22}
+                size={18}
                 className={`flex-shrink-0 transition-all ${active ? "scale-110" : "group-hover:scale-110"}`}
                 strokeWidth={active ? 2.5 : 2}
               />
               {!collapsed && (
                 <span
-                  className={`text-sm font-bold tracking-tight ${active ? "text-white" : ""}`}
+                  className={`text-[13px] font-bold tracking-tight ${active ? "text-white" : ""}`}
                 >
                   {label}
                 </span>
@@ -167,15 +181,15 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* Footer Actions */}
-      <div className="mt-auto px-4 space-y-4">
+      <div className="mt-auto px-3 space-y-1">
         <button
           onClick={signOut}
-          className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl text-[#d7c1a5] hover:text-[#ffcda2] hover:bg-[#7f5a30]/15 transition-all ${collapsed ? "justify-center" : ""}`}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#d7c1a5] hover:text-[#ffcda2] hover:bg-[#7f5a30]/15 transition-all ${collapsed ? "justify-center" : ""}`}
           title={collapsed ? "Sign Out" : undefined}
         >
-          <LogOut size={22} strokeWidth={2} />
+          <LogOut size={18} strokeWidth={2} />
           {!collapsed && (
-            <span className="text-sm font-bold tracking-tight">Logout</span>
+            <span className="text-[13px] font-bold tracking-tight">Logout</span>
           )}
         </button>
 
