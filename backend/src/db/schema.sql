@@ -273,6 +273,23 @@ CREATE TABLE IF NOT EXISTS user_email_config (
   UNIQUE (user_id, tenant_id)
 );
 
+-- Per-tenant (company) SMTP config — one shared mailbox per company (e.g. hiring@acme.com)
+-- Used as tier-2 fallback when a recruiter has no personal SMTP configured.
+-- ZorTech (is_platform_owner) uses this same table — no hardcoded env-var SMTP.
+CREATE TABLE IF NOT EXISTS tenant_email_config (
+  id                 uuid        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tenant_id          uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  email              text        NOT NULL,
+  encrypted_password text        NOT NULL,
+  provider           text        NOT NULL DEFAULT 'zoho',
+  display_name       text,
+  is_active          boolean     NOT NULL DEFAULT true,
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (tenant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_email_config_tenant_id ON tenant_email_config(tenant_id);
+
 -- Interviews
 CREATE TABLE IF NOT EXISTS interviews (
   id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),

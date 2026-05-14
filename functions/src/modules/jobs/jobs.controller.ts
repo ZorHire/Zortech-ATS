@@ -1,53 +1,57 @@
 import { Response } from "express";
-import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { getAtsPool } from "../../db/poolRouter";
+import { validateUserExists } from "../../lib/userValidator";
+import { markOnboardingStep } from "../onboarding/onboarding.service";
+import { PLATFORM_TENANT_ID } from "../tenants/tenantBootstrap.service";
 
 export const getJobs = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenant_id;
-    const isVendor = req.user?.role === "vendor_user";
+    const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
+    const isVendor = req.user?.role === "vendor_user" || req.user?.role === "vendor_manager";
     const vendorId = req.user?.vendor_id;
     const isRecruiter = req.user?.role === "recruiter";
     const userId = req.user?.id;
     const limitVal = Math.min(Number(req.query.limit) || 500, 500);
     const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
+    const db = await getAtsPool(filterTenantId);
 
     if (isVendor) {
       if (!vendorId) return res.json([]);
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
-                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ($1::uuid IS NULL OR ja.tenant_id = $1)) AS application_count
          FROM jobs j
          JOIN clients c ON c.id = j.client_id
-         WHERE j.tenant_id = $1 AND j.deleted_at IS NULL AND j.assigned_vendor_id = $2
+         WHERE ($1::uuid IS NULL OR j.tenant_id = $1) AND j.deleted_at IS NULL AND $2 = ANY(j.assigned_vendor_ids)
          ORDER BY j.created_at DESC LIMIT $3 OFFSET $4`,
-        [tenantId, vendorId, limitVal, offsetVal],
+        [filterTenantId, vendorId, limitVal, offsetVal],
       );
       return res.json(result.rows);
     }
 
     if (isRecruiter) {
       if (!userId) return res.json([]);
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
-                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ($1::uuid IS NULL OR ja.tenant_id = $1)) AS application_count
          FROM jobs j
          JOIN clients c ON c.id = j.client_id
-         WHERE j.tenant_id = $1 AND j.deleted_at IS NULL AND j.assigned_recruiter_id = $2
+         WHERE ($1::uuid IS NULL OR j.tenant_id = $1) AND j.deleted_at IS NULL AND $2 = ANY(j.assigned_recruiter_ids)
          ORDER BY j.created_at DESC LIMIT $3 OFFSET $4`,
-        [tenantId, userId, limitVal, offsetVal],
+        [filterTenantId, userId, limitVal, offsetVal],
       );
       return res.json(result.rows);
     }
 
-    const result = await pool.query(
+    const result = await db.query(
       `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
-              (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+              (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ($1::uuid IS NULL OR ja.tenant_id = $1)) AS application_count
        FROM jobs j
        JOIN clients c ON c.id = j.client_id
-       WHERE j.tenant_id = $1 AND j.deleted_at IS NULL
+       WHERE ($1::uuid IS NULL OR j.tenant_id = $1) AND j.deleted_at IS NULL
        ORDER BY j.created_at DESC LIMIT $2 OFFSET $3`,
-      [tenantId, limitVal, offsetVal],
+      [filterTenantId, limitVal, offsetVal],
     );
     res.json(result.rows);
   } catch (error) {
@@ -58,27 +62,31 @@ export const getJobs = async (req: AuthRequest, res: Response) => {
 
 export const getJobById = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const tenantId = req.user?.tenant_id;
-  const isVendor = req.user?.role === "vendor_user";
+  const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
+  const isVendor = req.user?.role === "vendor_user" || req.user?.role === "vendor_manager";
   const vendorId = req.user?.vendor_id;
   const isRecruiter = req.user?.role === "recruiter";
 
   try {
-    const result = await pool.query(
+    const db = await getAtsPool(filterTenantId);
+    const result = await db.query(
       `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client
        FROM jobs j
        JOIN clients c ON c.id = j.client_id
-       WHERE j.id = $1 AND j.tenant_id = $2 AND j.deleted_at IS NULL`,
-      [id, tenantId],
+       WHERE j.id = $1 AND ($2::uuid IS NULL OR j.tenant_id = $2) AND j.deleted_at IS NULL`,
+      [id, filterTenantId],
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
     }
     const job = result.rows[0];
-    if (isVendor && job.assigned_vendor_id !== vendorId) {
+    if (isVendor && !vendorId) {
+      return res.status(403).json({ message: "Access denied: no vendor assigned to your account" });
+    }
+    if (isVendor && vendorId && !(job.assigned_vendor_ids ?? []).includes(vendorId)) {
       return res.status(403).json({ message: "Access denied" });
     }
-    if (isRecruiter && job.assigned_recruiter_id !== req.user?.id) {
+    if (isRecruiter && !(job.assigned_recruiter_ids ?? []).includes(req.user?.id ?? "")) {
       return res.status(403).json({ message: "Access denied" });
     }
     res.json(job);
@@ -99,7 +107,15 @@ export const createJob = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
 
   try {
-    const result = await pool.query(
+    if (assigned_recruiter_id) {
+      const exists = await validateUserExists(assigned_recruiter_id);
+      if (!exists) {
+        return res.status(400).json({ message: "assigned_recruiter_id does not reference a valid user" });
+      }
+    }
+
+    const db = await getAtsPool(tenantId);
+    const result = await db.query(
       `INSERT INTO jobs (tenant_id, client_id, title, department, location, work_mode, employment_type, experience_min, experience_max, salary_min, salary_max, currency, headcount, priority, status, description, mandatory_skills, preferred_skills, assigned_recruiter_id, target_start_date, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
        RETURNING *`,
@@ -111,7 +127,25 @@ export const createJob = async (req: AuthRequest, res: Response) => {
         assigned_recruiter_id, target_start_date, createdBy,
       ],
     );
-    res.status(201).json(result.rows[0]);
+
+    const created = result.rows[0];
+
+    // Sync single-column assignment into array column for new jobs
+    if (created.assigned_recruiter_id) {
+      await db.query(
+        "UPDATE jobs SET assigned_recruiter_ids = ARRAY[$1::uuid] WHERE id = $2",
+        [created.assigned_recruiter_id, created.id],
+      );
+      created.assigned_recruiter_ids = [created.assigned_recruiter_id];
+    }
+
+    // Mark onboarding step when a job goes live for the first time
+    const resolvedStatus = created.status;
+    if (resolvedStatus === "active" && tenantId && tenantId !== PLATFORM_TENANT_ID) {
+      markOnboardingStep(tenantId, "first_job_posted").catch(() => {});
+    }
+
+    res.status(201).json(created);
   } catch (error) {
     console.error("Create job error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -125,11 +159,20 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
     experience_max, salary_min, salary_max, currency, headcount, priority, status,
     description, mandatory_skills, preferred_skills, assigned_recruiter_id,
     target_start_date, assigned_vendor_id,
+    assigned_recruiter_ids, assigned_vendor_ids,
   } = req.body;
-  const tenantId = req.user?.tenant_id;
+  const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
 
   try {
-    const result = await pool.query(
+    if (assigned_recruiter_id) {
+      const exists = await validateUserExists(assigned_recruiter_id);
+      if (!exists) {
+        return res.status(400).json({ message: "assigned_recruiter_id does not reference a valid user" });
+      }
+    }
+
+    const db = await getAtsPool(filterTenantId);
+    const result = await db.query(
       `UPDATE jobs SET
        title = COALESCE($1, title),
        department = COALESCE($2, department),
@@ -150,20 +193,32 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
        assigned_recruiter_id = COALESCE($17, assigned_recruiter_id),
        target_start_date = COALESCE($18, target_start_date),
        assigned_vendor_id = COALESCE($19, assigned_vendor_id),
+       assigned_recruiter_ids = COALESCE($20, assigned_recruiter_ids),
+       assigned_vendor_ids = COALESCE($21, assigned_vendor_ids),
        updated_at = now()
-       WHERE id = $20 AND tenant_id = $21 AND deleted_at IS NULL
+       WHERE id = $22 AND ($23::uuid IS NULL OR tenant_id = $23) AND deleted_at IS NULL
        RETURNING *`,
       [
         title, department, location, work_mode, employment_type, experience_min,
         experience_max, salary_min, salary_max, currency, headcount, priority, status,
         description, mandatory_skills, preferred_skills, assigned_recruiter_id,
-        target_start_date, assigned_vendor_id ?? null, id, tenantId,
+        target_start_date, assigned_vendor_id ?? null,
+        assigned_recruiter_ids ?? null, assigned_vendor_ids ?? null,
+        id, filterTenantId,
       ],
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
     }
+
+    // Mark onboarding step when a job transitions to active
+    const updatedStatus = result.rows[0]?.status;
+    const jobTenantId = result.rows[0]?.tenant_id;
+    if (status === "active" && updatedStatus === "active" && jobTenantId && jobTenantId !== PLATFORM_TENANT_ID) {
+      markOnboardingStep(jobTenantId, "first_job_posted").catch(() => {});
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update job error:", error);
@@ -173,11 +228,12 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
 
 export const deleteJob = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const tenantId = req.user?.tenant_id;
+  const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
   try {
-    const result = await pool.query(
-      "UPDATE jobs SET deleted_at = now() WHERE id = $1 AND tenant_id = $2 RETURNING id",
-      [id, tenantId],
+    const db = await getAtsPool(filterTenantId);
+    const result = await db.query(
+      "UPDATE jobs SET deleted_at = now() WHERE id = $1 AND ($2::uuid IS NULL OR tenant_id = $2) RETURNING id",
+      [id, filterTenantId],
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });

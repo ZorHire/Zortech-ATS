@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { createCandidateForJob } from "../candidates/candidates.controller";
 import { authMiddleware, authorize, tenantIsolation } from "../../middleware/auth";
+import { requireActiveSubscription } from "../../middleware/subscriptionCheck";
 import { candidateUpload } from "../../middleware/candidateUpload";
 
 const router = Router();
@@ -18,6 +19,7 @@ router.post(
   "/:jobId/candidates",
   authMiddleware,
   tenantIsolation,
+  requireActiveSubscription,
   authorize(candidateWriteRoles),
   candidateUpload,
   createCandidateForJob,

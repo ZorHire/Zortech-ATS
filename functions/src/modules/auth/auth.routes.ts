@@ -12,7 +12,10 @@ const changePasswordSchema = { required: ["currentPassword", "newPassword"] };
 router.post("/setup", validate({ required: ["email", "password", "full_name", "setupToken"] }), authController.setupAdmin);
 
 router.post("/login", validate(loginSchema), authController.login);
-router.post("/reset-password", validate({ required: ["email", "newPassword"] }), authController.resetPassword);
+// Step 1: request a reset link (sends signed JWT via email)
+router.post("/forgot-password", validate({ required: ["email"] }), authController.forgotPassword);
+// Step 2: consume the token from the link and set a new password
+router.post("/reset-password", validate({ required: ["token", "newPassword"] }), authController.resetPassword);
 // Self-registration is disabled — companies are onboarded by ZorTech via POST /v1/tenants/onboard
 router.post(
   "/change-password",
@@ -20,6 +23,7 @@ router.post(
   validate(changePasswordSchema),
   authController.changePassword,
 );
+router.post("/logout", authController.logout);
 router.get("/me", authMiddleware, authController.getMe);
 
 export default router;

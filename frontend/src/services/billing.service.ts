@@ -33,9 +33,25 @@ export interface Subscription {
   razorpay_subscription_id: string | null;
 }
 
-export interface SubscribeResponse {
+export interface RazorpayOrderResponse {
+  order_id: string;
+  key_id: string;
+  amount: number;
+  currency: string;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+}
+
+export interface VerifyPaymentRequest {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+}
+
+export interface VerifyPaymentResponse {
   subscription: Subscription;
-  checkout_url: string | null;
 }
 
 export const PLANS: Plan[] = [
@@ -119,8 +135,12 @@ export const billingService = {
   subscribe(
     plan_type: PlanType,
     billing_cycle: BillingCycle,
-  ): Promise<SubscribeResponse> {
+  ): Promise<RazorpayOrderResponse> {
     return api.post("/billing/subscribe", { plan_type, billing_cycle });
+  },
+
+  verifyPayment(payload: VerifyPaymentRequest): Promise<VerifyPaymentResponse> {
+    return api.post("/billing/verify-payment", payload);
   },
 
   cancelSubscription(): Promise<{ message: string }> {

@@ -83,6 +83,85 @@ interface RecruiterOption {
   full_name: string;
 }
 
+function MultiSelectList({
+  items,
+  selected,
+  onToggle,
+  labelKey,
+  subLabelKey,
+}: {
+  items: { id: string; [key: string]: string }[];
+  selected: string[];
+  onToggle: (id: string) => void;
+  labelKey: string;
+  subLabelKey?: string;
+}) {
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden max-h-44 overflow-y-auto divide-y divide-gray-50">
+      {items.map((item) => (
+        <label
+          key={item.id}
+          className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer select-none"
+        >
+          <input
+            type="checkbox"
+            checked={selected.includes(item.id)}
+            onChange={() => onToggle(item.id)}
+            className="accent-blue-600 w-3.5 h-3.5 flex-shrink-0"
+          />
+          <span className="text-sm text-gray-800 truncate">
+            {item[labelKey]}
+            {subLabelKey && item[subLabelKey] && (
+              <span className="text-gray-400 ml-1">({item[subLabelKey]})</span>
+            )}
+          </span>
+        </label>
+      ))}
+      {items.length === 0 && (
+        <p className="px-3 py-3 text-sm text-gray-400 text-center">None available</p>
+      )}
+    </div>
+  );
+}
+
+function SelectedTags({
+  ids,
+  items,
+  labelKey,
+  onRemove,
+  colorClass = "bg-blue-50 text-blue-700 border-blue-100",
+}: {
+  ids: string[];
+  items: { id: string; [key: string]: string }[];
+  labelKey: string;
+  onRemove: (id: string) => void;
+  colorClass?: string;
+}) {
+  if (ids.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {ids.map((id) => {
+        const item = items.find((i) => i.id === id);
+        return item ? (
+          <span
+            key={id}
+            className={`flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 text-xs rounded-full border ${colorClass}`}
+          >
+            {item[labelKey]}
+            <button
+              type="button"
+              onClick={() => onRemove(id)}
+              className="hover:opacity-60 transition-opacity ml-0.5"
+            >
+              <X size={9} />
+            </button>
+          </span>
+        ) : null;
+      })}
+    </div>
+  );
+}
+
 function AssignJdModal({
   vendors,
   userRole,
@@ -92,23 +171,31 @@ function AssignJdModal({
   userRole: string;
   onClose: () => void;
 }) {
-  // super_admin can choose; others are locked to their role
   const canAssignVendor = userRole === "super_admin" || userRole === "vendor_manager" || userRole === "accounts_manager";
   const canAssignRecruiter = userRole === "super_admin" || userRole === "accounts_manager";
-  const defaultType = "vendor";
 
-  const [assignType, setAssignType] = useState<"recruiter" | "vendor">(defaultType);
+  const [assignType, setAssignType] = useState<"recruiter" | "vendor">("vendor");
   const [jobs, setJobs] = useState<JobOption[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
   const [recruiters, setRecruiters] = useState<RecruiterOption[]>([]);
   const [loadingRecruiters, setLoadingRecruiters] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState("");
-  const [selectedVendorId, setSelectedVendorId] = useState("");
-  const [selectedRecruiterId, setSelectedRecruiterId] = useState("");
+  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
+  const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
   const [deadlineDays, setDeadlineDays] = useState(3);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const toggleVendor = (id: string) =>
+    setSelectedVendorIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    );
+
+  const toggleRecruiter = (id: string) =>
+    setSelectedRecruiterIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    );
 
   useEffect(() => {
     api
@@ -129,7 +216,11 @@ function AssignJdModal({
         setRecruiters(
           data
             .filter((u: any) => u.role === "recruiter")
-            .map((u: any) => ({ id: u.id, email: u.email, full_name: u.full_name || u.email })),
+            .map((u: any) => ({
+              id: u.id,
+              email: u.email,
+              full_name: u.full_name || u.email,
+            })),
         ),
       )
       .catch(() => setError("Could not load recruiters."))
@@ -144,13 +235,12 @@ function AssignJdModal({
       setError("Please select a Job Description.");
       return;
     }
-
-    if (assignType === "vendor" && !selectedVendorId) {
-      setError("Please select a vendor.");
+    if (assignType === "vendor" && selectedVendorIds.length === 0) {
+      setError("Please select at least one vendor.");
       return;
     }
-    if (assignType === "recruiter" && !selectedRecruiterId) {
-      setError("Please select a recruiter.");
+    if (assignType === "recruiter" && selectedRecruiterIds.length === 0) {
+      setError("Please select at least one recruiter.");
       return;
     }
 
@@ -159,7 +249,7 @@ function AssignJdModal({
       if (assignType === "vendor") {
         await api.post("/email/assign-jd", {
           job_id: selectedJobId,
-          vendor_id: selectedVendorId,
+          vendor_ids: selectedVendorIds,
           deadline_days: deadlineDays,
           site_url: window.location.origin,
         });
@@ -167,68 +257,73 @@ function AssignJdModal({
         try {
           await api.post("/email/assign-jd-recruiter", {
             job_id: selectedJobId,
-            recruiter_id: selectedRecruiterId,
+            recruiter_ids: selectedRecruiterIds,
             deadline_days: deadlineDays,
             site_url: window.location.origin,
           });
         } catch (recruiterAssignError: any) {
-          // Compatibility fallback for environments where the new endpoint is not yet available.
           const status = recruiterAssignError?.status;
-          if (status !== 404 && status !== 405) {
-            throw recruiterAssignError;
-          }
+          if (status !== 404 && status !== 405) throw recruiterAssignError;
 
           const selectedJob = jobs.find((j) => j.id === selectedJobId);
-          const selectedRecruiter = recruiters.find((r) => r.id === selectedRecruiterId);
-          if (!selectedJob || !selectedRecruiter) {
-            throw recruiterAssignError;
-          }
+          if (!selectedJob) throw recruiterAssignError;
 
           await api.patch(`/jobs/${selectedJobId}`, {
-            assigned_recruiter_id: selectedRecruiterId,
+            assigned_recruiter_ids: selectedRecruiterIds,
           });
 
           const dayLabel = deadlineDays === 1 ? "1 day" : `${deadlineDays} days`;
-          const emailBody =
-            `Hi ${selectedRecruiter.full_name || selectedRecruiter.email},\n\n` +
-            `You have been assigned "${selectedJob.title}". Please submit candidates within ${dayLabel} at ${window.location.origin}.`;
-
-          await api.post("/email/send-single", {
-            to: selectedRecruiter.email,
-            subject: `JD Assignment: ${selectedJob.title}`,
-            body: emailBody,
-          });
+          await Promise.allSettled(
+            selectedRecruiterIds.map((rid) => {
+              const rec = recruiters.find((r) => r.id === rid);
+              if (!rec) return Promise.resolve();
+              return api.post("/email/send-single", {
+                to: rec.email,
+                subject: `JD Assignment: ${selectedJob.title}`,
+                body:
+                  `Hi ${rec.full_name || rec.email},\n\n` +
+                  `You have been assigned "${selectedJob.title}". Please submit candidates within ${dayLabel} at ${window.location.origin}.`,
+              });
+            }),
+          );
         }
       }
-      setSuccess("Assignment email sent successfully.");
+      setSuccess("Assignment email(s) sent successfully.");
     } catch (err: any) {
       if (err?.data?.code === "EMAIL_NOT_CONFIGURED") {
         window.location.href = `/settings/email?returnTo=${encodeURIComponent(window.location.pathname)}`;
         return;
       }
-      const errorMessage =
-        err?.data?.message ||
-        err?.message ||
-        "Failed to send assignment email.";
-      setError(errorMessage);
+      setError(err?.data?.message || err?.message || "Failed to send assignment email.");
     } finally {
       setSending(false);
     }
   };
 
-  const activeVendors = vendors.filter((v) => v.is_active && v.primary_contact_email);
-  const modalTitle = assignType === "recruiter" ? "Assign JD to Recruiter" : "Assign JD to Vendor";
+  const activeVendors = vendors
+    .filter((v) => v.is_active && v.primary_contact_email)
+    .map((v) => ({ id: v.id, label: v.company_name }));
+
+  const recruiterItems = recruiters.map((r) => ({
+    id: r.id,
+    full_name: r.full_name,
+    email: r.email,
+  }));
+
+  const vendorItems = vendors
+    .filter((v) => v.is_active && v.primary_contact_email)
+    .map((v) => ({ id: v.id, company_name: v.company_name }));
+
+  const modalTitle = assignType === "recruiter" ? "Assign JD to Recruiters" : "Assign JD to Vendors";
 
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-2">
             <ClipboardList size={18} className="text-blue-600" />
             <h2 className="text-base font-bold text-gray-900">{modalTitle}</h2>
@@ -242,28 +337,24 @@ function AssignJdModal({
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-          {/* Type toggle — only shown to super_admin who can do both */}
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+          {/* Type toggle */}
           {canAssignVendor && canAssignRecruiter && (
             <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
               <button
                 type="button"
-                onClick={() => { setAssignType("recruiter"); setSelectedRecruiterId(""); setSelectedVendorId(""); }}
+                onClick={() => { setAssignType("recruiter"); setSelectedRecruiterIds([]); setSelectedVendorIds([]); }}
                 className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors ${
-                  assignType === "recruiter"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                  assignType === "recruiter" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Recruiter
               </button>
               <button
                 type="button"
-                onClick={() => { setAssignType("vendor"); setSelectedRecruiterId(""); setSelectedVendorId(""); }}
+                onClick={() => { setAssignType("vendor"); setSelectedRecruiterIds([]); setSelectedVendorIds([]); }}
                 className={`flex-1 text-sm font-medium py-1.5 rounded-lg transition-colors ${
-                  assignType === "vendor"
-                    ? "bg-white text-blue-700 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                  assignType === "vendor" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Vendor
@@ -273,13 +364,10 @@ function AssignJdModal({
 
           {/* Select JD */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Select JD
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Select JD</label>
             {loadingJobs ? (
               <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                <Loader2 size={14} className="animate-spin" />
-                Loading jobs…
+                <Loader2 size={14} className="animate-spin" /> Loading jobs…
               </div>
             ) : (
               <select
@@ -289,95 +377,99 @@ function AssignJdModal({
               >
                 <option value="">— Select a Job Description —</option>
                 {jobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.title}
-                  </option>
+                  <option key={j.id} value={j.id}>{j.title}</option>
                 ))}
               </select>
             )}
           </div>
 
-          {/* Select Recruiter (accounts_manager / super_admin in recruiter mode) */}
+          {/* Select Recruiters */}
           {assignType === "recruiter" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Select Recruiter
+                Select Recruiters
+                {selectedRecruiterIds.length > 0 && (
+                  <span className="ml-2 text-xs text-blue-600 font-normal">
+                    {selectedRecruiterIds.length} selected
+                  </span>
+                )}
               </label>
               {loadingRecruiters ? (
                 <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
-                  <Loader2 size={14} className="animate-spin" />
-                  Loading recruiters…
+                  <Loader2 size={14} className="animate-spin" /> Loading recruiters…
                 </div>
               ) : (
-                <select
-                  value={selectedRecruiterId}
-                  onChange={(e) => setSelectedRecruiterId(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
-                >
-                  <option value="">— Select a Recruiter —</option>
-                  {recruiters.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.full_name} ({r.email})
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <MultiSelectList
+                    items={recruiterItems}
+                    selected={selectedRecruiterIds}
+                    onToggle={toggleRecruiter}
+                    labelKey="full_name"
+                    subLabelKey="email"
+                  />
+                  <SelectedTags
+                    ids={selectedRecruiterIds}
+                    items={recruiterItems}
+                    labelKey="full_name"
+                    onRemove={toggleRecruiter}
+                    colorClass="bg-blue-50 text-blue-700 border-blue-100"
+                  />
+                </>
               )}
             </div>
           )}
 
-          {/* Select Vendor (vendor_manager / super_admin in vendor mode) */}
+          {/* Select Vendors */}
           {assignType === "vendor" && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Select Vendor
+                Select Vendors
+                {selectedVendorIds.length > 0 && (
+                  <span className="ml-2 text-xs text-violet-600 font-normal">
+                    {selectedVendorIds.length} selected
+                  </span>
+                )}
               </label>
-              <select
-                value={selectedVendorId}
-                onChange={(e) => setSelectedVendorId(e.target.value)}
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
-              >
-                <option value="">— Select a Vendor —</option>
-                {activeVendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.company_name}
-                  </option>
-                ))}
-              </select>
+              <MultiSelectList
+                items={vendorItems.map((v) => ({ id: v.id, company_name: v.company_name }))}
+                selected={selectedVendorIds}
+                onToggle={toggleVendor}
+                labelKey="company_name"
+              />
+              <SelectedTags
+                ids={selectedVendorIds}
+                items={vendorItems.map((v) => ({ id: v.id, company_name: v.company_name }))}
+                labelKey="company_name"
+                onRemove={toggleVendor}
+                colorClass="bg-violet-50 text-violet-700 border-violet-100"
+              />
             </div>
           )}
 
           {/* Deadline */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Deadline (days)
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Deadline (days)</label>
             <select
               value={deadlineDays}
               onChange={(e) => setDeadlineDays(Number(e.target.value))}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-800"
             >
               {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-                <option key={d} value={d}>
-                  {d} day{d > 1 ? "s" : ""}
-                </option>
+                <option key={d} value={d}>{d} day{d > 1 ? "s" : ""}</option>
               ))}
             </select>
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">
-              {error}
-            </p>
+            <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">{error}</p>
           )}
           {success && (
-            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
-              {success}
-            </p>
+            <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">{success}</p>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-6 flex items-center justify-end gap-3">
+        <div className="px-6 pb-6 pt-4 border-t border-gray-100 flex items-center justify-end gap-3 flex-shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
@@ -390,15 +482,9 @@ function AssignJdModal({
             className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
           >
             {sending ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                Sending…
-              </>
+              <><Loader2 size={14} className="animate-spin" /> Sending…</>
             ) : (
-              <>
-                <ClipboardList size={14} />
-                Assign
-              </>
+              <><ClipboardList size={14} /> Assign</>
             )}
           </button>
         </div>

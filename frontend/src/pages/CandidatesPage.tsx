@@ -16,6 +16,7 @@ import {
 import Header from "../components/layout/Header";
 import { Candidate } from "../types";
 import api from "../lib/api";
+import { useAuth } from "../contexts/AuthContext";
 import CandidateModal from "../components/candidates/CandidateModal";
 import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
 import { useSendEmail } from "../hooks/useSendEmail";
@@ -44,6 +45,10 @@ const sourceBadgeColors: Record<string, string> = {
 };
 
 export default function CandidatesPage() {
+  const { profile } = useAuth();
+  const isVendor = profile?.role === "vendor_user" || profile?.role === "vendor_manager";
+  const isRecruiter = profile?.role === "recruiter";
+
   const { emailToast } = useSendEmail();
   const [composeTarget, setComposeTarget] = useState<Candidate | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -55,6 +60,9 @@ export default function CandidatesPage() {
   const [viewingCandidate, setViewingCandidate] = useState<Candidate | null>(
     null,
   );
+
+  const [assignedJobs, setAssignedJobs] = useState<any[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState("");
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -77,6 +85,12 @@ export default function CandidatesPage() {
   useEffect(() => {
     fetchCandidates();
   }, []);
+
+  useEffect(() => {
+    if (isVendor || isRecruiter) {
+      api.get("/jobs").then(setAssignedJobs).catch(() => {});
+    }
+  }, [isVendor, isRecruiter]);
 
   const fetchCandidates = async () => {
     try {
@@ -151,6 +165,11 @@ export default function CandidatesPage() {
       return;
     }
 
+    if ((isVendor || isRecruiter) && !selectedJobId) {
+      alert("Please select a job to add this candidate to.");
+      return;
+    }
+
     try {
       const formDataToSend = new FormData();
 
@@ -160,10 +179,7 @@ export default function CandidatesPage() {
       formDataToSend.append("phone", formData.phone);
       formDataToSend.append("current_title", formData.current_title);
       formDataToSend.append("current_company", formData.current_company);
-      formDataToSend.append(
-        "experience_years",
-        String(formData.experience_years),
-      );
+      formDataToSend.append("experience_years", String(formData.experience_years));
       formDataToSend.append("current_location", formData.current_location);
       formDataToSend.append("source", formData.source);
 
@@ -171,19 +187,22 @@ export default function CandidatesPage() {
         .split(",")
         .map((s) => s.trim())
         .filter((s) => s !== "");
-
       formDataToSend.append("skills", JSON.stringify(skillsArray));
 
-      // 🔥 ADD FILE
       if (resumeFile) {
         formDataToSend.append("resume", resumeFile);
       }
 
-      const newCandidate = await api.post("/candidates", formDataToSend);
+      if (selectedJobId) {
+        const result = await api.post(`/jobs/${selectedJobId}/candidates`, formDataToSend);
+        setCandidates([result.candidate, ...candidates]);
+      } else {
+        const newCandidate = await api.post("/candidates", formDataToSend);
+        setCandidates([newCandidate, ...candidates]);
+      }
 
-      setCandidates([newCandidate, ...candidates]);
       setIsAddModalOpen(false);
-
+      setSelectedJobId("");
       setFormData({
         first_name: "",
         last_name: "",
@@ -196,13 +215,9 @@ export default function CandidatesPage() {
         skills: "",
         source: "direct",
       });
-
       setResumeFile(null);
     } catch (error: any) {
-      const msg =
-        error?.data?.message ||
-        error?.message ||
-        "Failed to add candidate";
+      const msg = error?.data?.message || error?.message || "Failed to add candidate";
       alert(msg);
     }
   };
@@ -539,7 +554,7 @@ export default function CandidatesPage() {
                 Add New Candidate
               </h2>
               <button
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => { setIsAddModalOpen(false); setSelectedJobId(""); }}
                 className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]"
               >
                 <X size={20} />
@@ -547,6 +562,39 @@ export default function CandidatesPage() {
             </div>
             <form onSubmit={handleAddCandidate} className="p-8">
               <div className="grid grid-cols-2 gap-6">
+                {(isVendor || isRecruiter) && (
+                  <div className="col-span-2 space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                      Add to Job *
+                    </label>
+                    {assignedJobs.length === 0 ? (
+                      <p className="px-4 py-3 bg-amber-50 border border-amber-100 rounded-2xl text-sm text-amber-700">
+                        No jobs are assigned to you yet. Ask your administrator to assign a job first.
+                      </p>
+                    ) : (
+                      <div className="relative">
+                        <select
+                          value={selectedJobId}
+                          onChange={(e) => setSelectedJobId(e.target.value)}
+                          required
+                          className="w-full px-4 py-3 pr-10 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none"
+                        >
+                          <option value="">Select an assigned job...</option>
+                          {assignedJobs.map((job) => (
+                            <option key={job.id} value={job.id}>
+                              {job.title}{job.client?.name ? ` — ${job.client.name}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     First Name
@@ -730,7 +778,7 @@ export default function CandidatesPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={resumeParsing}
+                  disabled={resumeParsing || ((isVendor || isRecruiter) && assignedJobs.length === 0)}
                   className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {resumeParsing ? "Parsing..." : "Create Profile"}

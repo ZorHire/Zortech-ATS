@@ -7,6 +7,14 @@ const migrate = async () => {
   const schemaPath = path.resolve(__dirname, 'schema.sql');
   const sql = fs.readFileSync(schemaPath, 'utf8');
 
+  // Collect numbered migration files from migrations/ directory, sorted by filename.
+  const migrationsDir = path.resolve(__dirname, 'migrations');
+  const migrationFiles = fs.existsSync(migrationsDir)
+    ? fs.readdirSync(migrationsDir)
+        .filter(f => f.endsWith('.sql'))
+        .sort()
+    : [];
+
   console.log('Starting database migration (additive only — no data loss)...');
   console.log(`Connecting to: ${env.DATABASE_URL.split('@')[1]}`);
 
@@ -82,6 +90,14 @@ const migrate = async () => {
 
     for (const stmt of columnMigrations) {
       await client.query(stmt);
+    }
+
+    // Apply numbered migration files (idempotent — all use IF NOT EXISTS guards)
+    for (const file of migrationFiles) {
+      const filePath = path.join(migrationsDir, file);
+      const migrationSql = fs.readFileSync(filePath, 'utf8');
+      console.log(`  Applying ${file}...`);
+      await client.query(migrationSql);
     }
 
     await client.query('COMMIT');

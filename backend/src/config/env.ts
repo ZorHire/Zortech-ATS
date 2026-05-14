@@ -8,7 +8,7 @@ export const env = {
   PORT: process.env.PORT || process.env.SERVER_PORT || "5000",
   DATABASE_URL: process.env.SERVER_DATABASE_URL || "",
   JWT_SECRET: process.env.SERVER_JWT_SECRET || "fallback_secret",
-  NODE_ENV: process.env.SERVER_NODE_ENV || "development",
+  NODE_ENV: process.env.SERVER_NODE_ENV || "production",
   UPLOAD_DIR:
     process.env.SERVER_UPLOAD_DIR || path.resolve(__dirname, "../uploads"),
   // AES-256-GCM key for encrypting per-user SMTP passwords at rest.

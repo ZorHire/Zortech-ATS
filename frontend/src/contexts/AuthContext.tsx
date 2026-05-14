@@ -37,7 +37,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [subscription, setSubscription] = useState<SubscriptionState | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const clearSession = () => {
+    setUser(null);
+    setProfile(null);
+    setSubscription(null);
+  };
+
   const fetchMe = async () => {
+    // No token in storage → no session to restore; skip the API call entirely
+    if (!localStorage.getItem("jwt")) {
+      setLoading(false);
+      return;
+    }
     try {
       const data = await api.get("/auth/me");
       const { subscription: sub, ...userData } = data;
@@ -46,25 +57,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSubscription(sub ?? null);
     } catch (error) {
       console.error("Fetch me error:", error);
-      signOut();
+      // Clear state without calling api.post("/auth/logout") — there is no valid
+      // session to clear server-side, and making another request risks loops.
+      localStorage.removeItem("jwt");
+      clearSession();
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      fetchMe();
-    } else {
-      setLoading(false);
-    }
+    fetchMe();
+
+    // Handle mid-session 401s from any API call (e.g. token expiry while navigating).
+    // api.ts dispatches this event instead of doing window.location.href to avoid
+    // hard page reloads that would re-trigger fetchMe and create an infinite loop.
+    const onUnauthorized = () => clearSession();
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const signIn = async (email: string, password: string, role: string) => {
     try {
       const data = await api.post("/auth/login", { email, password, role });
-      localStorage.setItem("token", data.token);
+      if (data.token) localStorage.setItem("jwt", data.token);
       setProfile(data.user);
       setUser(data.user);
       setSubscription(data.subscription ?? null);
@@ -77,30 +94,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Self-registration is disabled; companies are onboarded by ZorTech admins
   const signUp = async (
-    email: string,
-    password: string,
-    fullName: string,
-    role = "recruiter",
+    _email: string,
+    _password: string,
+    _fullName: string,
+    _role = "recruiter",
   ) => {
-    try {
-      await api.post("/auth/register", {
-        email,
-        password,
-        full_name: fullName,
-        role,
-      });
-      return { error: null };
-    } catch (error) {
-      return { error };
-    }
+    return { error: { message: "Self-registration is not available. Contact your administrator." } };
   };
 
   const signOut = () => {
-    localStorage.removeItem("token");
-    setUser(null);
-    setProfile(null);
-    setSubscription(null);
+    localStorage.removeItem("jwt");
+    api.post("/auth/logout", {}).catch(() => {});
+    clearSession();
   };
 
   return (

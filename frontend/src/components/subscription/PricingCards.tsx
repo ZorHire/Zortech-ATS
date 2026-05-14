@@ -8,7 +8,19 @@ import {
   BillingCycle,
   Subscription,
   billingService,
+  RazorpayOrderResponse,
 } from "../../services/billing.service";
+
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) { resolve(true); return; }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
 
 interface PricingCardsProps {
   onSubscribed?: (subscription: Subscription) => void;
@@ -42,19 +54,51 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
     }
     setSubscribing(plan.id);
     try {
-      const { subscription, checkout_url } = await billingService.subscribe(
-        plan.id,
-        billing,
-      );
-      if (checkout_url) {
-        window.location.href = checkout_url;
+      const order: RazorpayOrderResponse = await billingService.subscribe(plan.id, billing);
+
+      const loaded = await loadRazorpayScript();
+      if (!loaded) {
+        alert("Failed to load payment gateway. Please check your connection and try again.");
+        setSubscribing(null);
         return;
       }
-      setCurrentSub(subscription);
-      onSubscribed?.(subscription);
+
+      const rzp = new (window as any).Razorpay({
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.order_id,
+        name: "ZorHire",
+        description: `${plan.name} – ${billing} billing`,
+        theme: { color: "#b47b3b" },
+        handler: async (response: {
+          razorpay_order_id: string;
+          razorpay_payment_id: string;
+          razorpay_signature: string;
+        }) => {
+          try {
+            const { subscription } = await billingService.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              plan_type: order.plan_type,
+              billing_cycle: order.billing_cycle,
+            });
+            setCurrentSub(subscription);
+            onSubscribed?.(subscription);
+          } catch (err: any) {
+            alert(err?.message || "Payment verification failed. Please contact support.");
+          } finally {
+            setSubscribing(null);
+          }
+        },
+        modal: {
+          ondismiss: () => setSubscribing(null),
+        },
+      });
+      rzp.open();
     } catch (err: any) {
-      alert(err?.message || "Failed to start subscription. Please try again.");
-    } finally {
+      alert(err?.message || "Failed to initiate payment. Please try again.");
       setSubscribing(null);
     }
   };

@@ -3,14 +3,12 @@ import { AuthRequest } from "./auth";
 import { isTenantActive } from "../modules/tenants/tenantBootstrap.service";
 
 /**
- * Express middleware that blocks requests from tenants without an active
- * or in-trial subscription.
+ * Express middleware that blocks requests from tenants without an active subscription.
  *
  * Rules:
  *  - ZorTech (platform owner) → always passes through
  *  - Onboarding company with active subscription → passes through
- *  - Onboarding company on trial (not expired) → passes through + sets X-Trial-Days-Left header
- *  - No subscription / trial expired / cancelled → 402 Payment Required
+ *  - No subscription / expired / cancelled → 402 Payment Required
  *
  * Apply to all business routes (clients, jobs, vendors, etc.).
  * Do NOT apply to /auth/* or /billing/* so companies can log in and subscribe.

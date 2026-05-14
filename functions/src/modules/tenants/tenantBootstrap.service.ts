@@ -1,5 +1,8 @@
 import bcrypt from "bcryptjs";
 import pool from "../../db";
+import { initOnboardingStatus } from "../onboarding/onboarding.service";
+import { sendPlatformEmail, buildWelcomeEmail } from "../../lib/platformEmail.service";
+import env from "../../config/env";
 
 export const PLATFORM_TENANT_ID = "77777777-7777-7777-7777-777777777777";
 
@@ -9,7 +12,6 @@ export interface OnboardCompanyInput {
   adminEmail: string;
   adminPassword: string;
   adminFullName: string;
-  planType?: "starter" | "growth" | "enterprise";
   companyEmail?: string;
   companyPhone?: string;
   companyAddress?: string;
@@ -25,11 +27,11 @@ export interface BootstrapResult {
 
 /**
  * Provisions a new onboarding company in one atomic transaction:
- *   tenant row → admin user → profile → membership → trial subscription
+ *   tenant row → admin user → profile → membership
  *
- * Equivalent of bootstrapCompanyDatabase() from companyBootstrap.ts,
- * adapted for the single-DB PostgreSQL (Neon) multi-tenant architecture.
- * ZorTech (platform owner) is never created via this path.
+ * No subscription is created here. The company must purchase a plan via the
+ * billing flow before accessing the ATS. ZorTech (platform owner) bypasses
+ * all subscription checks and is never created via this path.
  */
 export async function bootstrapTenant(
   input: OnboardCompanyInput,
@@ -82,7 +84,25 @@ export async function bootstrapTenant(
       [userId, tenantId],
     );
 
+    // 5. Initialise the onboarding checklist row
+    await initOnboardingStatus(tenantId, client);
+
     await client.query("COMMIT");
+
+    // Send welcome email after the transaction commits (non-blocking)
+    sendPlatformEmail({
+      to: input.adminEmail,
+      subject: "You're in — let's build your dream team 🚀",
+      html: buildWelcomeEmail({
+        firstName: input.adminFullName.split(" ")[0],
+        companyName: input.companyName,
+        planName: "ZorHire",
+        frontendUrl: env.FRONTEND_URL || "https://app.zorhire.com",
+      }),
+    }).catch((err) =>
+      console.warn("[bootstrapTenant] Welcome email failed (non-fatal):", err?.message),
+    );
+
     return { tenantId, userId };
   } catch (err) {
     await client.query("ROLLBACK");
@@ -101,7 +121,7 @@ export interface TenantAccessStatus {
 /**
  * Checks whether a tenant is allowed to use the platform.
  * Platform owner (ZorTech) is always active.
- * Onboarding companies need an active or in-trial subscription.
+ * Onboarding companies need an active, paid subscription.
  *
  * Called by the subscriptionCheck middleware on every authenticated request.
  */

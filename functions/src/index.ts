@@ -21,9 +21,19 @@ import jobCandidateRoutes from "./modules/jobs/jobCandidates.routes";
 import billingRoutes from "./modules/billing/billing.routes";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import tenantRoutes from "./modules/tenants/tenants.routes";
+import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import { requireActiveSubscription } from "./middleware/subscriptionCheck";
 import { softAuth } from "./middleware/auth";
+import { resolveTenant } from "./middleware/tenantResolution";
 import pool from "./db";
+
+if (!env.JWT_SECRET) {
+  console.error(
+    "[startup] CRITICAL: SERVER_JWT_SECRET is not set. " +
+    "All authentication and token operations will fail. " +
+    "Add this secret in Firebase and redeploy.",
+  );
+}
 
 if (!env.EMAIL_ENCRYPTION_KEY) {
   console.error(
@@ -77,8 +87,14 @@ const apiLimiter = rateLimit({
   message: { message: "Too many requests. Please slow down." },
 });
 
-// Apply strict limiter to auth endpoints
-app.use("/v1/auth", authLimiter);
+// Apply strict limiter only to credential-submission endpoints.
+// /auth/me and /auth/logout are session endpoints called on every page load —
+// applying the strict limiter there would exhaust the window for normal users
+// in Cloud Run where many clients may share a proxy IP.
+app.use("/v1/auth/login", authLimiter);
+app.use("/v1/auth/forgot-password", authLimiter);
+app.use("/v1/auth/reset-password", authLimiter);
+app.use("/v1/auth/setup", authLimiter);
 
 // Apply general limiter to all API routes
 app.use("/v1", apiLimiter);
@@ -109,10 +125,12 @@ const v1Router = express.Router();
 // request. This must run before requireActiveSubscription so the gate can read
 // the tenant. Per-route authMiddleware still hard-rejects missing/invalid tokens.
 v1Router.use(softAuth);
+v1Router.use(resolveTenant);
 
 v1Router.use("/auth", authRoutes);
 v1Router.use("/billing", billingRoutes);       // billing exempt: tenant must be able to subscribe
 v1Router.use("/tenants", tenantRoutes);         // tenant mgmt exempt: ZorTech onboarding flow
+v1Router.use("/onboarding", onboardingRoutes); // onboarding exempt: accessible before subscription
 
 // ─── Subscription gate ────────────────────────────────────────────────────────
 // All routes below require an active or in-trial subscription.

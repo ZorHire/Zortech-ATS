@@ -6,17 +6,17 @@ import { sendEmailAsUser, EmailServiceError } from "../email/emailConfig.service
 
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenant_id;
+    const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
     const limitVal = Math.min(Number(req.query.limit) || 500, 500);
     const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
     const result = await pool.query(
-      `SELECT u.id, u.email, u.is_active, u.must_change_password, m.role, p.full_name
+      `SELECT u.id, u.email, u.is_active, u.must_change_password, m.role, p.full_name, m.tenant_id
        FROM users u
        JOIN tenant_memberships m ON u.id = m.user_id
        LEFT JOIN profiles p ON u.id = p.id
-       WHERE m.tenant_id = $1
+       WHERE ($1::uuid IS NULL OR m.tenant_id = $1)
        ORDER BY u.created_at DESC LIMIT $2 OFFSET $3`,
-      [tenantId, limitVal, offsetVal],
+      [filterTenantId, limitVal, offsetVal],
     );
     res.json(result.rows);
   } catch (error) {
@@ -78,7 +78,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       );
     }
 
-    if (role === "vendor_user" && vendor_id) {
+    if ((role === "vendor_user" || role === "vendor_manager") && vendor_id) {
       await client.query(
         "UPDATE profiles SET vendor_id = $1 WHERE id = $2",
         [vendor_id, userId],
@@ -168,23 +168,52 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { role, is_active } = req.body;
   const tenantId = req.user?.tenant_id;
+  const isPlatformOwner = req.user?.is_platform_owner;
+
+  if (role !== undefined) {
+    if (!ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({
+        message: `Invalid role '${role}'. Allowed: ${ALLOWED_ROLES.join(", ")}`,
+      });
+    }
+    // Only super_admin may assign the super_admin role
+    if (role === "super_admin" && req.user?.role !== "super_admin") {
+      return res.status(403).json({ message: "Only a super_admin can assign the super_admin role." });
+    }
+  }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     if (role) {
-      await client.query(
-        "UPDATE tenant_memberships SET role = $1, updated_at = now() WHERE user_id = $2 AND tenant_id = $3",
-        [role, id, tenantId],
-      );
+      if (isPlatformOwner) {
+        await client.query(
+          "UPDATE tenant_memberships SET role = $1, updated_at = now() WHERE user_id = $2",
+          [role, id],
+        );
+      } else {
+        await client.query(
+          "UPDATE tenant_memberships SET role = $1, updated_at = now() WHERE user_id = $2 AND tenant_id = $3",
+          [role, id, tenantId],
+        );
+      }
     }
 
     if (is_active !== undefined) {
-      await client.query(
-        "UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2",
-        [is_active, id],
-      );
+      if (isPlatformOwner) {
+        await client.query(
+          "UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2",
+          [is_active, id],
+        );
+      } else {
+        await client.query(
+          `UPDATE users SET is_active = $1, updated_at = now()
+           WHERE id = $2
+           AND EXISTS (SELECT 1 FROM tenant_memberships WHERE user_id = $2 AND tenant_id = $3)`,
+          [is_active, id, tenantId],
+        );
+      }
     }
 
     await client.query("COMMIT");
@@ -202,6 +231,7 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const tenantId = req.user?.tenant_id;
   const requesterId = req.user?.id;
+  const isPlatformOwner = req.user?.is_platform_owner;
 
   // Prevent self-deletion
   if (id === requesterId) {
@@ -212,17 +242,41 @@ export const deleteUser = async (req: AuthRequest, res: Response) => {
   try {
     await client.query("BEGIN");
 
-    // Verify the user belongs to this tenant before deleting
-    const member = await client.query(
-      "SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2",
-      [id, tenantId],
-    );
+    // Platform owner can delete users across any tenant; others are scoped to their own tenant
+    const member = isPlatformOwner
+      ? await client.query(
+          "SELECT id, role FROM tenant_memberships WHERE user_id = $1 LIMIT 1",
+          [id],
+        )
+      : await client.query(
+          "SELECT id, role FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2",
+          [id, tenantId],
+        );
+
     if (member.rows.length === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "User not found in this tenant." });
     }
+    // Only super_admin may delete another super_admin
+    if (member.rows[0].role === "super_admin" && req.user?.role !== "super_admin") {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ message: "Only a super_admin can delete another super_admin." });
+    }
 
-    // Permanently delete — CASCADE in schema handles memberships, profiles, etc.
+    // NULL out all non-cascading FK references before deleting so PostgreSQL
+    // doesn't reject with a FK violation (these columns have no ON DELETE action).
+    await client.query("UPDATE jobs SET assigned_recruiter_id = NULL WHERE assigned_recruiter_id = $1", [id]);
+    await client.query("UPDATE jobs SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE jobs SET approved_by = NULL WHERE approved_by = $1", [id]);
+    await client.query("UPDATE candidates SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE job_applications SET assigned_to = NULL WHERE assigned_to = $1", [id]);
+    await client.query("UPDATE pipeline_events SET changed_by = NULL WHERE changed_by = $1", [id]);
+    await client.query("UPDATE email_campaigns SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE interviews SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE clients SET created_by = NULL WHERE created_by = $1", [id]);
+    await client.query("UPDATE tenants SET onboarded_by = NULL WHERE onboarded_by = $1", [id]);
+
+    // Hard delete — CASCADE handles tenant_memberships and profiles.
     await client.query("DELETE FROM users WHERE id = $1", [id]);
 
     await client.query("COMMIT");
@@ -240,12 +294,18 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const { newPassword } = req.body;
   const tenantId = req.user?.tenant_id;
+  const isPlatformOwner = req.user?.is_platform_owner;
 
   try {
-    const member = await pool.query(
-      "SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2",
-      [id, tenantId],
-    );
+    const member = isPlatformOwner
+      ? await pool.query(
+          "SELECT id FROM tenant_memberships WHERE user_id = $1 LIMIT 1",
+          [id],
+        )
+      : await pool.query(
+          "SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2",
+          [id, tenantId],
+        );
     if (member.rows.length === 0) {
       return res.status(404).json({ message: "User not found in this tenant" });
     }

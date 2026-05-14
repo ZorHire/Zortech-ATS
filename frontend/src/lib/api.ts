@@ -17,9 +17,9 @@ export class ApiError extends Error {
 
 export const api = {
   async request(endpoint: string, options: RequestInit = {}, retry = true): Promise<any> {
-    const token = localStorage.getItem("token");
     const body = options.body as any;
 
+    const token = localStorage.getItem("jwt");
     const headers = {
       ...(body instanceof FormData
         ? {}
@@ -32,6 +32,7 @@ export const api = {
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers,
+        credentials: "include",
         body:
           body instanceof FormData
             ? body
@@ -41,8 +42,9 @@ export const api = {
       });
 
       if (response.status === 401) {
-        localStorage.removeItem("token");
-        window.location.href = "/login";
+        // Dispatch event so AuthContext can clear state and let React Router redirect
+        // without a hard page reload (which would cause an infinite reload loop).
+        window.dispatchEvent(new CustomEvent("auth:unauthorized"));
         const errorBody = await response
           .json()
           .catch(() => ({ message: "Token expired" }));
@@ -50,7 +52,7 @@ export const api = {
       }
 
       if (response.status === 402) {
-        window.location.href = "/pricing";
+        // Let ProtectedRoute's subscription gate handle the redirect to /pricing.
         const errorBody = await response
           .json()
           .catch(() => ({ message: "Subscription required" }));

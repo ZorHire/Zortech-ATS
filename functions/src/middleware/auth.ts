@@ -12,8 +12,44 @@ export interface AuthRequest extends Request {
     role: string;
     tenant_id: string;
     vendor_id?: string;
+    is_platform_owner?: boolean;
     permissions: string[];
   };
+}
+
+function extractTokenCandidates(req: Request): string[] {
+  const candidates: string[] = [];
+  // Bearer (localStorage) is tried first — it is explicitly set by the frontend
+  // on login and cleared on logout, so it reflects the current session.
+  const bearer = req.headers.authorization?.split(" ")[1];
+  if (bearer) candidates.push(bearer);
+  // Cookie is the fallback (e.g. for requests that don't send Authorization).
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const match = /(?:^|;\s*)jwt=([^;]+)/.exec(cookieHeader);
+    if (match?.[1]) candidates.push(decodeURIComponent(match[1]));
+  }
+  return candidates;
+}
+
+type JwtPayload = {
+  id: string;
+  email: string;
+  role: string;
+  tenant_id: string;
+  vendor_id?: string;
+  is_platform_owner?: boolean;
+};
+
+function verifyFirstValid(tokens: string[], secret: string): JwtPayload | undefined {
+  for (const token of tokens) {
+    try {
+      return jwt.verify(token, secret) as JwtPayload;
+    } catch {
+      // try next candidate
+    }
+  }
+  return undefined;
 }
 
 export const authMiddleware = (
@@ -21,28 +57,22 @@ export const authMiddleware = (
   res: Response,
   next: NextFunction,
 ) => {
-  const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
+  const tokens = extractTokenCandidates(req);
+  if (tokens.length === 0) {
     return res.status(401).json({ message: "Authentication required" });
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as {
-      id: string;
-      email: string;
-      role: string;
-      tenant_id: string;
-      vendor_id?: string;
-    };
-    req.user = {
-      ...decoded,
-      permissions: rolePermissions[decoded.role] ?? [],
-    };
-    next();
-  } catch {
+  const decoded = verifyFirstValid(tokens, JWT_SECRET);
+  if (!decoded) {
     return res.status(401).json({ message: "Invalid or expired token" });
   }
+
+  req.user = {
+    ...decoded,
+    is_platform_owner: decoded.is_platform_owner ?? false,
+    permissions: rolePermissions[decoded.role] ?? [],
+  };
+  next();
 };
 
 export const authorize = (roles: string[], permissions?: string[]) => {
@@ -79,23 +109,13 @@ export const softAuth = (
   _res: Response,
   next: NextFunction,
 ) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET) as {
-        id: string;
-        email: string;
-        role: string;
-        tenant_id: string;
-        vendor_id?: string;
-      };
-      req.user = {
-        ...decoded,
-        permissions: rolePermissions[decoded.role] ?? [],
-      };
-    } catch {
-      // Invalid / expired token — req.user stays undefined; routes will 401.
-    }
+  const decoded = verifyFirstValid(extractTokenCandidates(req), JWT_SECRET);
+  if (decoded) {
+    req.user = {
+      ...decoded,
+      is_platform_owner: decoded.is_platform_owner ?? false,
+      permissions: rolePermissions[decoded.role] ?? [],
+    };
   }
   next();
 };

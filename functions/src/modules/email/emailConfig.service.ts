@@ -10,7 +10,6 @@ import nodemailer from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import pool from "../../db";
 import { decrypt } from "../../utils/encryption";
-
 // ─── Domain-specific error codes ────────────────────────────────────────────
 
 export type EmailErrorCode =
@@ -50,9 +49,14 @@ interface ResolvedConfig {
   email: string;
   password: string;
   provider: string;
+  /** Display name for the From header — set by tier-2 tenant config. */
+  displayName?: string;
 }
 
-/** Load the user's email config from DB and decrypt the stored app password. */
+/**
+ * Load the calling user's personal SMTP config (tier 1 only).
+ * Used by verifySmtpConnection so "test my email" always tests the user's own config.
+ */
 async function loadAndDecryptConfig(
   userId: string,
   tenantId: string,
@@ -99,6 +103,93 @@ async function loadAndDecryptConfig(
   }
 
   return { email: row.email, password, provider: row.provider };
+}
+
+
+/**
+ * Resolve the best available sending config: user SMTP → company SMTP → error.
+ * Used exclusively by sendEmailAsUser so all email sends fall through tiers.
+ */
+async function resolveSendConfig(
+  userId: string,
+  tenantId: string,
+): Promise<ResolvedConfig> {
+  // ── Tier 1: per-user SMTP ────────────────────────────────────────────────
+  const tier1 = await pool.query<{
+    email: string;
+    encrypted_password: string;
+    provider: string;
+  }>(
+    `SELECT email, encrypted_password, provider
+       FROM user_email_config
+      WHERE user_id = $1 AND tenant_id = $2 AND is_active = true
+      LIMIT 1`,
+    [userId, tenantId],
+  );
+
+  if (tier1.rows.length > 0) {
+    const row = tier1.rows[0];
+    let password: string;
+    try {
+      password = decrypt(row.encrypted_password);
+    } catch (e) {
+      console.error(
+        "[email] Tier-1 decryption failed for user", userId,
+        "— check SERVER_EMAIL_ENCRYPTION_KEY.", (e as Error).message,
+      );
+      throw new EmailServiceError(
+        "Email credentials could not be decrypted. Please go to Email Settings and reconnect your email.",
+        "EMAIL_DECRYPT_FAILED",
+        400,
+      );
+    }
+    return { email: row.email, password, provider: row.provider };
+  }
+
+  // ── Tier 2: per-tenant SMTP ──────────────────────────────────────────────
+  const tier2 = await pool.query<{
+    email: string;
+    encrypted_password: string;
+    provider: string;
+    display_name: string | null;
+  }>(
+    `SELECT email, encrypted_password, provider, display_name
+       FROM tenant_email_config
+      WHERE tenant_id = $1 AND is_active = true
+      LIMIT 1`,
+    [tenantId],
+  );
+
+  if (tier2.rows.length > 0) {
+    const row = tier2.rows[0];
+    let password: string;
+    try {
+      password = decrypt(row.encrypted_password);
+    } catch (e) {
+      console.error(
+        "[email] Tier-2 decryption failed for tenant", tenantId,
+        "— check SERVER_EMAIL_ENCRYPTION_KEY.", (e as Error).message,
+      );
+      throw new EmailServiceError(
+        "Company email credentials could not be decrypted. Please ask your admin to reconnect the company email.",
+        "EMAIL_DECRYPT_FAILED",
+        400,
+      );
+    }
+    return {
+      email: row.email,
+      password,
+      provider: row.provider,
+      displayName: row.display_name ?? undefined,
+    };
+  }
+
+  // ── Tier 3: no config found ──────────────────────────────────────────────
+  throw new EmailServiceError(
+    "No email sender configured. Please set up SMTP credentials in Email Settings.",
+    "EMAIL_NOT_CONFIGURED",
+    400,
+  );
 }
 
 // Timeout values for all SMTP connections (ms)
@@ -266,13 +357,16 @@ function mapSmtpError(err: any): never {
 export async function sendEmailAsUser(params: SendEmailParams): Promise<void> {
   const { userId, tenantId, senderName, to, subject, html } = params;
 
-  const config = await loadAndDecryptConfig(userId, tenantId);
+  const config = await resolveSendConfig(userId, tenantId);
   const options = buildTransporterOptions(config.provider, config.email, config.password);
   const transporter = nodemailer.createTransport(options);
 
+  // Priority: explicit senderName (recruiter) → tenant displayName → bare email
   const from = senderName
     ? `"${senderName}" <${config.email}>`
-    : config.email;
+    : config.displayName
+      ? `"${config.displayName}" <${config.email}>`
+      : config.email;
 
   try {
     await transporter.sendMail({ from, to, subject, html });

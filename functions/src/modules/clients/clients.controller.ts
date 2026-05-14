@@ -1,31 +1,32 @@
 import { Response } from "express";
-import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { getAtsPool } from "../../db/poolRouter";
 
 export const getClients = async (req: AuthRequest, res: Response) => {
   try {
-    const tenantId = req.user?.tenant_id;
+    const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
     const limitVal = Math.min(Number(req.query.limit) || 500, 500);
     const offsetVal = Math.max(Number(req.query.offset) || 0, 0);
-    const isRecruiter = req.user?.role === "recruiter";
+    const isRecruiter = !req.user?.is_platform_owner && req.user?.role === "recruiter";
     const userId = req.user?.id;
+    const db = await getAtsPool(filterTenantId);
 
     if (isRecruiter) {
       if (!userId) return res.json([]);
-      const result = await pool.query(
+      const result = await db.query(
         `SELECT DISTINCT c.* FROM clients c
          JOIN jobs j ON j.client_id = c.id
-         WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+         WHERE ($1::uuid IS NULL OR c.tenant_id = $1) AND c.deleted_at IS NULL
            AND j.deleted_at IS NULL AND j.assigned_recruiter_id = $2
          ORDER BY c.name ASC LIMIT $3 OFFSET $4`,
-        [tenantId, userId, limitVal, offsetVal],
+        [filterTenantId, userId, limitVal, offsetVal],
       );
       return res.json(result.rows);
     }
 
-    const result = await pool.query(
-      "SELECT * FROM clients WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY name ASC LIMIT $2 OFFSET $3",
-      [tenantId, limitVal, offsetVal],
+    const result = await db.query(
+      "SELECT * FROM clients WHERE ($1::uuid IS NULL OR tenant_id = $1) AND deleted_at IS NULL ORDER BY name ASC LIMIT $2 OFFSET $3",
+      [filterTenantId, limitVal, offsetVal],
     );
     res.json(result.rows);
   } catch (error) {
@@ -36,20 +37,21 @@ export const getClients = async (req: AuthRequest, res: Response) => {
 
 export const getClientById = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const tenantId = req.user?.tenant_id;
+  const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
   try {
-    if (req.user?.role === "recruiter") {
-      const accessible = await pool.query(
-        `SELECT 1 FROM jobs WHERE client_id = $1 AND tenant_id = $2 AND deleted_at IS NULL AND assigned_recruiter_id = $3 LIMIT 1`,
-        [id, tenantId, req.user.id],
+    const db = await getAtsPool(filterTenantId);
+    if (!req.user?.is_platform_owner && req.user?.role === "recruiter") {
+      const accessible = await db.query(
+        `SELECT 1 FROM jobs WHERE client_id = $1 AND ($2::uuid IS NULL OR tenant_id = $2) AND deleted_at IS NULL AND assigned_recruiter_id = $3 LIMIT 1`,
+        [id, filterTenantId, req.user.id],
       );
       if (accessible.rows.length === 0) {
         return res.status(403).json({ message: "Access denied" });
       }
     }
-    const result = await pool.query(
-      "SELECT * FROM clients WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
-      [id, tenantId],
+    const result = await db.query(
+      "SELECT * FROM clients WHERE id = $1 AND ($2::uuid IS NULL OR tenant_id = $2) AND deleted_at IS NULL",
+      [id, filterTenantId],
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Client not found" });
@@ -73,7 +75,8 @@ export const createClient = async (req: AuthRequest, res: Response) => {
   }
 
   try {
-    const result = await pool.query(
+    const db = await getAtsPool(tenantId);
+    const result = await db.query(
       `INSERT INTO clients (
         tenant_id, name, client_type, industry, company_size, tier, website, linkedin,
         headquarters_location, operating_locations, address, city, country,
@@ -123,7 +126,7 @@ export const createClient = async (req: AuthRequest, res: Response) => {
     const stakeholders: Array<{ name: string; role?: string; email?: string; phone?: string; timezone?: string }> = b.stakeholders || [];
     const validStakeholders = stakeholders.filter((s) => s.name?.trim());
     for (const s of validStakeholders) {
-      await pool.query(
+      await db.query(
         `INSERT INTO client_stakeholders (client_id, tenant_id, name, role, email, phone, timezone)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [client.id, tenantId, s.name, s.role || null, s.email || null, s.phone || null, s.timezone || null],
@@ -143,10 +146,11 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
     name, industry, tier, website, logo_url, address, city, country,
     primary_contact_name, primary_contact_email, primary_contact_phone, sla_hours, is_active,
   } = req.body;
-  const tenantId = req.user?.tenant_id;
+  const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
 
   try {
-    const result = await pool.query(
+    const db = await getAtsPool(filterTenantId);
+    const result = await db.query(
       `UPDATE clients SET
        name = COALESCE($1, name),
        industry = COALESCE($2, industry),
@@ -162,9 +166,9 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
        sla_hours = COALESCE($12, sla_hours),
        is_active = COALESCE($13, is_active),
        updated_at = now()
-       WHERE id = $14 AND tenant_id = $15 AND deleted_at IS NULL
+       WHERE id = $14 AND ($15::uuid IS NULL OR tenant_id = $15) AND deleted_at IS NULL
        RETURNING *`,
-      [name, industry, tier, website, logo_url, address, city, country, primary_contact_name, primary_contact_email, primary_contact_phone, sla_hours, is_active, id, tenantId],
+      [name, industry, tier, website, logo_url, address, city, country, primary_contact_name, primary_contact_email, primary_contact_phone, sla_hours, is_active, id, filterTenantId],
     );
 
     if (result.rows.length === 0) {
@@ -179,11 +183,12 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
 
 export const deleteClient = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const tenantId = req.user?.tenant_id;
+  const filterTenantId = req.user?.is_platform_owner ? null : req.user?.tenant_id;
   try {
-    const result = await pool.query(
-      "UPDATE clients SET deleted_at = now() WHERE id = $1 AND tenant_id = $2 RETURNING id",
-      [id, tenantId],
+    const db = await getAtsPool(filterTenantId);
+    const result = await db.query(
+      "UPDATE clients SET deleted_at = now() WHERE id = $1 AND ($2::uuid IS NULL OR tenant_id = $2) RETURNING id",
+      [id, filterTenantId],
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Client not found" });

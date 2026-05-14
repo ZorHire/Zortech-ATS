@@ -18,10 +18,6 @@ export default function LoginPage() {
 
   // Reset state
   const [resetEmail, setResetEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
@@ -41,20 +37,12 @@ export default function LoginPage() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError("");
-    if (newPassword.length < 8) {
-      setResetError("Password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setResetError("Passwords do not match.");
-      return;
-    }
     setResetLoading(true);
     try {
-      await api.post("/auth/reset-password", { email: resetEmail, newPassword });
+      await api.post("/auth/forgot-password", { email: resetEmail });
       setResetSuccess(true);
     } catch (err: any) {
-      setResetError(err?.message || "Failed to reset password. Please try again.");
+      setResetError(err?.message || "Failed to send reset link. Please try again.");
     } finally {
       setResetLoading(false);
     }
@@ -63,8 +51,6 @@ export default function LoginPage() {
   const goToLogin = () => {
     setView("login");
     setResetEmail("");
-    setNewPassword("");
-    setConfirmPassword("");
     setResetError("");
     setResetSuccess(false);
   };
@@ -211,16 +197,18 @@ export default function LoginPage() {
                   <KeyRound size={20} className="text-[#b67031]" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-[#3a230f]">Reset password</h2>
-                  <p className="text-xs text-[#7d6651]">Enter your email and choose a new password.</p>
+                  <h2 className="text-2xl font-bold text-[#3a230f]">Forgot password?</h2>
+                  <p className="text-xs text-[#7d6651]">Enter your email and we'll send a reset link.</p>
                 </div>
               </div>
 
               {resetSuccess ? (
                 <div className="flex flex-col items-center gap-4 py-8 text-center">
                   <CheckCircle2 size={48} className="text-green-500" />
-                  <p className="text-[#3a230f] font-bold text-base">Password reset successfully!</p>
-                  <p className="text-sm text-[#7d6651]">You can now sign in with your new password.</p>
+                  <p className="text-[#3a230f] font-bold text-base">Check your email</p>
+                  <p className="text-sm text-[#7d6651]">
+                    If <strong>{resetEmail}</strong> is registered, a reset link has been sent. It expires in 15 minutes.
+                  </p>
                   <button
                     onClick={goToLogin}
                     className="mt-2 w-full bg-[#b67031] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-[#9b5c27] transition-all flex items-center justify-center gap-2 group"
@@ -252,44 +240,6 @@ export default function LoginPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-[#7d6651] uppercase tracking-wider mb-1.5 ml-1">
-                      New Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showNew ? "text" : "password"}
-                        required
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-4 py-3 bg-[#fff5ea] border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-12"
-                        placeholder="Min. 8 characters"
-                      />
-                      <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1">
-                        {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-[#7d6651] uppercase tracking-wider mb-1.5 ml-1">
-                      Confirm New Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showConfirm ? "text" : "password"}
-                        required
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full px-4 py-3 bg-[#fff5ea] border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-12"
-                        placeholder="Re-enter new password"
-                      />
-                      <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1">
-                        {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </div>
-
                   <button
                     type="submit"
                     disabled={resetLoading}
@@ -298,7 +248,7 @@ export default function LoginPage() {
                     {resetLoading ? (
                       <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
-                      "Reset Password"
+                      "Send Reset Link"
                     )}
                   </button>
 

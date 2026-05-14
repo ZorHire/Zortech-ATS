@@ -7,6 +7,7 @@ import {
   Clock,
   Briefcase,
   ChevronRight,
+  ChevronDown,
   Mail,
   Building2,
   TrendingUp,
@@ -16,6 +17,7 @@ import Header from '../components/layout/Header';
 import { jobStatusLabels } from '../lib/mockData';
 import { Job } from '../types';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
 
 const priorityColors: Record<string, string> = {
@@ -41,12 +43,44 @@ const workModeLabel: Record<string, string> = {
   onsite: 'Onsite',
 };
 
+const STATUS_OPTIONS = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'pending_review', label: 'Pending Review' },
+  { value: 'active', label: 'Active' },
+  { value: 'on_hold', label: 'On Hold' },
+  { value: 'closed_filled', label: 'Closed - Filled' },
+  { value: 'closed_cancelled', label: 'Closed - Cancelled' },
+  { value: 'expired', label: 'Expired' },
+];
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { profile } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
+  const [statusChanging, setStatusChanging] = useState(false);
+
+  const canEditStatus =
+    profile?.role === 'super_admin' ||
+    profile?.role === 'accounts_manager' ||
+    profile?.role === 'recruiter';
+
+  const handleStatusChange = async (newStatus: string) => {
+    if (!job || !id) return;
+    const prev = job.status;
+    setJob({ ...job, status: newStatus as Job['status'] });
+    setStatusChanging(true);
+    try {
+      await api.patch(`/jobs/${id}`, { status: newStatus });
+    } catch {
+      setJob({ ...job, status: prev });
+      alert('Failed to update job status');
+    } finally {
+      setStatusChanging(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -149,11 +183,32 @@ export default function JobDetailPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[job.status]}`}
-              >
-                {jobStatusLabels[job.status]}
-              </span>
+              {canEditStatus ? (
+                <div className="relative">
+                  <select
+                    value={job.status}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    disabled={statusChanging}
+                    className={`text-xs pl-2.5 pr-7 py-1 rounded-full font-medium cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-0 transition-opacity ${statusColors[job.status]} ${statusChanging ? 'opacity-60' : ''}`}
+                  >
+                    {STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={10}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50"
+                  />
+                </div>
+              ) : (
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[job.status]}`}
+                >
+                  {jobStatusLabels[job.status]}
+                </span>
+              )}
               <span
                 className={`px-2.5 py-1 rounded-full text-xs font-medium ${priorityColors[job.priority]}`}
               >

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/layout/Layout";
 import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SubscribePage from "./pages/SubscribePage";
 import PublicPricingPage from "./pages/PublicPricingPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -20,14 +21,17 @@ import EmailSettingsPage from "./pages/EmailSettingsPage";
 import EmailCampaignsPage from "./pages/EmailCampaignsPage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import PricingPage from "./pages/PricingPage";
+import OnboardingPage from "./pages/OnboardingPage";
+import CompaniesPage from "./pages/CompaniesPage";
+import AssignedJDsPage from "./pages/AssignedJDsPage";
 
 // vendor_user may access /jobs, /jobs/:id, and /pipeline/:jobId
 const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline"];
 
 // These paths are accessible even when subscription is blocked/expired
-const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription"];
+const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription", "/onboarding"];
 
-function ProtectedRoute({ children, path }: { children: React.ReactNode; path?: string }) {
+function ProtectedRoute({ children, path, noLayout }: { children: React.ReactNode; path?: string; noLayout?: boolean }) {
   const { user, loading, subscription } = useAuth();
 
   if (loading) {
@@ -67,6 +71,7 @@ function ProtectedRoute({ children, path }: { children: React.ReactNode; path?: 
     return <Navigate to="/pricing" replace />;
   }
 
+  if (noLayout) return <>{children}</>;
   return <Layout>{children}</Layout>;
 }
 
@@ -84,6 +89,7 @@ function AppRoutes() {
         path="/login"
         element={user ? <Navigate to="/" replace /> : <LoginPage />}
       />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}
       <Route
         path="/pricing"
@@ -194,6 +200,30 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/subscription">
             <SubscriptionPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/companies"
+        element={
+          <ProtectedRoute path="/companies">
+            <CompaniesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/assigned-jds"
+        element={
+          <ProtectedRoute path="/assigned-jds">
+            <AssignedJDsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/onboarding"
+        element={
+          <ProtectedRoute path="/onboarding" noLayout>
+            <OnboardingPage />
           </ProtectedRoute>
         }
       />

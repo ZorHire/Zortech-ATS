@@ -16,7 +16,7 @@ export const onboardCompany = async (req: AuthRequest, res: Response) => {
   const {
     company_name, slug,
     admin_email, admin_password, admin_full_name,
-    plan_type, company_email, company_phone, company_address,
+    company_email, company_phone, company_address,
     gst_number, country,
   } = req.body;
 
@@ -35,7 +35,6 @@ export const onboardCompany = async (req: AuthRequest, res: Response) => {
       adminEmail: admin_email,
       adminPassword: admin_password,
       adminFullName: admin_full_name,
-      planType: plan_type,
       companyEmail: company_email,
       companyPhone: company_phone,
       companyAddress: company_address,
@@ -114,6 +113,63 @@ export const getTenant = async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error("[getTenant] error:", err);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/** POST /v1/tenants/bulk-delete — permanently delete one or more non-platform tenants */
+export const bulkDeleteTenants = async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== "super_admin" || req.user.tenant_id !== PLATFORM_TENANT_ID) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ message: "ids array is required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const platformCheck = await client.query(
+      "SELECT id FROM tenants WHERE id = ANY($1) AND is_platform_owner = true",
+      [ids],
+    );
+    if (platformCheck.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "Cannot delete the platform owner tenant" });
+    }
+
+    // Collect user IDs before cascade-deleting their memberships
+    const userRows = await client.query(
+      "SELECT DISTINCT user_id FROM tenant_memberships WHERE tenant_id = ANY($1)",
+      [ids],
+    );
+    const userIds = userRows.rows.map((r: any) => r.user_id);
+
+    // Deleting tenants cascades to tenant_memberships, clients, jobs, etc.
+    const result = await client.query(
+      "DELETE FROM tenants WHERE id = ANY($1) AND is_platform_owner = false RETURNING id",
+      [ids],
+    );
+
+    // Remove orphan users (no remaining memberships after tenant deletion)
+    if (userIds.length > 0) {
+      await client.query(
+        `DELETE FROM users WHERE id = ANY($1::uuid[])
+         AND NOT EXISTS (SELECT 1 FROM tenant_memberships WHERE user_id = users.id)`,
+        [userIds],
+      );
+    }
+
+    await client.query("COMMIT");
+    res.json({ deleted: result.rows.length });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("[bulkDeleteTenants] error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
   }
 };
 

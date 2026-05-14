@@ -1,6 +1,9 @@
 import { Response } from "express";
+import crypto from "crypto";
+import axios from "axios";
 import { AuthRequest } from "../../middleware/auth";
 import pool from "../../db";
+import env from "../../config/env";
 
 type PlanType = "starter" | "growth" | "enterprise";
 type BillingCycle = "monthly" | "yearly";
@@ -107,9 +110,9 @@ export const getCurrentSubscription = async (
  * POST /v1/billing/subscribe
  * Body: { plan_type, billing_cycle }
  *
- * Creates or updates the tenant subscription.
- * Razorpay-ready: when RAZORPAY_KEY_ID is configured, creates a Razorpay
- * subscription and returns the checkout_url. Otherwise activates directly.
+ * Creates a Razorpay order for the selected plan. The subscription row is NOT
+ * activated here — it is activated only after payment is verified via
+ * POST /v1/billing/verify-payment.
  */
 export const subscribe = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user!.tenant_id;
@@ -125,12 +128,92 @@ export const subscribe = async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ message: "Invalid billing_cycle" });
   }
 
-  try {
-    // Razorpay integration point — wire in when RAZORPAY_KEY_ID secret is present.
-    // const razorpay = new Razorpay({ key_id, key_secret });
-    // const rzpSub = await razorpay.subscriptions.create({ plan_id, total_count, ... });
-    // Return rzpSub.short_url as checkout_url.
+  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+    return res.status(503).json({
+      message: "Payment gateway not configured. Please contact ZorHire support.",
+      code: "PAYMENT_GATEWAY_NOT_CONFIGURED",
+    });
+  }
 
+  const plan = PLANS.find((p) => p.id === plan_type)!;
+  // Amount in paisa (INR × 100). Yearly: price_yearly × 12 months.
+  const amountInPaisa =
+    billing_cycle === "yearly"
+      ? plan.price_yearly * 12 * 100
+      : plan.price_monthly * 100;
+
+  try {
+    const orderRes = await axios.post(
+      "https://api.razorpay.com/v1/orders",
+      {
+        amount: amountInPaisa,
+        currency: "INR",
+        receipt: `sub_${tenantId.slice(0, 8)}_${Date.now()}`,
+        notes: { plan_type, billing_cycle, tenant_id: tenantId },
+      },
+      {
+        auth: { username: env.RAZORPAY_KEY_ID, password: env.RAZORPAY_KEY_SECRET },
+      },
+    );
+
+    const order = orderRes.data;
+    res.json({
+      order_id: order.id,
+      key_id: env.RAZORPAY_KEY_ID,
+      amount: order.amount,
+      currency: order.currency,
+      plan_type,
+      billing_cycle,
+    });
+  } catch (err) {
+    console.error("[billing] subscribe error:", err);
+    res.status(500).json({ message: "Failed to initiate payment" });
+  }
+};
+
+/**
+ * POST /v1/billing/verify-payment
+ * Body: { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan_type, billing_cycle }
+ *
+ * Verifies the Razorpay HMAC signature and activates the subscription.
+ * This is the only path that writes an active subscription to the DB.
+ */
+export const verifyPayment = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, plan_type, billing_cycle } =
+    req.body as {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+      plan_type: PlanType;
+      billing_cycle: BillingCycle;
+    };
+
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return res.status(400).json({ message: "Missing Razorpay payment fields." });
+  }
+  if (!VALID_PLANS.includes(plan_type) || !VALID_CYCLES.includes(billing_cycle)) {
+    return res.status(400).json({ message: "Invalid plan_type or billing_cycle." });
+  }
+
+  if (!env.RAZORPAY_KEY_SECRET) {
+    return res.status(503).json({
+      message: "Payment gateway not configured. Please contact ZorHire support.",
+      code: "PAYMENT_GATEWAY_NOT_CONFIGURED",
+    });
+  }
+
+  // Verify HMAC-SHA256 signature: key_secret over "order_id|payment_id"
+  const expectedSignature = crypto
+    .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
+    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+    .digest("hex");
+
+  if (expectedSignature !== razorpay_signature) {
+    return res.status(400).json({ message: "Payment verification failed. Invalid signature." });
+  }
+
+  try {
     const now = new Date();
     const endDate =
       billing_cycle === "yearly"
@@ -139,26 +222,24 @@ export const subscribe = async (req: AuthRequest, res: Response) => {
 
     const result = await pool.query(
       `INSERT INTO subscriptions
-         (tenant_id, plan_type, billing_cycle, status, start_date, end_date)
-       VALUES ($1, $2, $3, 'active', now(), $4)
+         (tenant_id, plan_type, billing_cycle, status, razorpay_subscription_id, start_date, end_date)
+       VALUES ($1, $2, $3, 'active', $4, now(), $5)
        ON CONFLICT (tenant_id) DO UPDATE SET
-         plan_type    = EXCLUDED.plan_type,
-         billing_cycle = EXCLUDED.billing_cycle,
-         status       = 'active',
-         start_date   = now(),
-         end_date     = EXCLUDED.end_date,
-         updated_at   = now()
+         plan_type              = EXCLUDED.plan_type,
+         billing_cycle          = EXCLUDED.billing_cycle,
+         status                 = 'active',
+         razorpay_subscription_id = EXCLUDED.razorpay_subscription_id,
+         start_date             = now(),
+         end_date               = EXCLUDED.end_date,
+         updated_at             = now()
        RETURNING *`,
-      [tenantId, plan_type, billing_cycle, endDate],
+      [tenantId, plan_type, billing_cycle, razorpay_payment_id, endDate],
     );
 
-    res.status(201).json({
-      subscription: result.rows[0],
-      checkout_url: null, // populated once Razorpay is wired in
-    });
+    res.status(201).json({ subscription: result.rows[0] });
   } catch (err) {
-    console.error("[billing] subscribe error:", err);
-    res.status(500).json({ message: "Failed to create subscription" });
+    console.error("[billing] verifyPayment error:", err);
+    res.status(500).json({ message: "Failed to activate subscription" });
   }
 };
 

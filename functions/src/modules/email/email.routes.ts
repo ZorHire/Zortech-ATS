@@ -1,23 +1,18 @@
 import { Router } from "express";
 import * as emailController from "./email.controller";
 import * as emailConfigController from "./emailConfig.controller";
+import * as tenantEmailConfigController from "./tenantEmailConfig.controller";
 import { authMiddleware, authorize, tenantIsolation } from "../../middleware/auth";
 
 const router = Router();
 
-const recruiterRoles = [
-  "super_admin",
-  "accounts_manager",
-  "recruiter",
-];
-
 // ── Per-user SMTP config ────────────────────────────────────────────────────
-// Any recruiter-role user can manage their own email config.
+// Every authenticated user in any tenant (recruiter, vendor_manager, vendor_user, etc.)
+// can manage their own personal email config — no role restriction beyond being logged in.
 router.get(
   "/config",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
   emailConfigController.getEmailConfig,
 );
 
@@ -25,7 +20,6 @@ router.post(
   "/config",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
   emailConfigController.saveEmailConfig,
 );
 
@@ -33,7 +27,6 @@ router.delete(
   "/config",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
   emailConfigController.deleteEmailConfig,
 );
 
@@ -41,16 +34,52 @@ router.post(
   "/config/test",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
   emailConfigController.testEmailConfig,
 );
+
+// ── Per-tenant SMTP config (admin only) ────────────────────────────────────
+const adminRoles = ["super_admin", "accounts_manager"];
+
+router.get(
+  "/tenant-config",
+  authMiddleware,
+  tenantIsolation,
+  authorize(adminRoles),
+  tenantEmailConfigController.getTenantEmailConfig,
+);
+
+router.post(
+  "/tenant-config",
+  authMiddleware,
+  tenantIsolation,
+  authorize(adminRoles),
+  tenantEmailConfigController.saveTenantEmailConfig,
+);
+
+router.delete(
+  "/tenant-config",
+  authMiddleware,
+  tenantIsolation,
+  authorize(adminRoles),
+  tenantEmailConfigController.deleteTenantEmailConfig,
+);
+
+router.post(
+  "/tenant-config/test",
+  authMiddleware,
+  tenantIsolation,
+  authorize(adminRoles),
+  tenantEmailConfigController.testTenantEmailConfig,
+);
+
+const sendRoles = ["super_admin", "accounts_manager", "recruiter"];
 
 // ── Email sending & templates ───────────────────────────────────────────────
 router.get(
   "/templates",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
+  authorize(sendRoles),
   emailController.listTemplates,
 );
 
@@ -58,7 +87,7 @@ router.post(
   "/send",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
+  authorize(sendRoles),
   emailController.sendEmail,
 );
 
@@ -66,7 +95,7 @@ router.post(
   "/send-single",
   authMiddleware,
   tenantIsolation,
-  authorize(recruiterRoles),
+  authorize(sendRoles),
   emailController.sendSingleEmail,
 );
 

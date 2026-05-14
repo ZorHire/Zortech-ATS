@@ -10,6 +10,13 @@ const env_1 = __importDefault(require("../config/env"));
 const migrate = async () => {
     const schemaPath = path_1.default.resolve(__dirname, 'schema.sql');
     const sql = fs_1.default.readFileSync(schemaPath, 'utf8');
+    // Collect numbered migration files from migrations/ directory, sorted by filename.
+    const migrationsDir = path_1.default.resolve(__dirname, 'migrations');
+    const migrationFiles = fs_1.default.existsSync(migrationsDir)
+        ? fs_1.default.readdirSync(migrationsDir)
+            .filter(f => f.endsWith('.sql'))
+            .sort()
+        : [];
     console.log('Starting database migration (additive only — no data loss)...');
     console.log(`Connecting to: ${env_1.default.DATABASE_URL.split('@')[1]}`);
     const client = await index_1.default.connect();
@@ -79,6 +86,13 @@ const migrate = async () => {
         ];
         for (const stmt of columnMigrations) {
             await client.query(stmt);
+        }
+        // Apply numbered migration files (idempotent — all use IF NOT EXISTS guards)
+        for (const file of migrationFiles) {
+            const filePath = path_1.default.join(migrationsDir, file);
+            const migrationSql = fs_1.default.readFileSync(filePath, 'utf8');
+            console.log(`  Applying ${file}...`);
+            await client.query(migrationSql);
         }
         await client.query('COMMIT');
         console.log('Migration completed successfully — existing data preserved.');

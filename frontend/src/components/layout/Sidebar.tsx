@@ -13,6 +13,9 @@ import {
   LayoutGrid,
   Send,
   CreditCard,
+  Rocket,
+  Network,
+  ClipboardList,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -74,6 +77,12 @@ const navItems = [
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
   },
   {
+    icon: ClipboardList,
+    label: "JD Assignments",
+    path: "/assigned-jds",
+    roles: ["super_admin", "accounts_manager", "vendor_manager"],
+  },
+  {
     icon: BarChart3,
     label: "Analytics",
     path: "/analytics",
@@ -107,15 +116,33 @@ const navItems = [
     path: "/subscription",
     roles: ["super_admin", "accounts_manager"],
   },
+  {
+    icon: Network,
+    label: "Companies",
+    path: "/companies",
+    roles: ["super_admin"],
+    platformOwnerOnly: true,
+  },
+  {
+    icon: Rocket,
+    label: "Onboarding",
+    path: "/onboarding",
+    roles: ["super_admin"],
+    hidePlatformOwner: true,
+  },
 ];
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, subscription } = useAuth();
 
-  const visibleItems = navItems.filter(
-    (item) => !profile?.role || item.roles.includes(profile.role),
-  );
+  const isPlatformOwner = !!subscription?.isPlatformOwner;
+  const visibleItems = navItems.filter((item) => {
+    if (profile?.role && !item.roles.includes(profile.role)) return false;
+    if ((item as any).platformOwnerOnly && !isPlatformOwner) return false;
+    if ((item as any).hidePlatformOwner && isPlatformOwner) return false;
+    return true;
+  });
 
   return (
     <aside

@@ -45,7 +45,27 @@ const workModeLabel: Record<string, string> = {
   onsite: "Onsite",
 };
 
-function JobCard({ job, onDelete, readOnly = false }: { job: Job; onDelete: (id: string) => void; readOnly?: boolean }) {
+const STATUS_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "pending_review", label: "Pending Review" },
+  { value: "active", label: "Active" },
+  { value: "on_hold", label: "On Hold" },
+  { value: "closed_filled", label: "Closed - Filled" },
+  { value: "closed_cancelled", label: "Closed - Cancelled" },
+  { value: "expired", label: "Expired" },
+];
+
+function JobCard({
+  job,
+  onDelete,
+  onStatusChange,
+  readOnly = false,
+}: {
+  job: Job;
+  onDelete: (id: string) => void;
+  onStatusChange: (id: string, newStatus: string) => void;
+  readOnly?: boolean;
+}) {
   const salary =
     job.salary_min && job.salary_max
       ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L - INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
@@ -78,11 +98,35 @@ function JobCard({ job, onDelete, readOnly = false }: { job: Job; onDelete: (id:
             </div>
           </div>
         </div>
-        <span
-          className={`text-xs px-2.5 py-1 rounded-full border font-medium flex-shrink-0 ${statusColors[job.status]}`}
-        >
-          {jobStatusLabels[job.status]}
-        </span>
+        {readOnly ? (
+          <span
+            className={`text-xs px-2.5 py-1 rounded-full border font-medium flex-shrink-0 ${statusColors[job.status]}`}
+          >
+            {jobStatusLabels[job.status]}
+          </span>
+        ) : (
+          <div className="relative flex-shrink-0">
+            <select
+              value={job.status}
+              onChange={(e) => {
+                e.stopPropagation();
+                onStatusChange(job.id, e.target.value);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className={`text-xs pl-2.5 pr-6 py-1 rounded-full border font-medium cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-0 ${statusColors[job.status]}`}
+            >
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={10}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-50"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3 text-xs text-gray-500 mb-3">
@@ -156,7 +200,8 @@ function JobCard({ job, onDelete, readOnly = false }: { job: Job; onDelete: (id:
 
 export default function JobsPage() {
   const { profile } = useAuth();
-  const isVendor = profile?.role === "vendor_user";
+  const isVendor = profile?.role === "vendor_user" || profile?.role === "vendor_manager";
+  const isRecruiter = profile?.role === "recruiter";
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -328,6 +373,21 @@ export default function JobsPage() {
     }
   };
 
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    const prev = jobs.find((j) => j.id === id)?.status;
+    setJobs((all) =>
+      all.map((j) => (j.id === id ? { ...j, status: newStatus as Job["status"] } : j)),
+    );
+    try {
+      await api.patch(`/jobs/${id}`, { status: newStatus });
+    } catch {
+      setJobs((all) =>
+        all.map((j) => (j.id === id ? { ...j, status: prev as Job["status"] } : j)),
+      );
+      alert("Failed to update job status");
+    }
+  };
+
   const handleDeleteClient = async (id: string) => {
     if (!window.confirm("Delete this client? This cannot be undone.")) return;
     try {
@@ -346,10 +406,16 @@ export default function JobsPage() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
-        title={isVendor ? "Your Assigned Jobs" : "Job Descriptions"}
-        subtitle={isVendor ? `${jobs.length} job${jobs.length !== 1 ? "s" : ""} assigned to your vendor` : `${counts.active} active jobs across all clients`}
+        title={isVendor ? "Your Assigned Jobs" : isRecruiter ? "Your Jobs" : "Job Descriptions"}
+        subtitle={
+          isVendor
+            ? `${jobs.length} job${jobs.length !== 1 ? "s" : ""} assigned to your vendor`
+            : isRecruiter
+            ? `${jobs.length} job${jobs.length !== 1 ? "s" : ""} assigned to you`
+            : `${counts.active} active jobs across all clients`
+        }
         actions={
-          !isVendor ? (
+          !isVendor && !isRecruiter ? (
             <div className="flex gap-2">
               <button
                 onClick={handleViewPipeline}
@@ -437,7 +503,7 @@ export default function JobsPage() {
           </div>
         </div>
 
-        {!isVendor && (
+        {!isVendor && !isRecruiter && (
           <div className="flex gap-2 flex-wrap">
             {["all", "active", "pending_review", "on_hold", "closed_filled"].map(
               (status) => (
@@ -472,12 +538,18 @@ export default function JobsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((job) => (
-              <JobCard key={job.id} job={job} onDelete={handleDeleteJob} readOnly={isVendor} />
+              <JobCard
+                key={job.id}
+                job={job}
+                onDelete={handleDeleteJob}
+                onStatusChange={handleStatusChange}
+                readOnly={isVendor || isRecruiter}
+              />
             ))}
           </div>
         )}
 
-        {!isVendor && clients.length > 0 && (
+        {!isVendor && !isRecruiter && clients.length > 0 && (
           <div className="space-y-3 pt-2">
             <div className="flex items-center gap-2">
               <Building2 size={16} className="text-gray-400" />
