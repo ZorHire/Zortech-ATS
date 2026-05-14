@@ -108,6 +108,23 @@ export default function CompaniesPage() {
     }
   };
 
+  const handleSingleDelete = async (tenant: Tenant) => {
+    if (!window.confirm(
+      `Permanently delete "${tenant.name}"?\n\nThis removes ALL their users, jobs, candidates, subscriptions, and data.\n\nThis cannot be undone.`
+    )) return;
+
+    setActionLoading(tenant.id);
+    try {
+      await api.post("/tenants/bulk-delete", { ids: [tenant.id] });
+      setTenants((prev) => prev.filter((t) => t.id !== tenant.id));
+      showToast(`"${tenant.name}" deleted permanently`, true);
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete company", false);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const fetchTenants = async () => {
     try {
       const data = await api.get("/tenants");
@@ -346,17 +363,27 @@ export default function CompaniesPage() {
                           </p>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => toggleStatus(t)}
-                            disabled={actionLoading === t.id}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${
-                              t.is_active
-                                ? "text-red-600 bg-red-50 hover:bg-red-100"
-                                : "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                            }`}
-                          >
-                            {actionLoading === t.id ? "…" : t.is_active ? "Deactivate" : "Activate"}
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => toggleStatus(t)}
+                              disabled={actionLoading === t.id}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50 ${
+                                t.is_active
+                                  ? "text-red-600 bg-red-50 hover:bg-red-100"
+                                  : "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                              }`}
+                            >
+                              {actionLoading === t.id ? "…" : t.is_active ? "Deactivate" : "Activate"}
+                            </button>
+                            <button
+                              onClick={() => handleSingleDelete(t)}
+                              disabled={actionLoading === t.id}
+                              title="Permanently delete this company"
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
