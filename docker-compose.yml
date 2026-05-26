@@ -1,0 +1,44 @@
+version: "3.9"
+
+# ── Secrets ────────────────────────────────────────────────────────────────────
+# All secrets are loaded from /opt/zortech/.env on the VPS.
+# Required .env keys: DATABASE_URL, JWT_SECRET, REDIS_PASS, REDIS_URL, ...
+# See .env.example for the full list.
+
+services:
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASS} --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # ── Backend API ─────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: zortech-backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - redis
+
+  # ── Nginx reverse proxy ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+
+volumes:
+  redis_data:

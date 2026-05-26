@@ -34,29 +34,24 @@ docker exec zortech-nginx-1 nginx -t 2>&1 && echo "  Nginx config OK" || {
 # ── 3. Redis password ─────────────────────────────────────────────────────────
 echo ""
 echo "[3/6] Checking Redis password..."
-if grep -q 'REDIS_URL=redis://:[^@]' "$ENV_FILE" 2>/dev/null; then
-  echo "  Redis password already configured in .env"
+if grep -q '^REDIS_PASS=' "$ENV_FILE" 2>/dev/null; then
+  echo "  Redis password already configured in .env (REDIS_PASS present)"
 else
   echo "  Generating Redis password..."
   REDIS_PASS=$(openssl rand -hex 20)
 
-  # Update or append REDIS_URL in .env
+  # Write REDIS_PASS so docker-compose.yml can interpolate it
+  echo "REDIS_PASS=${REDIS_PASS}" >> "$ENV_FILE"
+
+  # Write / update REDIS_URL so the backend can connect with auth
   if grep -q '^REDIS_URL=' "$ENV_FILE" 2>/dev/null; then
     sed -i "s|^REDIS_URL=.*|REDIS_URL=redis://:${REDIS_PASS}@redis:6379|" "$ENV_FILE"
   else
     echo "REDIS_URL=redis://:${REDIS_PASS}@redis:6379" >> "$ENV_FILE"
   fi
 
-  # Add requirepass to redis service in docker-compose.yml
-  # If a command: line already exists for redis-server, update it in-place; otherwise insert after image: redis
-  if grep -q '^\s*command: redis-server' "$COMPOSE_FILE" 2>/dev/null; then
-    sed -i "s|^\(\s*\)command: redis-server.*|\1command: redis-server --requirepass ${REDIS_PASS} --appendonly yes|" "$COMPOSE_FILE"
-  else
-    sed -i "/image: redis/a\\    command: redis-server --requirepass ${REDIS_PASS} --appendonly yes" "$COMPOSE_FILE"
-  fi
-
-  echo "  Redis password set and .env + docker-compose.yml updated."
-  echo "  IMPORTANT: Redis will restart with auth — backend will reconnect automatically."
+  echo "  REDIS_PASS and REDIS_URL written to .env."
+  echo "  docker-compose.yml reads REDIS_PASS at startup — no file patching needed."
 fi
 
 # ── 4. Docker log rotation ────────────────────────────────────────────────────
