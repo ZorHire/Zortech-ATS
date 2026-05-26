@@ -57,7 +57,7 @@ jobs:
             docker compose build backend
             docker compose up -d
             echo "Waiting for backend to start and run migrations..."
-            sleep 20
+            sleep 45
 
       # ── Health check ────────────────────────────────────────────────────────
       - name: Backend health check

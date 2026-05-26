@@ -7,7 +7,11 @@ RUN npm ci --omit=dev
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm install -D typescript @types/node && npx tsc && npm prune --omit=dev
+RUN npm install -D typescript @types/node && npx tsc && \
+    find src -name "*.sql" | while IFS= read -r f; do \
+      dest="dist/${f#src/}"; mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; \
+    done && \
+    npm prune --omit=dev
 
 COPY start.sh ./
 RUN chmod +x start.sh
