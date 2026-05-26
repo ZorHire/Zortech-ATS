@@ -66,13 +66,23 @@ jobs:
             cd /opt/zortech
             docker compose build backend
             docker compose up -d
-            echo "Waiting for backend to start and run migrations..."
-            sleep 45
+            echo "Waiting for backend to be ready (migrations run on startup)..."
+            for i in $(seq 1 36); do
+              if curl -sf http://localhost:8080/v1/health > /dev/null 2>&1; then
+                echo "Backend ready after $(( i * 5 ))s"
+                exit 0
+              fi
+              echo "  [${i}/36] Not ready yet ($(( i * 5 ))s elapsed)..."
+              sleep 5
+            done
+            echo "ERROR: Backend did not respond within 180s. Last 60 log lines:"
+            docker compose logs --tail=60 backend
+            exit 1
 
       # ── Health check ────────────────────────────────────────────────────────
       - name: Backend health check
         run: |
-          for i in 1 2 3 4 5; do
+          for i in 1 2 3; do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://zorhire.zortechs.in/v1/health)
             if [ "$STATUS" = "200" ]; then
               echo "Backend healthy (HTTP $STATUS)"
@@ -81,5 +91,5 @@ jobs:
             echo "Attempt $i: got HTTP $STATUS, retrying in 10s..."
             sleep 10
           done
-          echo "ERROR: Backend health check failed after 5 attempts"
+          echo "ERROR: Backend health check failed after 3 attempts"
           exit 1
