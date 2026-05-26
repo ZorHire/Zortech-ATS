@@ -14,6 +14,10 @@ export const env = {
   // AES-256-GCM key for encrypting per-user SMTP passwords at rest.
   // Set EMAIL_ENCRYPTION_KEY in .env (64-char hex / 32 bytes).
   ENCRYPTION_KEY: process.env.EMAIL_ENCRYPTION_KEY || "",
+  REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+  RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",
+  RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "",
 };
 
 export default env;
