@@ -74,41 +74,42 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
     await client.query('COMMIT');
     await invalidate(`tenant:${tenantId}:users`);
-
-    // Send welcome email (non-blocking — user is created regardless)
-    let emailSent = false;
-    let emailError: string | undefined;
-    try {
-      const mail = await getUserTransporter(adminId!);
-      if (!mail) {
-        emailError = 'Email not configured on your account. Configure it in Settings → Email.';
-      } else {
-        const body =
-          `Hello ${full_name || email},\n\n` +
-          `Your account has been created.\n\n` +
-          `Login details:\nEmail: ${email}\nTemporary password: ${password}\n\n` +
-          `You will be asked to change your password on first login.`;
-        await mail.transporter.sendMail({
-          from: mail.fromEmail,
-          to: email,
-          subject: 'Your account has been created',
-          text: body,
-          html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${body}</div>`,
-        });
-        emailSent = true;
-      }
-    } catch (emailErr: any) {
-      emailError = classifySmtpError(emailErr).message;
-    }
-
-    res.status(201).json({ message: 'User created successfully', emailSent, emailError });
-  } catch (error) {
+  } catch (error: any) {
     await client.query('ROLLBACK');
-    console.error('Create user error:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    console.error('Create user error:', error?.message, error?.detail);
+    return res.status(500).json({ message: 'Internal server error' });
   } finally {
     client.release();
   }
+
+  // Email is sent AFTER the response-path try-catch so a corrupt/missing
+  // email config can never turn a successful user creation into a 500.
+  let emailSent = false;
+  let emailError: string | undefined;
+  try {
+    const mail = await getUserTransporter(adminId!);
+    if (!mail) {
+      emailError = 'Email not configured on your account. Configure it in Settings → Email.';
+    } else {
+      const body =
+        `Hello ${full_name || email},\n\n` +
+        `Your account has been created.\n\n` +
+        `Login details:\nEmail: ${email}\nTemporary password: ${password}\n\n` +
+        `You will be asked to change your password on first login.`;
+      await mail.transporter.sendMail({
+        from: mail.fromEmail,
+        to: email,
+        subject: 'Your account has been created',
+        text: body,
+        html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${body}</div>`,
+      });
+      emailSent = true;
+    }
+  } catch (emailErr: any) {
+    emailError = classifySmtpError(emailErr).message;
+  }
+
+  res.status(201).json({ message: 'User created successfully', emailSent, emailError });
 };
 
 export const updateUser = async (req: AuthRequest, res: Response) => {

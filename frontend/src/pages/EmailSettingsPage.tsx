@@ -22,6 +22,7 @@ interface EmailConfig {
   email?: string;
   provider?: string;
   updated_at?: string;
+  is_corrupted?: boolean;
 }
 
 export default function EmailSettingsPage() {
@@ -155,6 +156,7 @@ export default function EmailSettingsPage() {
   };
 
   const isConnected = config?.configured;
+  const isCorrupted = config?.configured && config?.is_corrupted;
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -183,10 +185,10 @@ export default function EmailSettingsPage() {
         </div>
         {!loading && (
           <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
-            isConnected ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+            isCorrupted ? "bg-red-50 text-red-700" : isConnected ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
           }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? "bg-emerald-500" : "bg-amber-400"}`} />
-            {isConnected ? `Connected · ${config?.email}` : "Not Connected"}
+            <span className={`w-1.5 h-1.5 rounded-full ${isCorrupted ? "bg-red-500" : isConnected ? "bg-emerald-500" : "bg-amber-400"}`} />
+            {isCorrupted ? "Reconnect Required" : isConnected ? `Connected · ${config?.email}` : "Not Connected"}
           </span>
         )}
       </div>
@@ -214,26 +216,30 @@ export default function EmailSettingsPage() {
 
             {/* Status card */}
             <div className={`bg-white rounded-2xl border shadow-sm p-5 flex items-center gap-4 ${
-              isConnected ? "border-emerald-100" : "border-amber-100"
+              isCorrupted ? "border-red-200" : isConnected ? "border-emerald-100" : "border-amber-100"
             }`}>
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                isConnected ? "bg-emerald-50" : "bg-amber-50"
+                isCorrupted ? "bg-red-50" : isConnected ? "bg-emerald-50" : "bg-amber-50"
               }`}>
-                {isConnected
-                  ? <CheckCircle2 size={20} className="text-emerald-600" />
-                  : <Mail size={20} className="text-amber-600" />}
+                {isCorrupted
+                  ? <AlertTriangle size={20} className="text-red-500" />
+                  : isConnected
+                    ? <CheckCircle2 size={20} className="text-emerald-600" />
+                    : <Mail size={20} className="text-amber-600" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-black text-gray-900">
-                  {isConnected ? "SMTP Connected" : "No Email Connected"}
+                <p className={`text-sm font-black ${isCorrupted ? "text-red-700" : "text-gray-900"}`}>
+                  {isCorrupted ? "Credentials Corrupt — Reconnect Required" : isConnected ? "SMTP Connected" : "No Email Connected"}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5 truncate">
-                  {isConnected
-                    ? `Sending from ${config?.email}${config?.updated_at ? ` · updated ${new Date(config.updated_at).toLocaleDateString()}` : ""}`
-                    : "You must connect an email before sending campaigns or candidate emails."}
+                  {isCorrupted
+                    ? `Stored password for ${config?.email} can no longer be decrypted. Re-enter your app password below.`
+                    : isConnected
+                      ? `Sending from ${config?.email}${config?.updated_at ? ` · updated ${new Date(config.updated_at).toLocaleDateString()}` : ""}`
+                      : "You must connect an email before sending campaigns or candidate emails."}
                 </p>
               </div>
-              {isConnected && (
+              {isConnected && !isCorrupted && (
                 <button
                   type="button"
                   onClick={handleTest}

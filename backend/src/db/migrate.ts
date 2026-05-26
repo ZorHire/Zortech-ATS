@@ -92,12 +92,18 @@ const migrate = async () => {
       await client.query(stmt);
     }
 
-    // Apply numbered migration files (idempotent — all use IF NOT EXISTS guards)
+    // Apply numbered migration files — split on semicolons so every statement runs
     for (const file of migrationFiles) {
       const filePath = path.join(migrationsDir, file);
       const migrationSql = fs.readFileSync(filePath, 'utf8');
       console.log(`  Applying ${file}...`);
-      await client.query(migrationSql);
+      const statements = migrationSql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+      for (const stmt of statements) {
+        await client.query(stmt);
+      }
     }
 
     await client.query('COMMIT');

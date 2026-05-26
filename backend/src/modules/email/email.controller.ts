@@ -165,7 +165,7 @@ export const getEmailConfig = async (req: AuthRequest, res: Response) => {
   const userId = req.user!.id;
   try {
     const result = await pool.query(
-      `SELECT email, provider, updated_at
+      `SELECT email, provider, encrypted_password, updated_at
        FROM user_email_config
        WHERE user_id = $1`,
       [userId],
@@ -173,8 +173,14 @@ export const getEmailConfig = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.json({ configured: false });
     }
-    const { email, provider, updated_at } = result.rows[0];
-    return res.json({ configured: true, email, provider, updated_at });
+    const { email, provider, encrypted_password, updated_at } = result.rows[0];
+    let is_corrupted = false;
+    try {
+      decrypt(encrypted_password);
+    } catch {
+      is_corrupted = true;
+    }
+    return res.json({ configured: true, email, provider, updated_at, is_corrupted });
   } catch (error) {
     console.error("Get email config error:", error);
     res.status(500).json({ message: "Internal server error" });
