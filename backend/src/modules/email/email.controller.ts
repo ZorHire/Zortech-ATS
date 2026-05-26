@@ -418,57 +418,39 @@ export const assignJd = async (req: AuthRequest, res: Response) => {
 
 // POST /email/assign-jd-recruiter
 export const assignJdRecruiter = async (req: AuthRequest, res: Response) => {
-  const { recruiter_id, job_id, deadline_days, site_url } = req.body;
-  console.log("assignJD payload:", {
-    recruiter_id,
-    job_id,
-    deadline_days,
-    site_url,
-  });
-  console.log("assignJD user:", {
-    id: req.user?.id,
-    tenant_id: req.user?.tenant_id,
-    role: req.user?.role,
-  });
-  console.log("assignJD tenant:", req.user?.tenant_id);
+  // Accept recruiter_ids (array) from frontend, or legacy recruiter_id (singular)
+  const { recruiter_id, recruiter_ids, job_id, deadline_days, site_url } = req.body;
+
+  const rawIds: string[] = Array.isArray(recruiter_ids)
+    ? recruiter_ids
+    : recruiter_id
+    ? [String(recruiter_id)]
+    : [];
 
   if (!req.user?.id || !req.user?.tenant_id) {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  if (!recruiter_id || !job_id || !deadline_days) {
-    return res
-      .status(400)
-      .json({
-        message: "recruiter_id, job_id, and deadline_days are required",
-      });
+  if (!rawIds.length || !job_id || !deadline_days) {
+    return res.status(400).json({ message: "recruiter_ids, job_id, and deadline_days are required" });
   }
 
-  // Prevent avoidable DB failures (e.g., invalid input syntax for uuid).
   const uuidPattern =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  if (
-    !uuidPattern.test(String(recruiter_id)) ||
-    !uuidPattern.test(String(job_id))
-  ) {
+  const invalidId = rawIds.find((id) => !uuidPattern.test(id));
+  if (invalidId || !uuidPattern.test(String(job_id))) {
     return res.status(400).json({ message: "Invalid recruiter_id or job_id" });
   }
 
   const days = Number(deadline_days);
   if (!Number.isFinite(days) || days <= 0) {
-    return res
-      .status(400)
-      .json({ message: "deadline_days must be a positive number" });
+    return res.status(400).json({ message: "deadline_days must be a positive number" });
   }
 
   const tenantId = req.user!.tenant_id;
 
   try {
-    console.log("assign-jd-recruiter: fetching job and recruiter", {
-      tenantId,
-      recruiter_id,
-      job_id,
-    });
+    // Fetch job
     let jobResult;
     try {
       jobResult = await pool.query(
@@ -476,143 +458,244 @@ export const assignJdRecruiter = async (req: AuthRequest, res: Response) => {
         [job_id, tenantId],
       );
     } catch (jobQueryError: any) {
-      console.error("assignJD jobs query failed:", jobQueryError);
-      if (jobQueryError?.code !== "42703") {
-        throw jobQueryError;
-      }
+      if (jobQueryError?.code !== "42703") throw jobQueryError;
       jobResult = await pool.query(
         "SELECT id, title FROM jobs WHERE id = $1 AND tenant_id = $2",
         [job_id, tenantId],
       );
     }
-
-    let recruiterResult;
-    try {
-      recruiterResult = await pool.query(
-        `SELECT u.id, u.email, p.full_name
-         FROM users u
-         INNER JOIN tenant_memberships tm ON tm.user_id = u.id
-         LEFT JOIN profiles p ON p.id = u.id
-         WHERE u.id = $1
-           AND tm.tenant_id = $2
-           AND tm.role = 'recruiter'
-           AND tm.is_active = true
-           AND u.is_active = true`,
-        [recruiter_id, tenantId],
-      );
-    } catch (recruiterQueryError: any) {
-      console.error("assignJD recruiter query failed:", recruiterQueryError);
-      recruiterResult = await pool.query(
-        `SELECT u.id, u.email, p.full_name
-         FROM users u
-         INNER JOIN tenant_memberships tm ON tm.user_id = u.id
-         LEFT JOIN profiles p ON p.id = u.id
-         WHERE u.id = $1
-           AND tm.tenant_id = $2
-           AND tm.role = 'recruiter'`,
-        [recruiter_id, tenantId],
-      );
-    }
-
     if (jobResult.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
     }
-    if (recruiterResult.rows.length === 0) {
-      return res.status(404).json({ message: "Recruiter not found" });
-    }
-
     const job = jobResult.rows[0];
-    const recruiter = recruiterResult.rows[0];
-    if (!job || !recruiter) {
-      return res.status(404).json({ message: "Job or recruiter not found" });
-    }
 
-    // Keep assignment state in sync with notification.
-    console.log("assign-jd-recruiter: updating assigned_recruiter_id", {
-      job_id,
-      recruiter_id,
-      tenantId,
-    });
+    // Fetch all recruiter rows in one query
+    const recruiterResult = await pool.query(
+      `SELECT u.id, u.email, p.full_name
+       FROM users u
+       INNER JOIN tenant_memberships tm ON tm.user_id = u.id
+       LEFT JOIN profiles p ON p.id = u.id
+       WHERE u.id = ANY($1::uuid[])
+         AND tm.tenant_id = $2
+         AND tm.role = 'recruiter'
+         AND tm.is_active = true
+         AND u.is_active = true`,
+      [rawIds, tenantId],
+    );
+    if (recruiterResult.rows.length === 0) {
+      return res.status(404).json({ message: "No active recruiters found" });
+    }
+    const recruiters = recruiterResult.rows;
+
+    // Update assigned_recruiter_ids array (migration 006); fall back to singular column
     try {
       await pool.query(
-        `UPDATE jobs
-         SET assigned_recruiter_id = $1, updated_at = now()
-         WHERE id = $2 AND tenant_id = $3`,
-        [recruiter_id, job_id, tenantId],
+        `UPDATE jobs SET assigned_recruiter_ids = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
+        [rawIds, job_id, tenantId],
       );
     } catch (assignUpdateError: any) {
-      console.error("assignJD update query failed:", assignUpdateError);
-      // Compatibility fallback for older deployed schemas.
-      // If assignment columns are missing, continue with email notification instead of 500.
-      const sqlState = assignUpdateError?.code;
-      if (sqlState !== "42703") {
-        throw assignUpdateError;
+      if (assignUpdateError?.code !== "42703") throw assignUpdateError;
+      try {
+        await pool.query(
+          `UPDATE jobs SET assigned_recruiter_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3`,
+          [rawIds[0], job_id, tenantId],
+        );
+      } catch {
+        // email-only flow if both columns missing
       }
-      console.error(
-        "assign-jd-recruiter: assignment column missing, continuing with email-only flow:",
-        assignUpdateError,
-      );
     }
 
     const dayLabel = days === 1 ? "1 day" : `${days} days`;
-    const urlPart = site_url ? ` at ${site_url}` : "";
-    const recruiterName =
-      recruiter.full_name && String(recruiter.full_name).trim().length > 0
-        ? recruiter.full_name
-        : recruiter.email;
+    const urlPart = site_url ? ` at ${String(site_url).replace(/[<>"']/g, "")}` : "";
 
-    const body =
-      `Hi ${recruiterName},\n\n` +
-      `You have been assigned "${job.title}". Please submit candidates within ${dayLabel}${urlPart}.`;
-
-    try {
-      console.log("assign-jd-recruiter: loading SMTP transporter", {
-        sender_user_id: req.user!.id,
-      });
-      const userMail = await getUserTransporter(req.user!.id);
-      if (!userMail) {
-        return res.status(200).json({
-          message:
-            "Recruiter assigned successfully, but assignment email could not be sent.",
-          email_error: {
-            code: "EMAIL_NOT_CONFIGURED",
-            message:
-              "Your email is not configured. Go to Settings → Email to connect your email.",
-          },
-        });
-      }
-
-      console.log("assign-jd-recruiter: sending recruiter email", {
-        to: recruiter.email,
-        subject: `JD Assignment: ${job.title}`,
-      });
-      await userMail.transporter.sendMail({
-        from: userMail.fromEmail,
-        to: recruiter.email,
-        subject: `JD Assignment: ${job.title}`,
-        text: body,
-        html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${body}</div>`,
-      });
-
-      return res.json({
-        message: "Recruiter assignment email sent successfully",
-      });
-    } catch (mailError: any) {
-      console.error("Email failed:", mailError);
-      // Do not fail the assignment update if email sending fails or transporter build fails.
-      const { code, message } = classifySmtpError(mailError);
+    const userMail = await getUserTransporter(req.user!.id);
+    if (!userMail) {
       return res.status(200).json({
-        message:
-          "Recruiter assigned successfully, but assignment email could not be sent.",
-        email_error: { code, message },
+        message: "Recruiters assigned successfully, but assignment emails could not be sent.",
+        email_error: {
+          code: "EMAIL_NOT_CONFIGURED",
+          message: "Your email is not configured. Go to Settings → Email to connect your email.",
+        },
       });
     }
+
+    const mailResults = await Promise.allSettled(
+      recruiters.map(async (recruiter) => {
+        const recruiterName =
+          recruiter.full_name && String(recruiter.full_name).trim().length > 0
+            ? recruiter.full_name
+            : recruiter.email;
+        const body =
+          `Hi ${recruiterName},\n\n` +
+          `You have been assigned "${job.title}". Please submit candidates within ${dayLabel}${urlPart}.`;
+        await userMail.transporter.sendMail({
+          from: userMail.fromEmail,
+          to: recruiter.email,
+          subject: `JD Assignment: ${job.title}`,
+          text: body,
+          html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${body}</div>`,
+        });
+      }),
+    );
+
+    const failed = mailResults.filter((r) => r.status === "rejected").length;
+    const sent = recruiters.length - failed;
+    return res.json({
+      message:
+        failed === 0
+          ? `Assignment email${sent > 1 ? "s" : ""} sent to ${sent} recruiter${sent > 1 ? "s" : ""} successfully.`
+          : `Assigned ${recruiters.length} recruiter${recruiters.length > 1 ? "s" : ""}, but ${failed} email${failed > 1 ? "s" : ""} failed to send.`,
+    });
   } catch (error: any) {
     console.error("assignJD error:", error);
     return res.status(500).json({
       message: "Internal server error",
       debug: env.NODE_ENV === "development" ? error?.message : undefined,
     });
+  }
+};
+
+// ─── GET /email-campaigns ─────────────────────────────────────────────────────
+
+export const listCampaigns = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT id, name, subject, body, status,
+              recipient_count, delivered_count, opened_count,
+              clicked_count, bounced_count, unsubscribed_count,
+              scheduled_at, sent_at, created_by, created_at, updated_at
+       FROM email_campaigns
+       WHERE tenant_id = $1
+       ORDER BY created_at DESC`,
+      [tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('List campaigns error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── POST /email-campaigns ────────────────────────────────────────────────────
+
+export const createCampaign = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  const userId = req.user!.id;
+  const { name, subject, body, status = 'draft' } = req.body;
+
+  if (!name?.trim() || !subject?.trim() || !body?.trim()) {
+    return res.status(400).json({ message: 'name, subject, and body are required.' });
+  }
+  const allowedStatuses = ['draft', 'scheduled', 'sending', 'sent', 'failed'];
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ message: 'Invalid status.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO email_campaigns
+         (tenant_id, name, subject, body, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [tenantId, name.trim(), subject.trim(), body.trim(), status, userId],
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Create campaign error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── POST /email-campaigns/:id/send ──────────────────────────────────────────
+
+export const sendCampaignById = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  const userId = req.user!.id;
+  const { id } = req.params;
+  const { recipients } = req.body;
+
+  if (!Array.isArray(recipients) || recipients.length === 0) {
+    return res.status(400).json({ message: 'recipients array is required.' });
+  }
+
+  try {
+    const campResult = await pool.query(
+      `SELECT * FROM email_campaigns WHERE id = $1 AND tenant_id = $2`,
+      [id, tenantId],
+    );
+    if (campResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Campaign not found.' });
+    }
+    const campaign = campResult.rows[0];
+
+    const userMail = await getUserTransporter(userId);
+    if (!userMail) {
+      return res.status(400).json({
+        code: 'EMAIL_NOT_CONFIGURED',
+        message: 'Email not configured. Go to Settings → Email to connect your email.',
+      });
+    }
+
+    await pool.query(
+      `UPDATE email_campaigns SET status = 'sending', recipient_count = $1, updated_at = now() WHERE id = $2`,
+      [recipients.length, id],
+    );
+
+    const sendResults = await Promise.allSettled(
+      recipients.map((r: { email: string }) =>
+        userMail.transporter.sendMail({
+          from: userMail.fromEmail,
+          to: r.email,
+          subject: campaign.subject,
+          text: campaign.body,
+          html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${campaign.body}</div>`,
+        }),
+      ),
+    );
+
+    const deliveredCount = sendResults.filter((r) => r.status === 'fulfilled').length;
+
+    await pool.query(
+      `UPDATE email_campaigns
+       SET status = 'sent', delivered_count = $1, sent_at = now(), updated_at = now()
+       WHERE id = $2`,
+      [deliveredCount, id],
+    );
+
+    const updated = await pool.query(`SELECT * FROM email_campaigns WHERE id = $1`, [id]);
+
+    res.json({
+      message: 'Campaign sent',
+      delivered_count: deliveredCount,
+      recipients: recipients.length,
+      campaign: updated.rows[0],
+    });
+  } catch (error: any) {
+    console.error('Send campaign error:', error);
+    const { code, message } = classifySmtpError(error);
+    res.status(500).json({ code, message });
+  }
+};
+
+// ─── DELETE /email-campaigns/:id ─────────────────────────────────────────────
+
+export const deleteCampaign = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM email_campaigns WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+      [id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Campaign not found.' });
+    }
+    res.json({ message: 'Campaign deleted.' });
+  } catch (error) {
+    console.error('Delete campaign error:', error);
+    res.status(500).json({ message: 'Internal server error' });
   }
 };
 

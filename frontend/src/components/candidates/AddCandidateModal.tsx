@@ -53,7 +53,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
         Object.keys(parsed).length === 0 ||
         (!parsed.name && !parsed.email && !parsed.phone && (!parsed.skills || parsed.skills.length === 0))
       ) {
-        setResumeParseError("Could not extract meaningful data.");
+        setResumeParseError("Could not auto-fill from this resume. Please fill in the fields manually.");
         return;
       }
       setFormData((cur) => ({

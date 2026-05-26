@@ -11,10 +11,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cd frontend && npm install && npm run build
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+
+      # ── Frontend ────────────────────────────────────────────────────────────
+      - name: Build frontend
+        run: cd frontend && npm install && npm run build
+
+      - name: Deploy frontend to Firebase
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_ZORTECH_SOLUTIONS_51A8D }}
           channelId: live
           projectId: zortech-solutions-51a8d
+
+      # ── Backend ─────────────────────────────────────────────────────────────
+      - name: Upload backend source to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "backend/src,backend/package.json,backend/package-lock.json,backend/tsconfig.json,backend/Dockerfile,backend/start.sh"
+          target: /opt/zortech/backend
+          strip_components: 1
+
+      - name: Rebuild backend and run migrations
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /opt/zortech
+            docker compose build backend
+            docker compose up -d --no-deps backend
+            echo "Waiting for backend to start and run migrations..."
+            sleep 20
+
+      # ── Health check ────────────────────────────────────────────────────────
+      - name: Backend health check
+        run: |
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://zorhire.zortechs.in/v1/health)
+            if [ "$STATUS" = "200" ]; then
+              echo "Backend healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "Attempt $i: got HTTP $STATUS, retrying in 10s..."
+            sleep 10
+          done
+          echo "ERROR: Backend health check failed after 5 attempts"
+          exit 1
