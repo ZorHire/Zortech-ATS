@@ -3,6 +3,16 @@ import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
+import { withCache, invalidate, invalidatePrefix } from "../../lib/cache";
+
+function buildCandidateCacheKey(tenantId: string, query: Record<string, any>): string {
+  const suffix = Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}=${v}`)
+    .join("&");
+  return `tenant:${tenantId}:candidates:${suffix}`;
+}
 
 const normalizeSkills = (value: any) => {
   if (!value) return [];
@@ -24,49 +34,55 @@ const normalizeSkills = (value: any) => {
 export const getCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const { search, location, skills, min_experience, max_experience } =
-      req.query;
-    const filters: string[] = ["tenant_id = $1", "deleted_at IS NULL"];
-    const params: any[] = [tenantId];
+    const { search, location, skills, min_experience, max_experience } = req.query;
 
-    if (search) {
-      params.push(`%${String(search).toLowerCase()}%`);
-      filters.push(
-        `(LOWER(first_name) LIKE $${params.length} OR LOWER(last_name) LIKE $${params.length} OR LOWER(email) LIKE $${params.length} OR LOWER(current_title) LIKE $${params.length} OR LOWER(current_company) LIKE $${params.length} OR LOWER(current_location) LIKE $${params.length})`,
-      );
-    }
+    const cacheKey = buildCandidateCacheKey(tenantId!, req.query as Record<string, any>);
 
-    if (location) {
-      params.push(`%${String(location).toLowerCase()}%`);
-      filters.push(`LOWER(current_location) LIKE $${params.length}`);
-    }
+    const rows = await withCache(cacheKey, 120, async () => {
+      const filters: string[] = ["tenant_id = $1", "deleted_at IS NULL"];
+      const params: any[] = [tenantId];
 
-    if (skills) {
-      String(skills)
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean)
-        .forEach((skill) => {
-          params.push(skill.toLowerCase());
-          filters.push(
-            `EXISTS (SELECT 1 FROM unnest(skills) s WHERE LOWER(s) = $${params.length})`,
-          );
-        });
-    }
+      if (search) {
+        params.push(`%${String(search).toLowerCase()}%`);
+        filters.push(
+          `(LOWER(first_name) LIKE $${params.length} OR LOWER(last_name) LIKE $${params.length} OR LOWER(email) LIKE $${params.length} OR LOWER(current_title) LIKE $${params.length} OR LOWER(current_company) LIKE $${params.length} OR LOWER(current_location) LIKE $${params.length})`,
+        );
+      }
 
-    if (min_experience) {
-      params.push(Number(min_experience));
-      filters.push(`experience_years >= $${params.length}`);
-    }
+      if (location) {
+        params.push(`%${String(location).toLowerCase()}%`);
+        filters.push(`LOWER(current_location) LIKE $${params.length}`);
+      }
 
-    if (max_experience) {
-      params.push(Number(max_experience));
-      filters.push(`experience_years <= $${params.length}`);
-    }
+      if (skills) {
+        String(skills)
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .forEach((skill) => {
+            params.push(skill.toLowerCase());
+            filters.push(
+              `EXISTS (SELECT 1 FROM unnest(skills) s WHERE LOWER(s) = $${params.length})`,
+            );
+          });
+      }
 
-    const query = `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC`;
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+      if (min_experience) {
+        params.push(Number(min_experience));
+        filters.push(`experience_years >= $${params.length}`);
+      }
+
+      if (max_experience) {
+        params.push(Number(max_experience));
+        filters.push(`experience_years <= $${params.length}`);
+      }
+
+      const sql = `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC`;
+      const result = await pool.query(sql, params);
+      return result.rows;
+    });
+
+    res.json(rows);
   } catch (error) {
     console.error("Get candidates error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -99,7 +115,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
 
   const resumeText =
     (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-  const parsed = parseResumeText(resumeText);
+  const parsed = await parseResumeText(resumeText);
 
   const first_name =
     body.first_name || parsed.name?.split(" ")[0] || "Candidate";
@@ -170,6 +186,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
         createdBy,
       ],
     );
+    await invalidatePrefix(`tenant:${tenantId}:candidates:`);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Create candidate error:", error);
@@ -237,6 +254,7 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Candidate not found" });
     }
+    await invalidatePrefix(`tenant:${tenantId}:candidates:`);
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update candidate error:", error);
@@ -255,6 +273,7 @@ export const deleteCandidate = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Candidate not found" });
     }
+    await invalidatePrefix(`tenant:${tenantId}:candidates:`);
     res.json({ message: "Candidate deleted successfully" });
   } catch (error) {
     console.error("Delete candidate error:", error);

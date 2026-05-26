@@ -3,7 +3,7 @@ import {
   Mail, Send, Loader2, X, Users, BarChart2, Clock,
   Search, ChevronDown, Plus, AlertCircle, CheckCircle2,
   XCircle, Eye, MousePointer, Globe, Bold, Italic,
-  Underline, List, Link, Image, Smile,
+  Underline, List, Link, Image, Smile, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import { EmailCampaign } from '../types';
@@ -280,6 +280,18 @@ export default function EmailCampaignsPage() {
     .replace(/\{\{job_title\}\}/g, 'Senior Developer');
 
   const wordCount = emailBody.trim() ? emailBody.trim().split(/\s+/).length : 0;
+
+  // ─── Delete campaign ────────────────────────────────────────────────────────
+
+  const handleDeleteCampaign = async (id: string, name: string) => {
+    if (!window.confirm(`Delete campaign "${name}"?\n\nThis cannot be undone.`)) return;
+    try {
+      await api.delete(`/email-campaigns/${id}`);
+      setCampaigns(prev => prev.filter(c => c.id !== id));
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete campaign');
+    }
+  };
 
   // ─── List stats ─────────────────────────────────────────────────────────────
 
@@ -927,20 +939,29 @@ export default function EmailCampaignsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {campaign.status === 'draft' && (
+                      <div className="flex items-center gap-2 justify-end">
+                        {campaign.status === 'draft' && (
+                          <button
+                            onClick={() => { resetWizard(); setMode('create'); }}
+                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5"
+                          >
+                            <Send size={12} /> Send
+                          </button>
+                        )}
+                        {campaign.status === 'sent' && (
+                          <div className="flex items-center gap-1">
+                            <BarChart2 size={13} className="text-emerald-500" />
+                            <span className="text-xs text-emerald-600 font-bold">Sent</span>
+                          </div>
+                        )}
                         <button
-                          onClick={() => { resetWizard(); setMode('create'); }}
-                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5 ml-auto"
+                          onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
+                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete campaign"
                         >
-                          <Send size={12} /> Send
+                          <Trash2 size={14} />
                         </button>
-                      )}
-                      {campaign.status === 'sent' && (
-                        <div className="flex items-center gap-1 justify-end">
-                          <BarChart2 size={13} className="text-emerald-500" />
-                          <span className="text-xs text-emerald-600 font-bold">Sent</span>
-                        </div>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}

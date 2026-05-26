@@ -38,7 +38,7 @@ function buildQs(params: Record<string, any>): string {
 }
 
 function authHeaders(): HeadersInit {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('jwt');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -58,8 +58,7 @@ export const resumeSearchService = {
     });
 
     if (res.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
       throw new Error('Session expired');
     }
     if (!res.ok) {

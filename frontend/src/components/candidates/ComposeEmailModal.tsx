@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { X, Mail, Loader2, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { X, Mail, Loader2 } from "lucide-react";
 import { useSendEmail } from "../../hooks/useSendEmail";
 
 interface Props {

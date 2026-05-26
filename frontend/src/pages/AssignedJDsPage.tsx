@@ -1,11 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  ClipboardList,
-  Search,
-  X,
-  Loader2,
-  Users,
-  Building2,
+  ClipboardList, Search, X, Loader2, Users, Building2,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import api from "../lib/api";
@@ -19,15 +15,22 @@ interface AssignedJob {
   assigned_vendor_ids: string[];
 }
 
-interface RecruiterInfo {
-  id: string;
-  full_name: string;
-  email: string;
-}
+interface RecruiterInfo { id: string; full_name: string; email: string; }
+interface VendorInfo { id: string; company_name: string; }
 
-interface VendorInfo {
-  id: string;
-  company_name: string;
+const PAGE_SIZE = 15;
+
+const statusConfig: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700",
+  draft: "bg-gray-100 text-gray-600",
+  pending_review: "bg-amber-50 text-amber-700",
+  on_hold: "bg-slate-100 text-slate-600",
+  closed_filled: "bg-blue-50 text-blue-700",
+  closed_cancelled: "bg-red-50 text-red-600",
+};
+
+function statusLabel(s: string) {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export default function AssignedJDsPage() {
@@ -38,13 +41,10 @@ export default function AssignedJDsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  const canManageRecruiters =
-    profile?.role === "super_admin" || profile?.role === "accounts_manager";
-  const canManageVendors =
-    profile?.role === "super_admin" ||
-    profile?.role === "vendor_manager" ||
-    profile?.role === "accounts_manager";
+  const canManageRecruiters = profile?.role === "super_admin" || profile?.role === "accounts_manager";
+  const canManageVendors = profile?.role === "super_admin" || profile?.role === "vendor_manager" || profile?.role === "accounts_manager";
 
   useEffect(() => {
     Promise.all([
@@ -54,21 +54,8 @@ export default function AssignedJDsPage() {
     ])
       .then(([jobsData, usersData, vendorsData]) => {
         setJobs(jobsData as AssignedJob[]);
-        setRecruiters(
-          (usersData as any[])
-            .filter((u: any) => u.role === "recruiter")
-            .map((u: any) => ({
-              id: u.id,
-              full_name: u.full_name || u.email,
-              email: u.email,
-            })),
-        );
-        setVendors(
-          (vendorsData as any[]).map((v: any) => ({
-            id: v.id,
-            company_name: v.company_name,
-          })),
-        );
+        setRecruiters((usersData as any[]).filter((u: any) => u.role === "recruiter").map((u: any) => ({ id: u.id, full_name: u.full_name || u.email, email: u.email })));
+        setVendors((vendorsData as any[]).map((v: any) => ({ id: v.id, company_name: v.company_name })));
       })
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
@@ -81,20 +68,11 @@ export default function AssignedJDsPage() {
     const key = `${jobId}-r-${recruiterId}`;
     setRemoving(key);
     try {
-      const newIds = (job.assigned_recruiter_ids ?? []).filter(
-        (id) => id !== recruiterId,
-      );
+      const newIds = (job.assigned_recruiter_ids ?? []).filter((id) => id !== recruiterId);
       await api.patch(`/jobs/${jobId}`, { assigned_recruiter_ids: newIds });
-      setJobs((prev) =>
-        prev.map((j) =>
-          j.id === jobId ? { ...j, assigned_recruiter_ids: newIds } : j,
-        ),
-      );
-    } catch (err) {
-      console.error("Failed to remove recruiter assignment:", err);
-    } finally {
-      setRemoving(null);
-    }
+      setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, assigned_recruiter_ids: newIds } : j));
+    } catch (err) { console.error("Failed to remove recruiter assignment:", err); }
+    finally { setRemoving(null); }
   };
 
   const removeVendor = async (jobId: string, vendorId: string) => {
@@ -103,20 +81,11 @@ export default function AssignedJDsPage() {
     const key = `${jobId}-v-${vendorId}`;
     setRemoving(key);
     try {
-      const newIds = (job.assigned_vendor_ids ?? []).filter(
-        (id) => id !== vendorId,
-      );
+      const newIds = (job.assigned_vendor_ids ?? []).filter((id) => id !== vendorId);
       await api.patch(`/jobs/${jobId}`, { assigned_vendor_ids: newIds });
-      setJobs((prev) =>
-        prev.map((j) =>
-          j.id === jobId ? { ...j, assigned_vendor_ids: newIds } : j,
-        ),
-      );
-    } catch (err) {
-      console.error("Failed to remove vendor assignment:", err);
-    } finally {
-      setRemoving(null);
-    }
+      setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, assigned_vendor_ids: newIds } : j));
+    } catch (err) { console.error("Failed to remove vendor assignment:", err); }
+    finally { setRemoving(null); }
   };
 
   const getRecruiterLabel = (id: string) => {
@@ -130,144 +99,161 @@ export default function AssignedJDsPage() {
   };
 
   const filtered = jobs.filter((j) => {
-    const hasAssignment =
-      (j.assigned_recruiter_ids?.length ?? 0) > 0 ||
-      (j.assigned_vendor_ids?.length ?? 0) > 0;
+    const hasAssignment = (j.assigned_recruiter_ids?.length ?? 0) > 0 || (j.assigned_vendor_ids?.length ?? 0) > 0;
     if (!hasAssignment) return false;
     if (!search) return true;
     return j.title.toLowerCase().includes(search.toLowerCase());
   });
 
-  const statusColor = (s: string) => {
-    if (s === "active") return "bg-emerald-50 text-emerald-700";
-    if (s === "draft") return "bg-gray-100 text-gray-600";
-    return "bg-blue-50 text-blue-700";
-  };
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const totalAssigned = filtered.length;
+  const totalRecruiterLinks = filtered.reduce((s, j) => s + (j.assigned_recruiter_ids?.length ?? 0), 0);
+  const totalVendorLinks = filtered.reduce((s, j) => s + (j.assigned_vendor_ids?.length ?? 0), 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header title="JD Assignments" />
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
-        {/* Search */}
-        <div className="relative mb-6">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
-          <input
-            type="text"
-            placeholder="Search by job title…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          />
+    <div className="flex flex-col flex-1 overflow-hidden">
+      <Header title="JD Assignments" subtitle="Track which jobs are assigned to recruiters and vendors" />
+
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Assigned JDs</p>
+            <p className="text-2xl font-black text-gray-900">{totalAssigned}</p>
+            <p className="text-xs text-gray-400 mt-0.5">with active assignments</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recruiter Links</p>
+            <p className="text-2xl font-black text-blue-600">{totalRecruiterLinks}</p>
+            <p className="text-xs text-gray-400 mt-0.5">across all jobs</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Vendor Links</p>
+            <p className="text-2xl font-black text-violet-600">{totalVendorLinks}</p>
+            <p className="text-xs text-gray-400 mt-0.5">across all jobs</p>
+          </div>
         </div>
 
+        {/* Search */}
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Search by job title…" value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
+        </div>
+
+        {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-sm">Loading assignments…</span>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            <ClipboardList size={36} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">No assigned JDs found.</p>
-            <p className="text-xs mt-1 text-gray-300">
-              Use the Assign JD button on the Vendors page to make assignments.
-            </p>
+          <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
+            <ClipboardList size={36} className="mx-auto mb-3 text-gray-300" />
+            <p className="text-sm font-semibold text-gray-500">No assigned JDs found</p>
+            <p className="text-xs mt-1 text-gray-400">Use the Assign JD button on the Vendors page to make assignments.</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filtered.map((job) => (
-              <div
-                key={job.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
-              >
-                {/* Job header */}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
-                      {job.title}
-                    </h3>
-                  </div>
-                  <span
-                    className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColor(job.status)}`}
-                  >
-                    {job.status}
-                  </span>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job Title</th>
+                    <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                    {canManageRecruiters && (
+                      <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assigned Recruiters</th>
+                    )}
+                    {canManageVendors && (
+                      <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assigned Vendors</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {paginated.map((job) => (
+                    <tr key={job.id} className="hover:bg-gray-50/60 transition-colors align-top">
+                      <td className="px-5 py-4">
+                        <p className="text-sm font-semibold text-gray-900 max-w-[220px] truncate">{job.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {(job.assigned_recruiter_ids?.length ?? 0) + (job.assigned_vendor_ids?.length ?? 0)} assignment{((job.assigned_recruiter_ids?.length ?? 0) + (job.assigned_vendor_ids?.length ?? 0)) !== 1 ? "s" : ""}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusConfig[job.status] || "bg-gray-100 text-gray-600"}`}>
+                          {statusLabel(job.status)}
+                        </span>
+                      </td>
+                      {canManageRecruiters && (
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(job.assigned_recruiter_ids?.length ?? 0) === 0 ? (
+                              <span className="text-xs text-gray-300">—</span>
+                            ) : job.assigned_recruiter_ids.map((rid) => (
+                              <span key={rid}
+                                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 bg-blue-50 border border-blue-100 rounded-full text-xs text-blue-800 font-medium">
+                                <Users size={10} className="text-blue-400" />
+                                {getRecruiterLabel(rid)}
+                                <button onClick={() => removeRecruiter(job.id, rid)} disabled={removing === `${job.id}-r-${rid}`}
+                                  className="ml-0.5 p-0.5 rounded-full hover:bg-blue-200 transition-colors disabled:opacity-40">
+                                  {removing === `${job.id}-r-${rid}` ? <Loader2 size={9} className="animate-spin" /> : <X size={9} />}
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      )}
+                      {canManageVendors && (
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap gap-1.5">
+                            {(job.assigned_vendor_ids?.length ?? 0) === 0 ? (
+                              <span className="text-xs text-gray-300">—</span>
+                            ) : job.assigned_vendor_ids.map((vid) => (
+                              <span key={vid}
+                                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 bg-violet-50 border border-violet-100 rounded-full text-xs text-violet-800 font-medium">
+                                <Building2 size={10} className="text-violet-400" />
+                                {getVendorLabel(vid)}
+                                <button onClick={() => removeVendor(job.id, vid)} disabled={removing === `${job.id}-v-${vid}`}
+                                  className="ml-0.5 p-0.5 rounded-full hover:bg-violet-200 transition-colors disabled:opacity-40">
+                                  {removing === `${job.id}-v-${vid}` ? <Loader2 size={9} className="animate-spin" /> : <X size={9} />}
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
+                <p className="text-xs text-gray-500">
+                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+                </p>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+                    <ChevronLeft size={15} />
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                    <button key={p} onClick={() => setPage(p)}
+                      className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-[#111111] text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+                      {p}
+                    </button>
+                  ))}
+                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+                    <ChevronRight size={15} />
+                  </button>
                 </div>
-
-                {/* Recruiters section */}
-                {canManageRecruiters &&
-                  (job.assigned_recruiter_ids?.length ?? 0) > 0 && (
-                    <div className="mb-3">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Users size={12} className="text-blue-500" />
-                        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-                          Recruiters
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {job.assigned_recruiter_ids.map((rid) => (
-                          <span
-                            key={rid}
-                            className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 bg-blue-50 border border-blue-100 rounded-full text-xs text-blue-800 font-medium"
-                          >
-                            {getRecruiterLabel(rid)}
-                            <button
-                              onClick={() => removeRecruiter(job.id, rid)}
-                              disabled={removing === `${job.id}-r-${rid}`}
-                              title="Remove assignment"
-                              className="p-0.5 rounded-full hover:bg-blue-200 transition-colors disabled:opacity-40"
-                            >
-                              {removing === `${job.id}-r-${rid}` ? (
-                                <Loader2 size={9} className="animate-spin" />
-                              ) : (
-                                <X size={9} />
-                              )}
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                {/* Vendors section */}
-                {canManageVendors &&
-                  (job.assigned_vendor_ids?.length ?? 0) > 0 && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Building2 size={12} className="text-violet-500" />
-                        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
-                          Vendors
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {job.assigned_vendor_ids.map((vid) => (
-                          <span
-                            key={vid}
-                            className="flex items-center gap-1.5 pl-3 pr-1.5 py-1 bg-violet-50 border border-violet-100 rounded-full text-xs text-violet-800 font-medium"
-                          >
-                            {getVendorLabel(vid)}
-                            <button
-                              onClick={() => removeVendor(job.id, vid)}
-                              disabled={removing === `${job.id}-v-${vid}`}
-                              title="Remove assignment"
-                              className="p-0.5 rounded-full hover:bg-violet-200 transition-colors disabled:opacity-40"
-                            >
-                              {removing === `${job.id}-v-${vid}` ? (
-                                <Loader2 size={9} className="animate-spin" />
-                              ) : (
-                                <X size={9} />
-                              )}
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>

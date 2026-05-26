@@ -1,25 +1,29 @@
 import { Response } from 'express';
 import pool from '../../db';
 import { AuthRequest } from '../../middleware/auth';
+import { withCache, invalidate } from '../../lib/cache';
 
 // ─── GET /clients ────────────────────────────────────────────────────────────
 export const getClients = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const result = await pool.query(
-      `SELECT c.*,
-        COALESCE(
-          json_agg(s.* ORDER BY s.created_at) FILTER (WHERE s.id IS NOT NULL),
-          '[]'
-        ) AS stakeholders
-       FROM clients c
-       LEFT JOIN client_stakeholders s ON s.client_id = c.id
-       WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
-       GROUP BY c.id
-       ORDER BY c.name ASC`,
-      [tenantId]
-    );
-    res.json(result.rows);
+    const rows = await withCache(`tenant:${tenantId}:clients`, 300, async () => {
+      const result = await pool.query(
+        `SELECT c.*,
+          COALESCE(
+            json_agg(s.* ORDER BY s.created_at) FILTER (WHERE s.id IS NOT NULL),
+            '[]'
+          ) AS stakeholders
+         FROM clients c
+         LEFT JOIN client_stakeholders s ON s.client_id = c.id
+         WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+         GROUP BY c.id
+         ORDER BY c.name ASC`,
+        [tenantId]
+      );
+      return result.rows;
+    });
+    res.json(rows);
   } catch (error) {
     console.error('Get clients error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -226,6 +230,7 @@ export const createClient = async (req: AuthRequest, res: Response) => {
       [newClient.id]
     );
 
+    await invalidate(`tenant:${tenantId}:clients`);
     res.status(201).json(fullResult.rows[0]);
   } catch (error) {
     await dbClient.query('ROLLBACK');
@@ -377,6 +382,7 @@ export const updateClient = async (req: AuthRequest, res: Response) => {
       [id]
     );
 
+    await invalidate(`tenant:${tenantId}:clients`, `tenant:${tenantId}:client:${id}`);
     res.json(fullResult.rows[0]);
   } catch (error) {
     await dbClient.query('ROLLBACK');
@@ -399,6 +405,7 @@ export const deleteClient = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Client not found' });
     }
+    await invalidate(`tenant:${tenantId}:clients`, `tenant:${tenantId}:client:${id}`);
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
     console.error('Delete client error:', error);

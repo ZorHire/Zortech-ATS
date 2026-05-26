@@ -5,11 +5,17 @@ import {
   SearchResult,
 } from '../services/resumeSearch.service';
 
+export interface ExtendedFilters extends SearchFilters {
+  skills: string[];
+  currentRole: string;
+  source: string;
+  availability: string;
+}
+
 interface ResumeSearchState {
   // search inputs
   query: string;
-  searchMode: 'boolean' | 'ai';
-  filters: SearchFilters;
+  filters: ExtendedFilters;
 
   // results
   results: SearchResult[];
@@ -25,23 +31,25 @@ interface ResumeSearchState {
 
   // actions
   setQuery: (q: string) => void;
-  setSearchMode: (mode: 'boolean' | 'ai') => void;
-  setFilter: (key: keyof SearchFilters, value: string) => void;
+  setFilter: <K extends keyof ExtendedFilters>(key: K, value: ExtendedFilters[K]) => void;
   search: () => Promise<void>;
   loadMore: () => Promise<void>;
   reset: () => void;
 }
 
-const DEFAULT_FILTERS: SearchFilters = {
+const DEFAULT_FILTERS: ExtendedFilters = {
   location: 'All',
   experience: 'All',
   noticePeriod: 'Any',
+  skills: [],
+  currentRole: '',
+  source: 'All',
+  availability: 'All',
 };
 
 export const useResumeSearchStore = create<ResumeSearchState>((set, get) => ({
   query: '',
-  searchMode: 'boolean',
-  filters: { ...DEFAULT_FILTERS },
+  filters: { ...DEFAULT_FILTERS, skills: [] },
 
   results: [],
   total: 0,
@@ -54,7 +62,6 @@ export const useResumeSearchStore = create<ResumeSearchState>((set, get) => ({
   searched: false,
 
   setQuery: (q) => set({ query: q }),
-  setSearchMode: (mode) => set({ searchMode: mode }),
   setFilter: (key, value) =>
     set((s) => ({ filters: { ...s.filters, [key]: value } })),
 
@@ -62,7 +69,14 @@ export const useResumeSearchStore = create<ResumeSearchState>((set, get) => ({
     const { query, filters } = get();
     set({ loading: true, error: null, searched: false, results: [], page: 1 });
     try {
-      const data = await resumeSearchService.search({ query, ...filters, page: 1, limit: 10 });
+      const data = await resumeSearchService.search({
+        query,
+        location: filters.location,
+        experience: filters.experience,
+        noticePeriod: filters.noticePeriod,
+        page: 1,
+        limit: 10,
+      });
       set({
         results: data.results,
         total: data.total,
@@ -85,7 +99,9 @@ export const useResumeSearchStore = create<ResumeSearchState>((set, get) => ({
       const nextPage = page + 1;
       const data = await resumeSearchService.search({
         query,
-        ...filters,
+        location: filters.location,
+        experience: filters.experience,
+        noticePeriod: filters.noticePeriod,
         page: nextPage,
         limit: 10,
       });
@@ -104,7 +120,7 @@ export const useResumeSearchStore = create<ResumeSearchState>((set, get) => ({
   reset: () =>
     set({
       query: '',
-      filters: { ...DEFAULT_FILTERS },
+      filters: { ...DEFAULT_FILTERS, skills: [] },
       results: [],
       total: 0,
       page: 1,

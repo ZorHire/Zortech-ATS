@@ -1,20 +1,24 @@
 import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { withCache, invalidate } from "../../lib/cache";
 
 export const getJobs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const result = await pool.query(
-      `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
-              (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
-       FROM jobs j
-       JOIN clients c ON c.id = j.client_id
-       WHERE j.tenant_id = $1 AND j.deleted_at IS NULL
-       ORDER BY j.created_at DESC`,
-      [tenantId],
-    );
-    res.json(result.rows);
+    const rows = await withCache(`tenant:${tenantId}:jobs`, 120, async () => {
+      const result = await pool.query(
+        `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
+                (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
+         FROM jobs j
+         JOIN clients c ON c.id = j.client_id
+         WHERE j.tenant_id = $1 AND j.deleted_at IS NULL
+         ORDER BY j.created_at DESC`,
+        [tenantId],
+      );
+      return result.rows;
+    });
+    res.json(rows);
   } catch (error) {
     console.error("Get jobs error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -96,6 +100,7 @@ export const createJob = async (req: AuthRequest, res: Response) => {
         createdBy,
       ],
     );
+    await invalidate(`tenant:${tenantId}:jobs`);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Create job error:", error);
@@ -178,6 +183,7 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
     }
+    await invalidate(`tenant:${tenantId}:jobs`);
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update job error:", error);
@@ -196,6 +202,7 @@ export const deleteJob = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Job not found" });
     }
+    await invalidate(`tenant:${tenantId}:jobs`);
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     console.error("Delete job error:", error);

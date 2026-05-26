@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { Request, Response, NextFunction } from "express";
 import env from "../config/env";
+import redis from "../lib/redis";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -11,10 +12,12 @@ export interface AuthRequest extends Request {
     role: string;
     tenant_id: string;
     vendor_id?: string;
+    jti?: string;
+    exp?: number;
   };
 }
 
-export const authMiddleware = (
+export const authMiddleware = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction,
@@ -31,7 +34,21 @@ export const authMiddleware = (
       email: string;
       role: string;
       tenant_id: string;
+      jti?: string;
+      exp?: number;
     };
+
+    if (decoded.jti) {
+      try {
+        const blacklisted = await redis.get(`blacklist:${decoded.jti}`);
+        if (blacklisted) {
+          return res.status(401).json({ message: "Token revoked" });
+        }
+      } catch {
+        // Redis unavailable — fail open, same pattern as caching
+      }
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

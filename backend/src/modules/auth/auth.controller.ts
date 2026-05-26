@@ -1,8 +1,12 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import pool from "../../db";
 import env from "../../config/env";
+import { withCache, invalidate } from "../../lib/cache";
+import redis from "../../lib/redis";
+import { AuthRequest } from "../../middleware/auth";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -27,24 +31,40 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Get user memberships and profile
-    const membershipResult = await pool.query(
-      `SELECT m.tenant_id, m.role, t.name as tenant_name 
-       FROM tenant_memberships m 
-       JOIN tenants t ON m.tenant_id = t.id 
-       WHERE m.user_id = $1 AND m.is_active = true`,
-      [user.id],
-    );
+    // Get user memberships, profile, and subscription in parallel
+    const [membershipResult, profileResult] = await Promise.all([
+      pool.query(
+        `SELECT m.tenant_id, m.role, t.name as tenant_name
+         FROM tenant_memberships m
+         JOIN tenants t ON m.tenant_id = t.id
+         WHERE m.user_id = $1 AND m.is_active = true`,
+        [user.id],
+      ),
+      pool.query("SELECT * FROM profiles WHERE id = $1", [user.id]),
+    ]);
 
-    const profileResult = await pool.query(
-      "SELECT * FROM profiles WHERE id = $1",
-      [user.id],
-    );
     const profile = profileResult.rows[0];
-
-    // For simplicity, we take the first membership if they have multiple,
-    // or provide a list. Usually, an ATS user belongs to one main tenant.
     const primaryMembership = membershipResult.rows[0];
+
+    // Fetch tenant platform-owner flag and active subscription
+    const tenantRow = primaryMembership
+      ? (await pool.query(
+          `SELECT t.is_platform_owner,
+                  (SELECT status FROM subscriptions
+                   WHERE tenant_id = t.id AND status IN ('active','trial')
+                   ORDER BY created_at DESC LIMIT 1) AS sub_status
+           FROM tenants t WHERE t.id = $1`,
+          [primaryMembership.tenant_id],
+        )).rows[0]
+      : null;
+
+    const isPlatformOwner = !!tenantRow?.is_platform_owner;
+    const subStatus = tenantRow?.sub_status ?? null;
+    const subscription = {
+      active: isPlatformOwner || subStatus === 'active' || subStatus === 'trial',
+      isPlatformOwner,
+      reason: subStatus ?? (isPlatformOwner ? 'platform_owner' : 'none'),
+    };
 
     // Generate token
     const token = jwt.sign(
@@ -56,7 +76,7 @@ export const login = async (req: Request, res: Response) => {
         must_change_password: user.must_change_password,
       },
       JWT_SECRET,
-      { expiresIn: "24h" },
+      { expiresIn: "24h", jwtid: crypto.randomUUID() },
     );
 
     res.json({
@@ -71,6 +91,7 @@ export const login = async (req: Request, res: Response) => {
         must_change_password: user.must_change_password,
         avatar_url: profile?.avatar_url,
       },
+      subscription,
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -186,6 +207,7 @@ export const changePassword = async (req: any, res: Response) => {
       [hashedNewPassword, userId],
     );
 
+    await invalidate(`user:${userId}:me`);
     res.json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Change password error:", error);
@@ -197,39 +219,72 @@ export const getMe = async (req: any, res: Response) => {
   try {
     const userId = req.user.id;
 
-    const userResult = await pool.query(
-      "SELECT email, must_change_password FROM users WHERE id = $1",
-      [userId],
-    );
-    const profileResult = await pool.query(
-      "SELECT * FROM profiles WHERE id = $1",
-      [userId],
-    );
-    const membershipResult = await pool.query(
-      `SELECT m.tenant_id, m.role, t.name as tenant_name 
-       FROM tenant_memberships m 
-       JOIN tenants t ON m.tenant_id = t.id 
-       WHERE m.user_id = $1 AND m.is_active = true`,
-      [userId],
-    );
+    const data = await withCache(`user:${userId}:me`, 300, async () => {
+      const [userResult, profileResult, membershipResult] = await Promise.all([
+        pool.query("SELECT email, must_change_password FROM users WHERE id = $1", [userId]),
+        pool.query("SELECT * FROM profiles WHERE id = $1", [userId]),
+        pool.query(
+          `SELECT m.tenant_id, m.role, t.name as tenant_name
+           FROM tenant_memberships m
+           JOIN tenants t ON m.tenant_id = t.id
+           WHERE m.user_id = $1 AND m.is_active = true`,
+          [userId],
+        ),
+      ]);
+      const user = userResult.rows[0];
+      const profile = profileResult.rows[0];
+      const primaryMembership = membershipResult.rows[0];
 
-    const user = userResult.rows[0];
-    const profile = profileResult.rows[0];
-    const primaryMembership = membershipResult.rows[0];
+      const tenantRow = primaryMembership
+        ? (await pool.query(
+            `SELECT t.is_platform_owner,
+                    (SELECT status FROM subscriptions
+                     WHERE tenant_id = t.id AND status IN ('active','trial')
+                     ORDER BY created_at DESC LIMIT 1) AS sub_status
+             FROM tenants t WHERE t.id = $1`,
+            [primaryMembership.tenant_id],
+          )).rows[0]
+        : null;
 
-    res.json({
-      id: userId,
-      email: user.email,
-      full_name: profile?.full_name,
-      role: primaryMembership?.role,
-      tenant_id: primaryMembership?.tenant_id,
-      tenant_name: primaryMembership?.tenant_name,
-      must_change_password: user.must_change_password,
-      avatar_url: profile?.avatar_url,
+      const isPlatformOwner = !!tenantRow?.is_platform_owner;
+      const subStatus = tenantRow?.sub_status ?? null;
+
+      return {
+        id: userId,
+        email: user.email,
+        full_name: profile?.full_name,
+        role: primaryMembership?.role,
+        tenant_id: primaryMembership?.tenant_id,
+        tenant_name: primaryMembership?.tenant_name,
+        must_change_password: user.must_change_password,
+        avatar_url: profile?.avatar_url,
+        subscription: {
+          active: isPlatformOwner || subStatus === 'active' || subStatus === 'trial',
+          isPlatformOwner,
+          reason: subStatus ?? (isPlatformOwner ? 'platform_owner' : 'none'),
+        },
+      };
     });
+
+    res.json(data);
   } catch (error) {
     console.error("Get me error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
 
+export const logout = async (req: AuthRequest, res: Response) => {
+  try {
+    const { jti, exp } = req.user ?? {};
+    if (jti && exp) {
+      const remainingTtl = exp - Math.floor(Date.now() / 1000);
+      if (remainingTtl > 0) {
+        await redis.setex(`blacklist:${jti}`, remainingTtl, "1");
+      }
+    }
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};

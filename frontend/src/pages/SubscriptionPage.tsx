@@ -8,10 +8,12 @@ import {
   AlertTriangle,
   Zap,
   ArrowRight,
+  CheckCircle2,
+  Users,
 } from "lucide-react";
-import Header from "../components/layout/Header";
 import {
   Subscription,
+  PaymentTransaction,
   billingService,
   PLANS,
   PlanType,
@@ -43,12 +45,16 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
 
   useEffect(() => {
-    billingService
-      .getCurrentSubscription()
-      .then((s) => setSub(s))
-      .finally(() => setLoading(false));
+    Promise.all([
+      billingService.getCurrentSubscription().catch(() => null),
+      billingService.getTransactions(),
+    ]).then(([s, txns]) => {
+      setSub(s);
+      setTransactions(txns);
+    }).finally(() => setLoading(false));
   }, []);
 
   const handleCancel = async () => {
@@ -73,24 +79,49 @@ export default function SubscriptionPage() {
       : null;
   const renewDays = sub?.end_date ? daysLeft(sub.end_date) : null;
 
-  if (loading) {
-    return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Subscription" subtitle="Your ZorHire plan & billing" />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 size={28} className="animate-spin text-gray-300" />
-        </div>
-      </div>
-    );
-  }
+  const statusBadge = sub
+    ? sub.status === "active"
+      ? { label: "Active", cls: "bg-emerald-50 text-emerald-700" }
+      : sub.status === "cancelled"
+        ? { label: "Cancelled", cls: "bg-red-50 text-red-600" }
+        : { label: sub.status, cls: "bg-gray-100 text-gray-600" }
+    : null;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      <Header title="Subscription" subtitle="Your ZorHire plan & billing" />
 
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-8 space-y-5">
-        {/* ── Current Plan Card ── */}
-        {sub && sub.status === "active" ? (
+      {/* ── Page Header ── */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
+        <div>
+          <h1 className="text-xl font-black text-gray-900">Subscription</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Your ZorHire plan, billing cycle, and renewal details</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {statusBadge && (
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusBadge.cls}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
+              {statusBadge.label}
+            </span>
+          )}
+          <button
+            onClick={() => navigate("/pricing")}
+            className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all"
+          >
+            <ArrowRight size={14} /> View Plans
+          </button>
+        </div>
+      </div>
+
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+        {loading ? (
+          <div className="flex items-center justify-center py-24">
+            <Loader2 size={28} className="animate-spin text-gray-300" />
+          </div>
+        ) : sub && sub.status === "active" ? (
+
+          /* ── Active Plan Card ── */
           <div className="relative rounded-[28px] overflow-hidden shadow-lg bg-white border border-gray-100">
             <div className="absolute top-0 left-1/2 -translate-x-1/2">
               <div className="flex items-center gap-1.5 bg-amber-200 text-[#111111] text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
@@ -230,6 +261,7 @@ export default function SubscriptionPage() {
               </div>
             </div>
           </div>
+
         ) : sub && sub.status === "cancelled" ? (
           /* ── Cancelled state ── */
           <div className="bg-white border border-gray-100 rounded-[28px] p-8 shadow-sm text-center space-y-4">
@@ -279,60 +311,66 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {/* ── Billing Details ── */}
+        {/* ── Plan Features ── */}
+        {sub && sub.status === "active" && planMeta && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { icon: Users, label: "User Seats", value: planMeta.user_max ? `Up to ${planMeta.user_max}` : `${planMeta.user_min}+`, color: "text-blue-600", bg: "bg-blue-50" },
+              { icon: Zap,   label: "Plan Tier",  value: PLAN_LABELS[sub.plan_type], color: "text-amber-600", bg: "bg-amber-50" },
+              { icon: CheckCircle2, label: "Billing", value: sub.billing_cycle === "yearly" ? "Annual · 15% off" : "Monthly", color: "text-emerald-600", bg: "bg-emerald-50" },
+            ].map(({ icon: Icon, label, value, color, bg }) => (
+              <div key={label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+                <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
+                  <Icon size={18} className={color} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
+                  <p className="text-base font-black text-gray-900 mt-0.5">{value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Billing Details Table ── */}
         {sub && (
-          <div className="bg-white border border-gray-100 rounded-[28px] p-7 shadow-sm space-y-4">
-            <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-[0.2em]">
-              Billing Details
-            </h3>
-            <div className="overflow-hidden rounded-2xl border border-gray-100">
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-50">
+              <h3 className="text-sm font-black text-gray-900">Current Subscription</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Active plan record</p>
+            </div>
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
+                  <tr className="bg-gray-50/60 border-b border-gray-100">
                     {["Plan", "Cycle", "Period", "Status"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-5 py-3 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider"
-                      >
+                      <th key={h} className="px-6 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-50 last:border-0">
-                    <td className="px-5 py-4">
-                      <span className="font-bold text-[#111111]">
-                        {PLAN_LABELS[sub.plan_type]}
-                      </span>
+                  <tr>
+                    <td className="px-6 py-4">
+                      <span className="font-bold text-[#111111]">{PLAN_LABELS[sub.plan_type]}</span>
                       {price && (
                         <span className="ml-2 text-xs text-gray-400 font-medium">
                           ₹{price.toLocaleString("en-IN")}/user/mo
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-4 capitalize text-gray-600 font-medium">
-                      {sub.billing_cycle}
-                    </td>
-                    <td className="px-5 py-4 text-gray-600 font-medium text-[13px]">
+                    <td className="px-6 py-4 capitalize text-gray-600 font-medium">{sub.billing_cycle}</td>
+                    <td className="px-6 py-4 text-gray-600 font-medium text-[13px]">
                       {fmt(sub.start_date)}
-                      {sub.end_date && (
-                        <span className="text-gray-400">
-                          {" "}
-                          → {fmt(sub.end_date)}
-                        </span>
-                      )}
+                      {sub.end_date && <span className="text-gray-400"> → {fmt(sub.end_date)}</span>}
                     </td>
-                    <td className="px-5 py-4">
-                      <span
-                        className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                          sub.status === "active"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : sub.status === "cancelled"
-                              ? "bg-red-50 text-red-600"
-                              : "bg-gray-100 text-gray-500"
-                        }`}
-                      >
+                    <td className="px-6 py-4">
+                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                        sub.status === "active" ? "bg-emerald-50 text-emerald-700"
+                          : sub.status === "cancelled" ? "bg-red-50 text-red-600"
+                          : "bg-gray-100 text-gray-500"
+                      }`}>
                         {sub.status}
                       </span>
                     </td>
@@ -340,10 +378,60 @@ export default function SubscriptionPage() {
                 </tbody>
               </table>
             </div>
-            <p className="text-[11px] text-gray-400 font-medium">
-              Full invoice history will be available once payment integration is
-              activated.
-            </p>
+          </div>
+        )}
+
+        {/* ── Payment Transaction History ── */}
+        {transactions.length > 0 && (
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-50">
+              <h3 className="text-sm font-black text-gray-900">Payment History</h3>
+              <p className="text-xs text-gray-400 mt-0.5">All Razorpay transactions for your account</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50/60 border-b border-gray-100">
+                    {["Date", "Plan", "Cycle", "Amount", "Payment ID", "Status"].map((h) => (
+                      <th key={h} className="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {transactions.map((txn) => (
+                    <tr key={txn.id} className="hover:bg-gray-50/40 transition-colors">
+                      <td className="px-5 py-3.5 text-[13px] text-gray-500 whitespace-nowrap">
+                        {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="font-bold text-[#111111] capitalize">{txn.plan_type}</span>
+                      </td>
+                      <td className="px-5 py-3.5 capitalize text-gray-600 text-[13px]">{txn.billing_cycle}</td>
+                      <td className="px-5 py-3.5 font-bold text-[#111111] whitespace-nowrap">
+                        ₹{(txn.amount / 100).toLocaleString("en-IN")}
+                      </td>
+                      <td className="px-5 py-3.5 text-[12px] font-mono text-gray-400">
+                        {txn.razorpay_payment_id
+                          ? <span title={txn.razorpay_payment_id}>{txn.razorpay_payment_id.slice(0, 18)}…</span>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                          txn.status === "captured" ? "bg-emerald-50 text-emerald-700"
+                            : txn.status === "pending" ? "bg-amber-50 text-amber-700"
+                            : txn.status === "failed" ? "bg-red-50 text-red-600"
+                            : "bg-gray-100 text-gray-500"
+                        }`}>
+                          {txn.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

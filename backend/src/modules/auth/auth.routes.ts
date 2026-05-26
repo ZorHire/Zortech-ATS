@@ -23,5 +23,6 @@ router.post(
   authController.changePassword,
 );
 router.get("/me", authMiddleware, authController.getMe);
+router.post("/logout", authMiddleware, authController.logout);
 
 export default router;

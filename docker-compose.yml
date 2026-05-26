@@ -21,6 +21,10 @@ services:
     image: zortech-backend
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Pin to 8080 — aligns with Dockerfile EXPOSE and nginx upstream.
+      # Overrides SERVER_PORT=5000 that may be set in .env for local dev.
+      - PORT=8080
     depends_on:
       - redis
 

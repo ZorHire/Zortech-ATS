@@ -15,7 +15,6 @@ const statusOptions = [
 export default function NewJobPage() {
   const navigate = useNavigate();
   const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
   const [jdParsing, setJdParsing] = useState(false);
   const [jdParseMessage, setJdParseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [formData, setFormData] = useState({
@@ -45,8 +44,6 @@ export default function NewJobPage() {
       setClients(data);
     } catch (error) {
       console.error("Fetch clients error:", error);
-    } finally {
-      setLoading(false);
     }
   };
 

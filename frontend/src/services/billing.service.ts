@@ -54,6 +54,19 @@ export interface VerifyPaymentResponse {
   subscription: Subscription;
 }
 
+export interface PaymentTransaction {
+  id: string;
+  razorpay_order_id: string;
+  razorpay_payment_id: string | null;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+  amount: number;
+  currency: string;
+  status: "pending" | "captured" | "failed" | "refunded";
+  failure_reason: string | null;
+  created_at: string;
+}
+
 export const PLANS: Plan[] = [
   {
     id: "starter",
@@ -145,5 +158,9 @@ export const billingService = {
 
   cancelSubscription(): Promise<{ message: string }> {
     return api.post("/billing/cancel", {});
+  },
+
+  getTransactions(): Promise<PaymentTransaction[]> {
+    return api.get("/billing/transactions").catch(() => []);
   },
 };

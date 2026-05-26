@@ -2,20 +2,24 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import pool from '../../db';
 import { AuthRequest } from '../../middleware/auth';
+import { withCache, invalidate } from '../../lib/cache';
 
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const result = await pool.query(
-      `SELECT u.id, u.email, u.is_active, u.must_change_password, m.role, p.full_name
-       FROM users u
-       JOIN tenant_memberships m ON u.id = m.user_id
-       LEFT JOIN profiles p ON u.id = p.id
-       WHERE m.tenant_id = $1
-       ORDER BY u.created_at DESC`,
-      [tenantId]
-    );
-    res.json(result.rows);
+    const rows = await withCache(`tenant:${tenantId}:users`, 300, async () => {
+      const result = await pool.query(
+        `SELECT u.id, u.email, u.is_active, u.must_change_password, m.role, p.full_name
+         FROM users u
+         JOIN tenant_memberships m ON u.id = m.user_id
+         LEFT JOIN profiles p ON u.id = p.id
+         WHERE m.tenant_id = $1
+         ORDER BY u.created_at DESC`,
+        [tenantId]
+      );
+      return result.rows;
+    });
+    res.json(rows);
   } catch (error) {
     console.error('List users error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -72,6 +76,7 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     );
 
     await client.query('COMMIT');
+    await invalidate(`tenant:${tenantId}:users`);
     res.status(201).json({ message: 'User created and added to tenant successfully' });
   } catch (error) {
     await client.query('ROLLBACK');
@@ -87,29 +92,33 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
   const { role, is_active } = req.body;
   const tenantId = req.user?.tenant_id;
 
+  const client = await pool.connect();
   try {
-    await pool.query('BEGIN');
+    await client.query('BEGIN');
 
     if (role) {
-      await pool.query(
+      await client.query(
         'UPDATE tenant_memberships SET role = $1, updated_at = now() WHERE user_id = $2 AND tenant_id = $3',
         [role, id, tenantId]
       );
     }
 
     if (is_active !== undefined) {
-      await pool.query(
+      await client.query(
         'UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2',
         [is_active, id]
       );
     }
 
-    await pool.query('COMMIT');
+    await client.query('COMMIT');
+    await invalidate(`tenant:${tenantId}:users`, `user:${id}:me`);
     res.json({ message: 'User updated successfully' });
   } catch (error) {
-    await pool.query('ROLLBACK');
+    await client.query('ROLLBACK');
     console.error('Update user error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };
 
@@ -134,6 +143,7 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
       [hashedPassword, id]
     );
 
+    await invalidate(`user:${id}:me`);
     res.json({ message: 'Password reset successfully. User must change it on next login.' });
   } catch (error) {
     console.error('Reset password error:', error);

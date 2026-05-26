@@ -59,7 +59,7 @@ export const parseResume = async (req: AuthRequest, res: Response) => {
       return res.status(200).json(defaultResumeResponse);
     }
 
-    const parsed = parseResumeText(content);
+    const parsed = await parseResumeText(content);
 
     const fallbackName =
       parsed.name ||
@@ -135,7 +135,7 @@ export const parseVendor = async (req: AuthRequest, res: Response) => {
       return res.status(200).json(defaultVendorResponse);
     }
 
-    const parsed = parseVendorText(content);
+    const parsed = await parseVendorText(content);
 
     return res.json({
       company_name: parsed.company_name || "",
@@ -174,7 +174,7 @@ export const parseJobDescription = async (req: AuthRequest, res: Response) => {
       console.warn("Empty or invalid parsed content");
       return res.status(200).json({ ...defaultJobResponse });
     }
-    const parsed = parseJobDescriptionText(content);
+    const parsed = await parseJobDescriptionText(content);
 
     return res.json({
       title: parsed.title || "",

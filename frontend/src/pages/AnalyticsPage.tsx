@@ -167,7 +167,7 @@ export default function AnalyticsPage() {
             </select>
             <button
               onClick={handleExportReport}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 bg-white"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 bg-white transition-colors"
             >
               Export Report
             </button>
@@ -183,9 +183,9 @@ export default function AnalyticsPage() {
             { label: 'Offer Accept Rate', value: '81%', change: '+5%', up: true, icon: Target, color: 'bg-violet-500' },
             { label: 'Candidate Pipeline', value: '1,247', change: '+18%', up: true, icon: Users, color: 'bg-amber-500' },
           ].map(stat => (
-            <div key={stat.label} className="bg-white rounded-xl border border-gray-200 p-5">
+            <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
               <div className="flex items-center justify-between mb-3">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${stat.color}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${stat.color}`}>
                   <stat.icon size={17} className="text-white" />
                 </div>
                 <span className={`text-xs font-medium flex items-center gap-0.5 ${stat.up ? 'text-emerald-600' : 'text-red-500'}`}>
@@ -193,14 +193,14 @@ export default function AnalyticsPage() {
                   {stat.change}
                 </span>
               </div>
-              <p className="text-xl font-bold text-gray-900">{stat.value}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
+              <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{stat.label}</p>
             </div>
           ))}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-1">Hiring Funnel</h3>
             <p className="text-xs text-gray-400 mb-5">Candidate conversion through pipeline stages</p>
             <div className="space-y-3">
@@ -221,7 +221,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-1">Source Effectiveness</h3>
             <p className="text-xs text-gray-400 mb-5">Placements by candidate source channel</p>
             <DonutChart segments={[
@@ -235,7 +235,7 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-1">Monthly Placements</h3>
             <p className="text-xs text-gray-400 mb-5">Last 6 months</p>
             <BarChart data={[
@@ -248,7 +248,7 @@ export default function AnalyticsPage() {
             ]} />
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Key Metrics</h3>
             <MetricRow label="Time to Source" value={6} prev={8} unit=" days" />
             <MetricRow label="Time to Screen" value={3} prev={5} unit=" days" />
@@ -257,7 +257,7 @@ export default function AnalyticsPage() {
             <MetricRow label="Offer Accept Rate" value={81} prev={76} unit="%" />
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h3 className="font-semibold text-gray-900 mb-4">Vendor Performance</h3>
             <div className="space-y-3">
               {[
@@ -283,7 +283,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-gray-900">Recruiter Productivity</h3>

@@ -3,10 +3,8 @@ import {
   Plus,
   Search,
   Mail,
-  Star,
   Users,
   Award,
-  AlertCircle,
   CheckCircle2,
   XCircle,
   Phone,
@@ -299,10 +297,6 @@ function AssignJdModal({
       setSending(false);
     }
   };
-
-  const activeVendors = vendors
-    .filter((v) => v.is_active && v.primary_contact_email)
-    .map((v) => ({ id: v.id, label: v.company_name }));
 
   const recruiterItems = recruiters.map((r) => ({
     id: r.id,
@@ -775,181 +769,6 @@ function VendorDetailModal({
   );
 }
 
-function VendorCard({
-  vendor,
-  onSendEmail,
-  onViewDetails,
-  onDelete,
-  emailSending,
-  isSelected,
-  onToggleSelect,
-}: {
-  vendor: Vendor;
-  onSendEmail: (email: string) => void;
-  onViewDetails: (vendor: Vendor) => void;
-  onDelete: (id: string) => void;
-  emailSending: boolean;
-  isSelected: boolean;
-  onToggleSelect: (id: string) => void;
-}) {
-  const tier = tierConfig[vendor.tier];
-  const TierIcon = tier.icon;
-
-  return (
-    <div
-      className={`bg-white rounded-xl p-5 hover:shadow-md transition-all cursor-pointer border-2 ${
-        isSelected
-          ? "border-blue-500 shadow-md shadow-blue-100"
-          : "border-gray-200 hover:border-gray-300"
-      } ${!vendor.is_active ? "opacity-60" : ""}`}
-      onClick={() => onViewDetails(vendor)}
-    >
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* Checkbox — stopPropagation so it doesn't open the detail modal */}
-          <div
-            className="flex-shrink-0 mt-0.5"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleSelect(vendor.id);
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => onToggleSelect(vendor.id)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer accent-blue-600"
-            />
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center flex-shrink-0">
-            <span className="text-sm font-bold text-white">
-              {vendor.company_name.charAt(0)}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 truncate">
-              {vendor.company_name}
-            </h3>
-            <p className="text-xs text-gray-500 truncate">
-              {vendor.primary_contact_name}
-            </p>
-          </div>
-        </div>
-        <span
-          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium flex-shrink-0 ${tier.color}`}
-        >
-          <TierIcon size={11} />
-          {tier.label}
-        </span>
-      </div>
-
-      <div className="space-y-2 mb-4">
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>Quality Score</span>
-        </div>
-        <ScoreBar
-          value={vendor.quality_score}
-          color={
-            vendor.quality_score >= 80
-              ? "bg-emerald-500"
-              : vendor.quality_score >= 60
-                ? "bg-amber-500"
-                : "bg-red-400"
-          }
-        />
-
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>SLA Adherence</span>
-        </div>
-        <ScoreBar
-          value={vendor.sla_adherence}
-          color={
-            vendor.sla_adherence >= 85
-              ? "bg-blue-500"
-              : vendor.sla_adherence >= 65
-                ? "bg-amber-500"
-                : "bg-red-400"
-          }
-        />
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="text-center p-2 bg-gray-50 rounded-lg">
-          <p className="text-base font-bold text-gray-900">
-            {vendor.submission_count}
-          </p>
-          <p className="text-xs text-gray-400">Submissions</p>
-        </div>
-        <div className="text-center p-2 bg-gray-50 rounded-lg">
-          <p className="text-base font-bold text-gray-900">
-            {vendor.shortlist_rate}%
-          </p>
-          <p className="text-xs text-gray-400">Shortlist</p>
-        </div>
-        <div className="text-center p-2 bg-gray-50 rounded-lg">
-          <p className="text-base font-bold text-gray-900">
-            {vendor.fill_rate}%
-          </p>
-          <p className="text-xs text-gray-400">Fill Rate</p>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {vendor.industry_specializations.map((spec) => (
-          <span
-            key={spec}
-            className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md"
-          >
-            {spec}
-          </span>
-        ))}
-        {vendor.geographies.slice(0, 2).map((geo) => (
-          <span
-            key={geo}
-            className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md"
-          >
-            {geo}
-          </span>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-2 pt-3 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => onSendEmail(vendor.primary_contact_email)}
-          disabled={emailSending}
-          title="Send email"
-          className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Mail size={13} />
-          {vendor.primary_contact_email}
-        </button>
-        <div className="ml-auto flex gap-1">
-          <button
-            onClick={() => onSendEmail(vendor.primary_contact_email)}
-            disabled={emailSending}
-            className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {emailSending ? "Sending…" : "Send Job"}
-          </button>
-          <button
-            onClick={() => onViewDetails(vendor)}
-            className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            View
-          </button>
-          <button
-            onClick={() => onDelete(vendor.id)}
-            title="Delete vendor"
-            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all text-sm"
-          >
-            🗑️
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function VendorsPage() {
   const { user } = useAuth();
   const userRole: string = user?.role ?? "";
@@ -1201,138 +1020,151 @@ export default function VendorsPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Users size={16} className="text-blue-500" />
-              <span className="text-sm font-semibold text-gray-900">
-                {stats.total}
-              </span>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total Vendors", value: stats.total, color: "text-gray-900" },
+            { label: "Preferred", value: stats.preferred, color: "text-emerald-600" },
+            { label: "Avg Quality", value: `${stats.avgQuality}%`, color: "text-amber-600" },
+            { label: "Blocked", value: stats.blocked, color: "text-red-500" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{s.label}</p>
+              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
             </div>
-            <p className="text-xs text-gray-500">Total Vendors</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Award size={16} className="text-emerald-500" />
-              <span className="text-sm font-semibold text-gray-900">
-                {stats.preferred}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500">Preferred (PVL)</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Star size={16} className="text-amber-500" />
-              <span className="text-sm font-semibold text-gray-900">
-                {stats.avgQuality}%
-              </span>
-            </div>
-            <p className="text-xs text-gray-500">Avg Quality Score</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <AlertCircle size={16} className="text-red-500" />
-              <span className="text-sm font-semibold text-gray-900">
-                {stats.blocked}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500">Blocked</p>
-          </div>
+          ))}
         </div>
 
+        {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <Search
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              placeholder="Search vendors..."
-              value={search}
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" placeholder="Search vendors by name, contact, or specialization…" value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            />
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {["all", "preferred", "standard", "blocked"].map((t) => (
-              <button
-                key={t}
-                onClick={() => setTierFilter(t)}
-                className={`text-xs px-3 py-2.5 rounded-lg border font-medium transition-all ${
-                  tierFilter === t
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                }`}
-              >
+              <button key={t} onClick={() => setTierFilter(t)}
+                className={`text-xs px-3.5 py-2.5 rounded-xl font-bold transition-all ${
+                  tierFilter === t ? "bg-[#111111] text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
+                }`}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Selection action bar — visible only when ≥1 vendor is checked */}
+        {/* Bulk action bar */}
         {selectedIds.size > 0 && (
           <div className="flex items-center justify-between gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
             <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 checked={selectedIds.size === filtered.length && filtered.length > 0}
-                ref={(el) => {
-                  if (el)
-                    el.indeterminate =
-                      selectedIds.size > 0 && selectedIds.size < filtered.length;
-                }}
+                ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
                 onChange={toggleSelectAll}
-                className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer"
-              />
-              <span className="text-sm font-medium text-blue-700">
+                className="w-4 h-4 rounded border-gray-300 accent-blue-600 cursor-pointer" />
+              <span className="text-sm font-semibold text-blue-700">
                 {selectedIds.size} vendor{selectedIds.size > 1 ? "s" : ""} selected
               </span>
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="text-xs text-blue-500 hover:text-blue-700 underline"
-              >
-                Clear
-              </button>
+              <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-500 hover:text-blue-700 underline">Clear</button>
             </div>
-            <button
-              onClick={handleDeleteSelected}
-              disabled={deleting}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors"
-            >
-              <Trash2 size={14} />
+            <button onClick={handleDeleteSelected} disabled={deleting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-bold rounded-xl transition-colors">
+              <Trash2 size={13} />
               {deleting ? "Deleting…" : `Delete ${selectedIds.size > 1 ? `${selectedIds.size} vendors` : "vendor"}`}
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {/* Table */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {loading ? (
-            <div className="col-span-full flex items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <div className="flex items-center justify-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300">
-              <Users size={40} className="mx-auto text-gray-300 mb-3" />
-              <p className="text-gray-500 font-medium">No vendors found</p>
+            <div className="text-center py-16">
+              <Users size={36} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500 font-semibold">No vendors found</p>
             </div>
           ) : (
-            filtered.map((vendor) => (
-              <VendorCard
-                key={vendor.id}
-                vendor={vendor}
-                onSendEmail={(email) =>
-                  sendEmail(email, { subject: "Job Opportunity from ZorHire" })
-                }
-                onViewDetails={setSelectedVendor}
-                onDelete={handleDeleteVendor}
-                emailSending={emailSending}
-                isSelected={selectedIds.has(vendor.id)}
-                onToggleSelect={toggleSelect}
-              />
-            ))
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="px-4 py-3.5 w-8">
+                      <input type="checkbox"
+                        checked={selectedIds.size === filtered.length && filtered.length > 0}
+                        ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < filtered.length; }}
+                        onChange={toggleSelectAll}
+                        className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600 cursor-pointer" />
+                    </th>
+                    {["Vendor", "Tier", "Contact", "Submissions", "Shortlist", "Fill Rate", "Quality Score", "SLA", "Actions"].map((h) => (
+                      <th key={h} className="px-4 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filtered.map((vendor) => {
+                    const tier = tierConfig[vendor.tier];
+                    const TierIcon = tier.icon;
+                    return (
+                      <tr key={vendor.id} className={`hover:bg-gray-50/60 transition-colors cursor-pointer ${!vendor.is_active ? "opacity-60" : ""}`}
+                        onClick={() => setSelectedVendor(vendor)}>
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <input type="checkbox" checked={selectedIds.has(vendor.id)} onChange={() => toggleSelect(vendor.id)}
+                            className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600 cursor-pointer" />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center flex-shrink-0">
+                              <span className="text-xs font-bold text-white">{vendor.company_name.charAt(0)}</span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900 max-w-[160px] truncate">{vendor.company_name}</p>
+                              <p className="text-xs text-gray-400">{vendor.is_active ? "Active" : "Inactive"}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${tier.color}`}>
+                            <TierIcon size={10} /> {tier.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <p className="text-xs text-gray-700 font-medium">{vendor.primary_contact_name}</p>
+                          <p className="text-xs text-gray-400 truncate max-w-[140px]">{vendor.primary_contact_email}</p>
+                        </td>
+                        <td className="px-4 py-3.5 text-sm font-bold text-gray-900">{vendor.submission_count}</td>
+                        <td className="px-4 py-3.5 text-sm font-bold text-gray-700">{vendor.shortlist_rate}%</td>
+                        <td className="px-4 py-3.5 text-sm font-bold text-gray-700">{vendor.fill_rate}%</td>
+                        <td className="px-4 py-3.5 min-w-[120px]">
+                          <ScoreBar value={vendor.quality_score} color={vendor.quality_score >= 80 ? "bg-emerald-500" : vendor.quality_score >= 60 ? "bg-amber-500" : "bg-red-400"} />
+                        </td>
+                        <td className="px-4 py-3.5 min-w-[120px]">
+                          <ScoreBar value={vendor.sla_adherence} color={vendor.sla_adherence >= 85 ? "bg-blue-500" : vendor.sla_adherence >= 65 ? "bg-amber-500" : "bg-red-400"} />
+                        </td>
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1 justify-end">
+                            <button onClick={() => sendEmail(vendor.primary_contact_email, { subject: "Job Opportunity from ZorHire" })}
+                              disabled={emailSending} title="Send email"
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-40">
+                              <Mail size={13} />
+                            </button>
+                            <button onClick={() => handleDeleteVendor(vendor.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

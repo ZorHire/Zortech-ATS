@@ -1,4 +1,5 @@
-import { X, Building2, Mail, Phone, Globe, MapPin, Users, Briefcase, FileText } from "lucide-react";
+import type { ReactNode } from "react";
+import { X, Mail, Phone, Globe } from "lucide-react";
 
 interface ClientDetailModalProps {
   client: any;
@@ -16,7 +17,7 @@ function Field({ label, value }: { label: string; value?: string | number | bool
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-4">
       <div>
