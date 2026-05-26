@@ -25,6 +25,16 @@ jobs:
           projectId: zortech-solutions-51a8d
 
       # ── Backend ─────────────────────────────────────────────────────────────
+      - name: Upload frontend dist to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "frontend/dist"
+          target: /opt/zortech
+          strip_components: 0
+
       - name: Upload backend source to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
