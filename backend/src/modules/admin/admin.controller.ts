@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import pool from '../../db';
 import { AuthRequest } from '../../middleware/auth';
 import { withCache, invalidate } from '../../lib/cache';
+import { getUserTransporter, classifySmtpError } from '../email/email.controller';
 
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -27,8 +28,9 @@ export const listUsers = async (req: AuthRequest, res: Response) => {
 };
 
 export const createUser = async (req: AuthRequest, res: Response) => {
-  const { email, password, full_name, role } = req.body;
+  const { email, password, full_name, role, vendor_id } = req.body;
   const tenantId = req.user?.tenant_id;
+  const adminId = req.user?.id;
 
   if (!email || !password || !role) {
     return res.status(400).json({ message: 'Email, password, and role are required' });
@@ -38,13 +40,11 @@ export const createUser = async (req: AuthRequest, res: Response) => {
   try {
     await client.query('BEGIN');
 
-    // Check if user exists
     const userExists = await client.query('SELECT id FROM users WHERE email = $1', [email]);
     let userId;
 
     if (userExists.rows.length > 0) {
       userId = userExists.rows[0].id;
-      // Check if already a member of this tenant
       const memberExists = await client.query(
         'SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2',
         [userId, tenantId]
@@ -54,7 +54,6 @@ export const createUser = async (req: AuthRequest, res: Response) => {
         return res.status(400).json({ message: 'User is already a member of this tenant' });
       }
     } else {
-      // Create new user
       const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await client.query(
         'INSERT INTO users (email, password, must_change_password) VALUES ($1, $2, true) RETURNING id',
@@ -62,14 +61,12 @@ export const createUser = async (req: AuthRequest, res: Response) => {
       );
       userId = newUser.rows[0].id;
 
-      // Create profile
       await client.query(
-        'INSERT INTO profiles (id, email, full_name) VALUES ($1, $2, $3)',
-        [userId, email, full_name || '']
+        'INSERT INTO profiles (id, email, full_name, vendor_id) VALUES ($1, $2, $3, $4)',
+        [userId, email, full_name || '', vendor_id || null]
       );
     }
 
-    // Add membership
     await client.query(
       'INSERT INTO tenant_memberships (user_id, tenant_id, role) VALUES ($1, $2, $3)',
       [userId, tenantId, role]
@@ -77,7 +74,34 @@ export const createUser = async (req: AuthRequest, res: Response) => {
 
     await client.query('COMMIT');
     await invalidate(`tenant:${tenantId}:users`);
-    res.status(201).json({ message: 'User created and added to tenant successfully' });
+
+    // Send welcome email (non-blocking — user is created regardless)
+    let emailSent = false;
+    let emailError: string | undefined;
+    try {
+      const mail = await getUserTransporter(adminId!);
+      if (!mail) {
+        emailError = 'Email not configured on your account. Configure it in Settings → Email.';
+      } else {
+        const body =
+          `Hello ${full_name || email},\n\n` +
+          `Your account has been created.\n\n` +
+          `Login details:\nEmail: ${email}\nTemporary password: ${password}\n\n` +
+          `You will be asked to change your password on first login.`;
+        await mail.transporter.sendMail({
+          from: mail.fromEmail,
+          to: email,
+          subject: 'Your account has been created',
+          text: body,
+          html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${body}</div>`,
+        });
+        emailSent = true;
+      }
+    } catch (emailErr: any) {
+      emailError = classifySmtpError(emailErr).message;
+    }
+
+    res.status(201).json({ message: 'User created successfully', emailSent, emailError });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Create user error:', error);
@@ -116,6 +140,46 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Update user error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+};
+
+export const deleteUser = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+
+  const client = await pool.connect();
+  try {
+    const member = await client.query(
+      'SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2',
+      [id, tenantId]
+    );
+    if (member.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found in this tenant' });
+    }
+
+    // If the user belongs to other tenants, only remove from this one
+    const otherMemberships = await client.query(
+      'SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id != $2',
+      [id, tenantId]
+    );
+
+    if (otherMemberships.rows.length > 0) {
+      await client.query(
+        'DELETE FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2',
+        [id, tenantId]
+      );
+    } else {
+      // No other tenants — delete the user entirely (cascades to profiles + memberships)
+      await client.query('DELETE FROM users WHERE id = $1', [id]);
+    }
+
+    await invalidate(`tenant:${tenantId}:users`, `user:${id}:me`);
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('Delete user error:', error);
     res.status(500).json({ message: 'Internal server error' });
   } finally {
     client.release();

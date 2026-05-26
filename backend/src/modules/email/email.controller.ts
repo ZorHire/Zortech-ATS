@@ -69,7 +69,7 @@ function buildTransporter(email: string, password: string, provider: string) {
 
 // ─── SMTP error classifier ────────────────────────────────────────────────────
 
-function classifySmtpError(error: any): { code: string; message: string } {
+export function classifySmtpError(error: any): { code: string; message: string } {
   const msg = String(error?.message ?? "").toLowerCase();
   const rc = error?.responseCode as number | undefined;
 
@@ -116,7 +116,7 @@ function classifySmtpError(error: any): { code: string; message: string } {
 
 // ─── Shared helper: fetch + build transporter for a user ─────────────────────
 
-async function getUserTransporter(userId: string): Promise<{
+export async function getUserTransporter(userId: string): Promise<{
   transporter: nodemailer.Transporter;
   fromEmail: string;
 } | null> {
