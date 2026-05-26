@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ── Secrets ────────────────────────────────────────────────────────────────────
 # All secrets are loaded from /opt/zortech/.env on the VPS.
 # Required .env keys: DATABASE_URL, JWT_SECRET, REDIS_PASS, REDIS_URL, ...
