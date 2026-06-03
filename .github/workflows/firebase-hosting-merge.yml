@@ -68,7 +68,9 @@ jobs:
             docker compose up -d
             echo "Waiting for backend to be ready (migrations run on startup)..."
             for i in $(seq 1 36); do
-              if curl -sf http://localhost:8080/v1/health > /dev/null 2>&1; then
+              if docker compose exec -T backend node -e \
+                "require('http').get('http://localhost:8080/v1/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))" \
+                > /dev/null 2>&1; then
                 echo "Backend ready after $(( i * 5 ))s"
                 exit 0
               fi
