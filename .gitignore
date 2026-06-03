@@ -67,6 +67,10 @@ backend/dist/
 
 # dotenv environment variables file
 .env
+.env.*
+
+# commands for VPS, docker, redis, backend,, github actions.
+COMMANDS.md
 
 # dataconnect generated files
 .dataconnect
@@ -84,3 +88,11 @@ ATS_PR_Feature_Gap_Analysis.md
 CLAUDE.md
 GEMINI.md
 AGENTS.md
+
+# Screenshots and test artifacts in root
+/*.png
+/test-resume.txt
+/config.json
+/temp.txt
+.playwright-mcp/
+.playwright-test-results/

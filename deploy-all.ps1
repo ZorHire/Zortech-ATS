@@ -42,6 +42,12 @@ ssh $VPS "mkdir -p ${ZORTECH}/backend/src/modules/onboarding"
 scp backend/src/modules/onboarding/onboarding.controller.ts     "${VPS}:${ZORTECH}/backend/src/modules/onboarding/onboarding.controller.ts"
 scp backend/src/modules/onboarding/onboarding.routes.ts         "${VPS}:${ZORTECH}/backend/src/modules/onboarding/onboarding.routes.ts"
 
+# Admin module
+ssh $VPS "mkdir -p ${ZORTECH}/backend/src/modules/admin"
+scp backend/src/modules/admin/admin.routes.ts                   "${VPS}:${ZORTECH}/backend/src/modules/admin/admin.routes.ts"
+scp backend/src/modules/admin/admin.controller.ts               "${VPS}:${ZORTECH}/backend/src/modules/admin/admin.controller.ts"
+scp backend/src/modules/admin/analytics.controller.ts           "${VPS}:${ZORTECH}/backend/src/modules/admin/analytics.controller.ts"
+
 # VPS setup + rollback scripts
 scp vps-setup.sh                                                "${VPS}:${ZORTECH}/vps-setup.sh"
 scp rollback.sh                                                 "${VPS}:${ZORTECH}/rollback.sh"

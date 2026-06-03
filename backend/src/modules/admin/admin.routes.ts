@@ -13,6 +13,7 @@ router.delete('/users/:id', authMiddleware, tenantIsolation, authorize(['super_a
 router.post('/users/:id/reset-password', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), adminController.resetPassword);
 
 // Analytics
-router.get('/analytics/export', authMiddleware, tenantIsolation, analyticsController.exportAnalytics);
+router.get('/analytics', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), analyticsController.getAnalytics);
+router.get('/analytics/export', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager']), analyticsController.exportAnalytics);
 
 export default router;
