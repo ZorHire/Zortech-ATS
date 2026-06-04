@@ -36,7 +36,7 @@ export default function EmailSettingsPage() {
   // Form state
   const [email, setEmail] = useState("");
   const [appPassword, setAppPassword] = useState("");
-  const [provider, setProvider] = useState<"zoho" | "google_workspace">("zoho");
+  const [provider, setProvider] = useState<"zoho" | "zoho_in" | "zoho_eu" | "google_workspace">("zoho");
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -57,8 +57,9 @@ export default function EmailSettingsPage() {
         const body = (await api.get("/email/config")) as EmailConfig;
         setConfig(body);
         if (body.email) setEmail(body.email);
-        if (body.provider === "google_workspace")
-          setProvider("google_workspace");
+        if (body.provider === "zoho_in") setProvider("zoho_in");
+        else if (body.provider === "zoho_eu") setProvider("zoho_eu");
+        else if (body.provider === "google_workspace") setProvider("google_workspace");
       } catch {
         setConfig({ configured: false });
       } finally {
@@ -288,7 +289,9 @@ export default function EmailSettingsPage() {
               <div className="grid grid-cols-2 gap-3">
                 {(
                   [
-                    { value: "zoho", label: "Zoho Mail", sub: "smtp.zoho.com" },
+                    { value: "zoho", label: "Zoho Mail", sub: "smtp.zoho.com · Global" },
+                    { value: "zoho_in", label: "Zoho Mail India", sub: "smtp.zoho.in · India" },
+                    { value: "zoho_eu", label: "Zoho Mail Europe", sub: "smtp.zoho.eu · EU" },
                     { value: "google_workspace", label: "Google Workspace", sub: "smtp.gmail.com" },
                   ] as const
                 ).map((opt) => (
@@ -313,12 +316,12 @@ export default function EmailSettingsPage() {
             <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5 space-y-4">
               <div className="flex items-center gap-2 text-blue-700 font-bold text-sm">
                 <ShieldCheck size={17} />
-                {provider === "zoho"
-                  ? "How to generate a Zoho Mail App Password"
-                  : "How to generate a Google App Password"}
+                {provider === "google_workspace"
+                  ? "How to generate a Google App Password"
+                  : "How to generate a Zoho Mail App Password"}
               </div>
 
-              {provider === "zoho" ? (
+              {provider !== "google_workspace" ? (
                 <ol className="space-y-3 text-sm text-gray-700">
                   <li className="flex gap-3">
                     <span className="flex-shrink-0 w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center text-[11px] font-bold">1</span>
@@ -388,9 +391,14 @@ export default function EmailSettingsPage() {
 
               <p className="text-xs text-gray-500 border-t border-blue-100 pt-3">
                 <strong>Important:</strong> Use your <strong>App Password</strong> — NOT your regular login password.
-                {provider === "zoho" &&
+                {provider !== "google_workspace" &&
                   " Also ensure SMTP access is enabled under Zoho Mail Settings → Security."}{" "}
                 Only company domain emails are supported.
+                {provider === "zoho_in" && (
+                  <span className="block mt-1.5 text-blue-700 font-medium">
+                    Use this option if your Zoho account was created at <strong>zoho.in</strong> or your company is based in India.
+                  </span>
+                )}
               </p>
             </div>
 
@@ -402,7 +410,7 @@ export default function EmailSettingsPage() {
               <form onSubmit={handleSave} className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    {provider === "zoho" ? "Zoho Email Address" : "Google Workspace Email Address"}
+                    {provider === "google_workspace" ? "Google Workspace Email Address" : "Zoho Email Address"}
                   </label>
                   <div className="relative">
                     <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

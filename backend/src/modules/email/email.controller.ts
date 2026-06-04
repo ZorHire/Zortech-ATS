@@ -53,6 +53,8 @@ const PROVIDER_SMTP: Record<
   { host: string; port: number; secure: boolean }
 > = {
   zoho: { host: "smtp.zoho.com", port: 465, secure: true },
+  zoho_in: { host: "smtp.zoho.in", port: 465, secure: true },
+  zoho_eu: { host: "smtp.zoho.eu", port: 465, secure: true },
   google_workspace: { host: "smtp.gmail.com", port: 587, secure: false },
 };
 
@@ -199,7 +201,7 @@ export const saveEmailConfig = async (req: AuthRequest, res: Response) => {
       .status(400)
       .json({ message: "Email and app password are required." });
   }
-  if (!["zoho", "google_workspace"].includes(provider)) {
+  if (!["zoho", "zoho_in", "zoho_eu", "google_workspace"].includes(provider)) {
     return res.status(400).json({ message: "Unsupported provider." });
   }
 
