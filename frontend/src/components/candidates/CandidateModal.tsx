@@ -8,7 +8,7 @@ import { Candidate } from '../../types';
 import api from '../../lib/api';
 import ComposeEmailModal from './ComposeEmailModal';
 
-const RESUME_API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const RESUME_API = import.meta.env.VITE_API_URL || '/v1';
 
 interface CandidateModalProps {
   candidate: Candidate;

@@ -55,10 +55,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(userData as Profile);
       setUser(userData);
       setSubscription(sub ?? null);
-    } catch (error) {
-      console.error("Fetch me error:", error);
-      // Clear state without calling api.post("/auth/logout") — there is no valid
-      // session to clear server-side, and making another request risks loops.
+    } catch (error: any) {
+      // 401 means token expired — expected, not an error worth logging.
+      if (error?.status !== 401) console.error("Fetch me error:", error);
       localStorage.removeItem("jwt");
       clearSession();
     } finally {
