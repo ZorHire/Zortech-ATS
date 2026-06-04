@@ -285,10 +285,8 @@ export const testEmailConfig = async (req: AuthRequest, res: Response) => {
     res.json({ ok: true, message: `Connected successfully as ${email}` });
   } catch (error: any) {
     console.error("Test email config error:", error);
-    res.status(400).json({
-      ok: false,
-      message: error?.message ?? "Connection failed. Check your credentials.",
-    });
+    const { message } = classifySmtpError(error);
+    res.status(400).json({ ok: false, message });
   }
 };
 
