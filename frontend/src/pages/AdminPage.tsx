@@ -124,8 +124,13 @@ export default function AdminPage() {
       setShowCreateModal(false);
       const capturedEmail = newEmail;
       resetForm(); fetchUsers();
-      if (result.emailSent) showEmailToast({ message: `Invite email sent to ${capturedEmail}`, type: "success" });
-      else if (result.emailError) showEmailToast({ message: result.emailError, type: "error", showConfigLink: result.emailError.includes("not configured") });
+      if (result.emailSent) {
+        showEmailToast({ message: `User created — invite sent to ${capturedEmail}`, type: "success" });
+      } else if (result.emailError) {
+        showEmailToast({ message: `User created. Invite email failed — ${result.emailError}`, type: "error", showConfigLink: true });
+      } else {
+        showEmailToast({ message: `User created successfully`, type: "success" });
+      }
     } catch (err: any) { setFormError(err.message || "Failed to create user"); }
     finally { setFormLoading(false); }
   };
