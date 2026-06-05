@@ -3,11 +3,11 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm install -D typescript @types/node && npx tsc && \
+RUN npx tsc && \
     find src -name "*.sql" | while IFS= read -r f; do \
       dest="dist/${f#src/}"; mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; \
     done && \
