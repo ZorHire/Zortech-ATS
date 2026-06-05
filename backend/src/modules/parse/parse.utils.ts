@@ -1,6 +1,12 @@
 // ---------------------------------------------------------------------------
 // Dependencies
 // ---------------------------------------------------------------------------
+// pdf-parse / pdfjs-dist references DOMMatrix at module load time, which does
+// not exist in Node.js. Stub it before the require so the import doesn't crash.
+if (typeof (globalThis as any).DOMMatrix === "undefined") {
+  (globalThis as any).DOMMatrix = class DOMMatrix {};
+}
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse = require("pdf-parse") as (
   buffer: Buffer | Uint8Array | string,
