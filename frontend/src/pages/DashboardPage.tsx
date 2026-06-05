@@ -215,21 +215,64 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
   );
 }
 
-// ─── Recent Activity ──────────────────────────────────────────────────────────
+// ─── Activity & Task types ────────────────────────────────────────────────────
 
-const MOCK_ACTIVITY = [
-  { icon: Users, color: "text-blue-500 bg-blue-50", text: "John Doe applied for Frontend Developer", time: "2m ago" },
-  { icon: Calendar, color: "text-violet-500 bg-violet-50", text: "Interview scheduled with Sarah Wilson", time: "1h ago" },
-  { icon: Mail, color: "text-emerald-500 bg-emerald-50", text: "Email sent to 5 candidates", time: "3h ago" },
-  { icon: Users, color: "text-amber-500 bg-amber-50", text: "New candidate added: Michael Brown", time: "5h ago" },
-];
+interface ActivityItem {
+  type: 'application' | 'stage_change' | 'interview';
+  candidate_name: string;
+  job_title: string;
+  job_location?: string;
+  current_location?: string;
+  stage?: string;
+  from_stage?: string;
+  to_stage?: string;
+  interview_type?: string;
+  scheduled_at?: string;
+  created_at: string;
+}
 
-const MOCK_TASKS = [
-  { text: "Follow up with 3 candidates", due: "Due in 2h", urgent: true },
-  { text: "Schedule interviews for 2 candidates", due: "Due today", urgent: true },
-  { text: "Review 5 new applications", due: "Due tomorrow", urgent: false },
-  { text: "Update offer for 1 candidate", due: "Overdue", urgent: true, overdue: true },
-];
+interface TaskItem {
+  text: string;
+  due: string;
+  priority: 'overdue' | 'urgent' | 'normal';
+}
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function activityMeta(a: ActivityItem): { icon: React.ComponentType<any>; color: string; text: string } {
+  if (a.type === 'application') {
+    const loc = a.current_location || a.job_location;
+    return {
+      icon: Users,
+      color: "text-blue-500 bg-blue-50",
+      text: `${a.candidate_name} applied for ${a.job_title}${loc ? ` · ${loc}` : ''}`,
+    };
+  }
+  if (a.type === 'stage_change') {
+    const LABELS: Record<string, string> = {
+      new: "New", sourced: "Sourced", screened: "Screened", shortlisted: "Shortlisted",
+      submitted_to_client: "Submitted", client_interview_scheduled: "Interview Scheduled",
+      interview_completed: "Interview Done", selected: "Selected", offer_extended: "Offered",
+      offer_accepted: "Accepted", joined: "Hired", disqualified: "Disqualified",
+    };
+    return {
+      icon: LayoutGrid,
+      color: "text-violet-500 bg-violet-50",
+      text: `${a.candidate_name} moved to ${LABELS[a.to_stage ?? ''] ?? a.to_stage} for ${a.job_title}`,
+    };
+  }
+  return {
+    icon: Calendar,
+    color: "text-amber-500 bg-amber-50",
+    text: `${a.interview_type ?? 'Interview'} scheduled with ${a.candidate_name} for ${a.job_title}`,
+  };
+}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -240,6 +283,10 @@ export default function DashboardPage() {
   const [activeCard, setActiveCard] = useState<CardType | null>(null);
   const [jobsLoading, setJobsLoading] = useState(true);
   const [jobsError, setJobsError] = useState(false);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
 
   const activeJobs = jobs.filter((j) => j.status === "active");
 
@@ -252,6 +299,12 @@ export default function DashboardPage() {
         .then((d) => { setJobs(d); setJobsLoading(false); initial = false; })
         .catch(() => { setJobsError(true); setJobsLoading(false); initial = false; });
       api.get("/dashboard/stats").then(setStats).catch(() => {});
+      api.get("/dashboard/activity")
+        .then((d) => { setActivity(d); setActivityLoading(false); })
+        .catch(() => setActivityLoading(false));
+      api.get("/dashboard/tasks")
+        .then((d) => { setTasks(d); setTasksLoading(false); })
+        .catch(() => setTasksLoading(false));
     };
     load();
     const iv = setInterval(load, 30_000);
@@ -473,29 +526,42 @@ export default function DashboardPage() {
           </div>
 
           {/* Tasks & Reminders */}
-          <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-bold text-gray-900">Tasks & Reminders</p>
-              <button className="text-xs text-blue-600 hover:underline font-medium">View All</button>
             </div>
-            <div className="space-y-3">
-              {MOCK_TASKS.map((t, i) => (
-                <div key={i} className="flex items-start gap-2.5">
-                  <div className="mt-0.5 flex-shrink-0">
-                    {t.overdue ? (
-                      <AlertCircle size={14} className="text-red-500" />
-                    ) : (
-                      <Circle size={14} className="text-gray-300" />
-                    )}
+            <div className="space-y-3 flex-1 overflow-y-auto">
+              {tasksLoading ? (
+                [1, 2, 3].map((i) => (
+                  <div key={i} className="animate-pulse flex items-start gap-2.5">
+                    <div className="w-3.5 h-3.5 bg-gray-200 rounded-full mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="h-3 bg-gray-200 rounded w-full mb-1.5" />
+                      <div className="h-2.5 bg-gray-200 rounded w-1/3" />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-700 leading-snug">{t.text}</p>
-                    <p className={`text-[11px] mt-0.5 ${t.overdue ? "text-red-500 font-semibold" : t.urgent ? "text-amber-600" : "text-gray-400"}`}>
-                      {t.due}
-                    </p>
+                ))
+              ) : tasks.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">All caught up! No pending tasks.</p>
+              ) : (
+                tasks.map((t, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <div className="mt-0.5 flex-shrink-0">
+                      {t.priority === 'overdue' ? (
+                        <AlertCircle size={14} className="text-red-500" />
+                      ) : (
+                        <Circle size={14} className="text-gray-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-700 leading-snug">{t.text}</p>
+                      <p className={`text-[11px] mt-0.5 ${t.priority === 'overdue' ? "text-red-500 font-semibold" : t.priority === 'urgent' ? "text-amber-600" : "text-gray-400"}`}>
+                        {t.due}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -551,25 +617,42 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Activity */}
-          <div className="lg:col-span-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="lg:col-span-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-bold text-gray-900">Recent Activity</p>
-              <button className="text-xs text-blue-600 hover:underline font-medium">View All</button>
             </div>
-            <div className="space-y-4">
-              {MOCK_ACTIVITY.map((a, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-xl ${a.color} flex items-center justify-center flex-shrink-0`}>
-                    <a.icon size={14} />
+            <div className="space-y-3 flex-1 overflow-y-auto">
+              {activityLoading ? (
+                [1, 2, 3, 4].map((i) => (
+                  <div key={i} className="animate-pulse flex items-start gap-3">
+                    <div className="w-8 h-8 bg-gray-200 rounded-xl flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="h-3 bg-gray-200 rounded w-5/6 mb-1.5" />
+                      <div className="h-2.5 bg-gray-200 rounded w-1/4" />
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-700 leading-snug">{a.text}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
-                      <Clock size={10} />{a.time}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                ))
+              ) : activity.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-4">No recent activity yet.</p>
+              ) : (
+                activity.map((a, i) => {
+                  const meta = activityMeta(a);
+                  const Icon = meta.icon;
+                  return (
+                    <div key={i} className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-xl ${meta.color} flex items-center justify-center flex-shrink-0`}>
+                        <Icon size={14} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-700 leading-snug">{meta.text}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
+                          <Clock size={10} />{timeAgo(a.created_at)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
