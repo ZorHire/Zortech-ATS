@@ -18,6 +18,7 @@ export const env = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "",
+  FRONTEND_URL: process.env.SERVER_FRONTEND_URL || "https://zorhire.zortechs.in",
 };
 
 export default env;

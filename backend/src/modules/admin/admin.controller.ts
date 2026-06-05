@@ -4,6 +4,7 @@ import pool from '../../db';
 import { AuthRequest } from '../../middleware/auth';
 import { withCache, invalidate } from '../../lib/cache';
 import { getUserTransporter, classifySmtpError } from '../email/email.controller';
+import env from '../../config/env';
 
 export const listUsers = async (req: AuthRequest, res: Response) => {
   try {
@@ -91,17 +92,38 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     if (!mail) {
       emailError = 'Email not configured on your account. Configure it in Settings → Email.';
     } else {
-      const body =
+      const platformUrl = env.FRONTEND_URL;
+      const textBody =
         `Hello ${full_name || email},\n\n` +
-        `Your account has been created.\n\n` +
+        `Your account has been created on ZorHire ATS.\n\n` +
         `Login details:\nEmail: ${email}\nTemporary password: ${password}\n\n` +
-        `You will be asked to change your password on first login.`;
+        `You will be asked to change your password on first login.\n\n` +
+        `Access the platform here: ${platformUrl}`;
+      const htmlBody = `
+        <div style="font-family:sans-serif;line-height:1.6;color:#333;max-width:520px">
+          <h2 style="color:#1a1a1a">Welcome to ZorHire ATS</h2>
+          <p>Hello ${full_name || email},</p>
+          <p>Your account has been created. Here are your login details:</p>
+          <table style="border-collapse:collapse;margin:12px 0">
+            <tr><td style="padding:4px 12px 4px 0;font-weight:600">Email</td><td>${email}</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;font-weight:600">Temporary password</td><td style="font-family:monospace">${password}</td></tr>
+          </table>
+          <p>You will be asked to change your password on first login.</p>
+          <p style="margin-top:24px">
+            <a href="${platformUrl}" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600">
+              Access ZorHire ATS
+            </a>
+          </p>
+          <p style="margin-top:16px;font-size:13px;color:#666">
+            Or copy this link: <a href="${platformUrl}">${platformUrl}</a>
+          </p>
+        </div>`;
       await mail.transporter.sendMail({
         from: mail.fromEmail,
         to: email,
-        subject: 'Your account has been created',
-        text: body,
-        html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${body}</div>`,
+        subject: 'Your ZorHire ATS account has been created',
+        text: textBody,
+        html: htmlBody,
       });
       emailSent = true;
     }
