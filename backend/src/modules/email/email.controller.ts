@@ -64,7 +64,7 @@ function buildTransporter(email: string, password: string, provider: string) {
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
-    auth: { type: "LOGIN", user: email, pass: password },
+    auth: { user: email, pass: password },
     tls: { rejectUnauthorized: true, minVersion: "TLSv1.2" },
   });
 }
@@ -245,10 +245,12 @@ export const saveEmailConfig = async (req: AuthRequest, res: Response) => {
 
 export const removeEmailConfig = async (req: AuthRequest, res: Response) => {
   const userId = req.user!.id;
+  const tenantId = req.user!.tenant_id;
   try {
-    await pool.query(`DELETE FROM user_email_config WHERE user_id = $1`, [
-      userId,
-    ]);
+    await pool.query(
+      `DELETE FROM user_email_config WHERE user_id = $1 AND tenant_id = $2`,
+      [userId, tenantId],
+    );
     res.json({ configured: false });
   } catch (error) {
     console.error("Remove email config error:", error);
@@ -264,7 +266,7 @@ export const testEmailConfig = async (req: AuthRequest, res: Response) => {
     const result = await pool.query(
       `SELECT email, encrypted_password, provider
        FROM user_email_config
-       WHERE user_id = $1`,
+       WHERE user_id = $1 AND is_active = true`,
       [userId],
     );
     if (result.rows.length === 0) {
