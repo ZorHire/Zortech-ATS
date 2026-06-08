@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Plus,
   Search,
@@ -19,11 +19,24 @@ import {
   Loader2,
 } from "lucide-react";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
 import { Vendor } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
-import { useAuth } from "../contexts/AuthContext";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import {
+  useGetVendorsQuery,
+  useCreateVendorMutation,
+  useDeleteVendorMutation,
+  useParseVendorMutation,
+} from "../store/api/vendorApi";
+import { useGetJobsQuery, useUpdateJobMutation } from "../store/api/jobApi";
+import { useGetUsersQuery } from "../store/api/adminApi";
+import {
+  useAssignJdMutation,
+  useAssignJdRecruiterMutation,
+  useSendSingleEmailMutation,
+} from "../store/api/emailApi";
 
 const tierConfig: Record<
   string,
@@ -68,17 +81,6 @@ function ScoreBar({
       </span>
     </div>
   );
-}
-
-interface JobOption {
-  id: string;
-  title: string;
-}
-
-interface RecruiterOption {
-  id: string;
-  email: string;
-  full_name: string;
 }
 
 function MultiSelectList({
@@ -165,7 +167,7 @@ function AssignJdModal({
   userRole,
   onClose,
 }: {
-  vendors: import("../types").Vendor[];
+  vendors: Vendor[];
   userRole: string;
   onClose: () => void;
 }) {
@@ -173,10 +175,6 @@ function AssignJdModal({
   const canAssignRecruiter = userRole === "super_admin" || userRole === "accounts_manager";
 
   const [assignType, setAssignType] = useState<"recruiter" | "vendor">("vendor");
-  const [jobs, setJobs] = useState<JobOption[]>([]);
-  const [loadingJobs, setLoadingJobs] = useState(true);
-  const [recruiters, setRecruiters] = useState<RecruiterOption[]>([]);
-  const [loadingRecruiters, setLoadingRecruiters] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
@@ -184,6 +182,20 @@ function AssignJdModal({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // RTK Query — data
+  const { data: jobs = [], isLoading: loadingJobs } = useGetJobsQuery();
+  const { data: allUsers = [], isLoading: loadingRecruiters } = useGetUsersQuery(
+    undefined,
+    { skip: assignType !== "recruiter" },
+  );
+  const recruiters = allUsers.filter((u) => u.role === "recruiter");
+
+  // RTK Query — mutations
+  const [assignJd] = useAssignJdMutation();
+  const [assignJdRecruiter] = useAssignJdRecruiterMutation();
+  const [updateJob] = useUpdateJobMutation();
+  const [sendSingleEmail] = useSendSingleEmailMutation();
 
   const toggleVendor = (id: string) =>
     setSelectedVendorIds((prev) =>
@@ -194,36 +206,6 @@ function AssignJdModal({
     setSelectedRecruiterIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
-
-  useEffect(() => {
-    api
-      .get("/jobs")
-      .then((data: any[]) =>
-        setJobs(data.map((j) => ({ id: j.id, title: j.title }))),
-      )
-      .catch(() => setError("Could not load jobs."))
-      .finally(() => setLoadingJobs(false));
-  }, []);
-
-  useEffect(() => {
-    if (assignType !== "recruiter") return;
-    setLoadingRecruiters(true);
-    api
-      .get("/admin/users")
-      .then((data: any[]) =>
-        setRecruiters(
-          data
-            .filter((u: any) => u.role === "recruiter")
-            .map((u: any) => ({
-              id: u.id,
-              email: u.email,
-              full_name: u.full_name || u.email,
-            })),
-        ),
-      )
-      .catch(() => setError("Could not load recruiters."))
-      .finally(() => setLoadingRecruiters(false));
-  }, [assignType]);
 
   const handleAssign = async () => {
     setError("");
@@ -245,20 +227,20 @@ function AssignJdModal({
     setSending(true);
     try {
       if (assignType === "vendor") {
-        await api.post("/email/assign-jd", {
+        await assignJd({
           job_id: selectedJobId,
           vendor_ids: selectedVendorIds,
           deadline_days: deadlineDays,
           site_url: window.location.origin,
-        });
+        }).unwrap();
       } else {
         try {
-          await api.post("/email/assign-jd-recruiter", {
+          await assignJdRecruiter({
             job_id: selectedJobId,
             recruiter_ids: selectedRecruiterIds,
             deadline_days: deadlineDays,
             site_url: window.location.origin,
-          });
+          }).unwrap();
         } catch (recruiterAssignError: any) {
           const status = recruiterAssignError?.status;
           if (status !== 404 && status !== 405) throw recruiterAssignError;
@@ -266,22 +248,23 @@ function AssignJdModal({
           const selectedJob = jobs.find((j) => j.id === selectedJobId);
           if (!selectedJob) throw recruiterAssignError;
 
-          await api.patch(`/jobs/${selectedJobId}`, {
-            assigned_recruiter_ids: selectedRecruiterIds,
-          });
+          await updateJob({
+            id: selectedJobId,
+            body: { assigned_recruiter_ids: selectedRecruiterIds },
+          }).unwrap();
 
           const dayLabel = deadlineDays === 1 ? "1 day" : `${deadlineDays} days`;
           await Promise.allSettled(
             selectedRecruiterIds.map((rid) => {
               const rec = recruiters.find((r) => r.id === rid);
               if (!rec) return Promise.resolve();
-              return api.post("/email/send-single", {
+              return sendSingleEmail({
                 to: rec.email,
                 subject: `JD Assignment: ${selectedJob.title}`,
                 body:
                   `Hi ${rec.full_name || rec.email},\n\n` +
                   `You have been assigned "${selectedJob.title}". Please submit candidates within ${dayLabel} at ${window.location.origin}.`,
-              });
+              }).unwrap();
             }),
           );
         }
@@ -770,11 +753,10 @@ function VendorDetailModal({
 }
 
 export default function VendorsPage() {
-  const { user } = useAuth();
+  const user = useAppSelector(selectCurrentUser);
   const userRole: string = user?.role ?? "";
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
@@ -783,10 +765,8 @@ export default function VendorsPage() {
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [showAssignJd, setShowAssignJd] = useState(false);
   const [vendorFile, setVendorFile] = useState<File | null>(null);
-  const [vendorParsing, setVendorParsing] = useState(false);
   const [vendorParseMessage, setVendorParseMessage] = useState("");
   const [vendorParseError, setVendorParseError] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
   const [vendorFormData, setVendorFormData] = useState({
     company_name: "",
     registration_number: "",
@@ -799,20 +779,11 @@ export default function VendorsPage() {
     tier: "standard",
   });
 
-  useEffect(() => {
-    fetchVendors();
-  }, []);
-
-  const fetchVendors = async () => {
-    try {
-      const data = await api.get("/vendors");
-      setVendors(data);
-    } catch (error) {
-      console.error("Fetch vendors error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // RTK Query
+  const { data: vendors = [], isLoading: loading } = useGetVendorsQuery();
+  const [createVendor, { isLoading: formLoading }] = useCreateVendorMutation();
+  const [deleteVendor] = useDeleteVendorMutation();
+  const [parseVendor, { isLoading: vendorParsing }] = useParseVendorMutation();
 
   const resetVendorForm = () => {
     setVendorFormData({
@@ -829,35 +800,32 @@ export default function VendorsPage() {
     setVendorFile(null);
     setVendorParseMessage("");
     setVendorParseError("");
-    setVendorParsing(false);
   };
 
   const parseVendorFile = async (file: File) => {
-    setVendorParsing(true);
     setVendorParseMessage("");
     setVendorParseError("");
-
     try {
       const body = new FormData();
       body.append("file", file);
-      const parsed = await api.post("/parse/vendor", body);
+      const parsed = await parseVendor(body).unwrap();
 
       setVendorFormData((current) => ({
         ...current,
-        company_name: parsed.company_name || current.company_name,
+        company_name: (parsed.company_name as string) || current.company_name,
         primary_contact_name:
-          parsed.primary_contact_name || current.primary_contact_name,
+          (parsed.primary_contact_name as string) || current.primary_contact_name,
         primary_contact_email:
-          parsed.primary_contact_email || current.primary_contact_email,
+          (parsed.primary_contact_email as string) || current.primary_contact_email,
         primary_contact_phone:
-          parsed.primary_contact_phone || current.primary_contact_phone,
+          (parsed.primary_contact_phone as string) || current.primary_contact_phone,
         industry_specializations:
-          parsed.industry_specializations?.length > 0
-            ? parsed.industry_specializations.join(", ")
+          (parsed.industry_specializations as string[])?.length > 0
+            ? (parsed.industry_specializations as string[]).join(", ")
             : current.industry_specializations,
         geographies:
-          parsed.geographies?.length > 0
-            ? parsed.geographies.join(", ")
+          (parsed.geographies as string[])?.length > 0
+            ? (parsed.geographies as string[]).join(", ")
             : current.geographies,
       }));
 
@@ -865,22 +833,18 @@ export default function VendorsPage() {
         "Vendor document parsed successfully. Please review the data.",
       );
     } catch (error: any) {
-      console.error("Vendor parse failed:", error);
       setVendorParseError(
         error?.message || "Could not extract vendor data from the file.",
       );
-    } finally {
-      setVendorParsing(false);
     }
   };
 
   const handleAddVendor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setFormLoading(true);
     setVendorParseError("");
 
     try {
-      const payload = {
+      await createVendor({
         company_name: vendorFormData.company_name,
         registration_number: vendorFormData.registration_number,
         gst_id: vendorFormData.gst_id,
@@ -896,27 +860,20 @@ export default function VendorsPage() {
           .map((item) => item.trim())
           .filter(Boolean),
         tier: vendorFormData.tier,
-      };
-
-      const createdVendor = await api.post("/vendors", payload);
-      setVendors([createdVendor, ...vendors]);
+      }).unwrap();
       setShowAddVendor(false);
       resetVendorForm();
     } catch (error: any) {
-      console.error("Add vendor failed:", error);
       setVendorParseError(
         error?.message || "Failed to create vendor. Please check the form.",
       );
-    } finally {
-      setFormLoading(false);
     }
   };
 
   const handleDeleteVendor = async (id: string) => {
     if (!window.confirm("Delete this vendor? This cannot be undone.")) return;
     try {
-      await api.delete(`/vendors/${id}`);
-      setVendors((prev) => prev.filter((v) => v.id !== id));
+      await deleteVendor(id).unwrap();
       if (selectedVendor?.id === id) setSelectedVendor(null);
     } catch {
       alert("Failed to delete vendor");
@@ -952,15 +909,12 @@ export default function VendorsPage() {
     setDeleting(true);
     const ids = Array.from(selectedIds);
     const results = await Promise.allSettled(
-      ids.map((id) => api.delete(`/vendors/${id}`)),
+      ids.map((id) => deleteVendor(id).unwrap()),
     );
-
-    const deleted = ids.filter((_, i) => results[i].status === "fulfilled");
-    setVendors((prev) => prev.filter((v) => !deleted.includes(v.id)));
     setSelectedIds(new Set());
     setDeleting(false);
 
-    const failed = ids.length - deleted.length;
+    const failed = results.filter((r) => r.status === "rejected").length;
     if (failed > 0) {
       alert(`${failed} vendor${failed > 1 ? "s" : ""} could not be deleted.`);
     }
@@ -1374,9 +1328,7 @@ export default function VendorsPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0] || null;
                     setVendorFile(file);
-                    if (file) {
-                      parseVendorFile(file);
-                    }
+                    if (file) parseVendorFile(file);
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

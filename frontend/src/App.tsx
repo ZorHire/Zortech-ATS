@@ -1,5 +1,21 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { useAppDispatch } from "./hooks/useAppDispatch";
+import { useAppSelector } from "./hooks/useAppSelector";
+import {
+  selectCurrentUser,
+  selectSessionStatus,
+  setCredentials,
+  clearCredentials,
+  setSessionStatus,
+} from "./store/slices/authSlice";
+import type { AuthUser } from "./store/slices/authSlice";
+import {
+  selectSubscription,
+  setSubscription,
+} from "./store/slices/subscriptionSlice";
+import type { SubscriptionInfo } from "./store/slices/subscriptionSlice";
+import { useMeQuery } from "./store/api/authApi";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/layout/Layout";
 import LoginPage from "./pages/LoginPage";
@@ -31,10 +47,69 @@ const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline"];
 // These paths are accessible even when subscription is blocked/expired
 const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription", "/onboarding"];
 
-function ProtectedRoute({ children, path, noLayout }: { children: React.ReactNode; path?: string; noLayout?: boolean }) {
-  const { user, loading, subscription } = useAuth();
+// Replaces the old AuthSyncer+AuthProvider bridge.
+// Calls /auth/me on load (if JWT exists) and populates Redux auth state.
+// Also listens for mid-session 401 events from legacy api.ts calls.
+function SessionRestorer() {
+  const dispatch = useAppDispatch();
+  const hasToken = !!localStorage.getItem("jwt");
 
-  if (loading) {
+  const { data, isSuccess, isError } = useMeQuery(undefined, { skip: !hasToken });
+
+  // No token → immediately resolve as unauthenticated
+  useEffect(() => {
+    if (!hasToken) dispatch(setSessionStatus("active"));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Success: populate Redux with user + subscription from /auth/me
+  useEffect(() => {
+    if (!isSuccess || !data) return;
+    const { subscription, ...user } = data;
+    dispatch(setCredentials({ user: user as AuthUser, accessToken: localStorage.getItem("jwt") }));
+    dispatch(
+      setSubscription(
+        subscription
+          ? ({
+              active: subscription.active,
+              isPlatformOwner: subscription.isPlatformOwner ?? false,
+              reason: subscription.reason ?? null,
+            } satisfies SubscriptionInfo)
+          : null
+      )
+    );
+    dispatch(setSessionStatus("active"));
+  }, [isSuccess, data, dispatch]);
+
+  // Any /auth/me error (401, 5xx): clear session, matching AuthContext behavior
+  useEffect(() => {
+    if (isError) dispatch(clearCredentials());
+  }, [isError, dispatch]);
+
+  // Handle mid-session 401s fired by legacy api.ts calls
+  useEffect(() => {
+    const onUnauthorized = () => dispatch(clearCredentials());
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+  }, [dispatch]);
+
+  return null;
+}
+
+function ProtectedRoute({
+  children,
+  path,
+  noLayout,
+}: {
+  children: React.ReactNode;
+  path?: string;
+  noLayout?: boolean;
+}) {
+  const user = useAppSelector(selectCurrentUser);
+  const sessionStatus = useAppSelector(selectSessionStatus);
+  const subscription = useAppSelector(selectSubscription);
+
+  // Show spinner while SessionRestorer hasn't resolved yet.
+  if (sessionStatus === "idle") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -47,19 +122,25 @@ function ProtectedRoute({ children, path, noLayout }: { children: React.ReactNod
 
   if (!user) return <Navigate to="/login" replace />;
 
+  // Gate 1: force password change before any other navigation
   if (user.must_change_password) {
     return <ChangePasswordPage />;
   }
 
+  // Gate 2: vendor_user is restricted to jobs and pipeline only
   if (user.role === "vendor_user" && path) {
-    const allowed = VENDOR_ALLOWED_PREFIXES.some((p: string) => path === p || path.startsWith(p + "/"));
+    const allowed = VENDOR_ALLOWED_PREFIXES.some(
+      (p: string) => path === p || path.startsWith(p + "/")
+    );
     if (!allowed) return <Navigate to="/jobs" replace />;
   }
 
-  // Subscription gate: block onboarding companies with no active/trial subscription.
-  // Platform owner (ZorTech) passes through. Fail open when subscription is null.
+  // Gate 3: subscription gate — blocks onboarding companies with no active/trial plan.
+  // Platform owner (ZorTech) always passes. null means still loading → fail open.
   const isSubscriptionExempt = path
-    ? SUBSCRIPTION_EXEMPT_PATHS.some((p) => path === p || path.startsWith(p + "/"))
+    ? SUBSCRIPTION_EXEMPT_PATHS.some(
+        (p) => path === p || path.startsWith(p + "/")
+      )
     : false;
 
   if (
@@ -76,7 +157,7 @@ function ProtectedRoute({ children, path, noLayout }: { children: React.ReactNod
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const user = useAppSelector(selectCurrentUser);
 
   return (
     <Routes>
@@ -94,9 +175,13 @@ function AppRoutes() {
       <Route
         path="/pricing"
         element={
-          user
-            ? <ProtectedRoute path="/pricing"><PricingPage /></ProtectedRoute>
-            : <PublicPricingPage />
+          user ? (
+            <ProtectedRoute path="/pricing">
+              <PricingPage />
+            </ProtectedRoute>
+          ) : (
+            <PublicPricingPage />
+          )
         }
       />
       <Route
@@ -227,7 +312,10 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to={user ? "/" : "/subscribe"} replace />} />
+      <Route
+        path="*"
+        element={<Navigate to={user ? "/" : "/subscribe"} replace />}
+      />
     </Routes>
   );
 }
@@ -236,9 +324,8 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <SessionRestorer />
+        <AppRoutes />
       </BrowserRouter>
     </ErrorBoundary>
   );

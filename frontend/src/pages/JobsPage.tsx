@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "../contexts/AuthContext";
+import { useState } from "react";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
 import {
   Plus, Search, MapPin, Users, ChevronDown, Briefcase,
   Building2, X, TrendingUp, MoreHorizontal, Trash2, Eye,
@@ -9,7 +10,15 @@ import { Link } from "react-router-dom";
 import Header from "../components/layout/Header";
 import { jobStatusLabels } from "../lib/mockData";
 import { Job } from "../types";
-import api from "../lib/api";
+import {
+  useGetJobsQuery,
+  useGetClientsQuery,
+  useCreateJobMutation,
+  useUpdateJobMutation,
+  useDeleteJobMutation,
+  useParseJdMutation,
+  useDeleteClientMutation,
+} from "../store/api/jobApi";
 import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
 import ClientInfoModal from "../components/clients/ClientInfoModal";
 import ClientDetailModal from "../components/clients/ClientDetailModal";
@@ -157,13 +166,19 @@ function ClientCard({ client, onDelete, onClick }: { client: any; onDelete: () =
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function JobsPage() {
-  const { profile } = useAuth();
+  const profile = useAppSelector(selectCurrentUser);
   const isVendor = profile?.role === "vendor_user" || profile?.role === "vendor_manager";
   const isRecruiter = profile?.role === "recruiter";
   const canManage = !isVendor && !isRecruiter;
 
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: jobs = [], isLoading } = useGetJobsQuery();
+  const { data: clients = [], refetch: refetchClients } = useGetClientsQuery();
+  const [createJob] = useCreateJobMutation();
+  const [updateJob] = useUpdateJobMutation();
+  const [deleteJob] = useDeleteJobMutation();
+  const [parseJd] = useParseJdMutation();
+  const [deleteClient] = useDeleteClientMutation();
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -185,36 +200,23 @@ export default function JobsPage() {
   const [jobParsing, setJobParsing] = useState(false);
   const [jobParseMessage, setJobParseMessage] = useState("");
   const [jobParseError, setJobParseError] = useState("");
-  const [clients, setClients] = useState<any[]>([]);
-
-  useEffect(() => { fetchJobs(); fetchClients(); }, []);
-
-  const fetchJobs = async () => {
-    try { const data = await api.get("/jobs"); setJobs(data); }
-    catch (error) { console.error("Fetch jobs error:", error); }
-    finally { setLoading(false); }
-  };
-
-  const fetchClients = async () => {
-    try { const data = await api.get("/clients"); setClients(data); }
-    catch (error) { console.error("Fetch clients error:", error); }
-  };
 
   const parseJDFile = async (file: File) => {
     setJobParsing(true); setJobParseMessage(""); setJobParseError("");
     try {
       const body = new FormData(); body.append("file", file);
-      const parsed = await api.post("/parse/jd", body);
+      const parsed = await parseJd(body).unwrap();
       setFormData((cur) => ({
         ...cur,
-        title: parsed.title || cur.title,
-        location: parsed.location || cur.location,
-        description: parsed.description || cur.description,
-        experience_min: parsed.experience_min !== undefined ? parsed.experience_min : cur.experience_min,
-        experience_max: parsed.experience_max !== undefined ? parsed.experience_max : cur.experience_max,
-        salary_min: parsed.salary_min !== undefined ? parsed.salary_min : cur.salary_min,
-        salary_max: parsed.salary_max !== undefined ? parsed.salary_max : cur.salary_max,
-        mandatory_skills: parsed.required_skills?.length > 0 ? parsed.required_skills.join(", ") : cur.mandatory_skills,
+        title: (parsed.title as string) || cur.title,
+        location: (parsed.location as string) || cur.location,
+        description: (parsed.description as string) || cur.description,
+        experience_min: parsed.experience_min !== undefined ? (parsed.experience_min as number) : cur.experience_min,
+        experience_max: parsed.experience_max !== undefined ? (parsed.experience_max as number) : cur.experience_max,
+        salary_min: parsed.salary_min !== undefined ? (parsed.salary_min as number) : cur.salary_min,
+        salary_max: parsed.salary_max !== undefined ? (parsed.salary_max as number) : cur.salary_max,
+        mandatory_skills: Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
+          ? (parsed.required_skills as string[]).join(", ") : cur.mandatory_skills,
       }));
       setJobParseMessage("JD parsed successfully. Review and edit the auto-filled details.");
     } catch { setJobParseError("Could not extract data, please fill manually."); }
@@ -225,8 +227,7 @@ export default function JobsPage() {
     e.preventDefault();
     try {
       const payload = { ...formData, mandatory_skills: formData.mandatory_skills.split(",").map((s) => s.trim()).filter(Boolean) };
-      const newJob = await api.post("/jobs", payload, { headers: { "Content-Type": "application/json" } });
-      setJobs([newJob, ...jobs]);
+      await createJob(payload).unwrap();
       setIsAddModalOpen(false);
       setFormData({ title: "", client_id: "", department: "", location: "", work_mode: "onsite", employment_type: "full_time", experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0, headcount: 1, priority: "medium", description: "", mandatory_skills: "" });
       setJobFile(null);
@@ -235,20 +236,18 @@ export default function JobsPage() {
 
   const handleDeleteJob = async (id: string) => {
     if (!window.confirm("Delete this job opening? This cannot be undone.")) return;
-    try { await api.delete(`/jobs/${id}`); setJobs(jobs.filter((j) => j.id !== id)); }
+    try { await deleteJob(id).unwrap(); }
     catch { alert("Failed to delete job"); }
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    const prev = jobs.find((j) => j.id === id)?.status;
-    setJobs((all) => all.map((j) => (j.id === id ? { ...j, status: newStatus as Job["status"] } : j)));
-    try { await api.patch(`/jobs/${id}`, { status: newStatus }); }
-    catch { setJobs((all) => all.map((j) => (j.id === id ? { ...j, status: prev as Job["status"] } : j))); alert("Failed to update status"); }
+    try { await updateJob({ id, body: { status: newStatus } }).unwrap(); }
+    catch { alert("Failed to update status"); }
   };
 
   const handleDeleteClient = async (id: string) => {
     if (!window.confirm("Delete this client? This cannot be undone.")) return;
-    try { await api.delete(`/clients/${id}`); setClients(clients.filter((c) => c.id !== id)); }
+    try { await deleteClient(id).unwrap(); }
     catch { alert("Failed to delete client"); }
   };
 
@@ -353,7 +352,7 @@ export default function JobsPage() {
 
             {/* Table */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              {loading ? (
+              {isLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
                 </div>
@@ -461,7 +460,6 @@ export default function JobsPage() {
             )}
           </>
         ) : (
-          /* Clients tab */
           clients.length === 0 ? (
             <div className="text-center py-20">
               <Layers size={36} className="mx-auto text-gray-300 mb-3" />
@@ -486,7 +484,7 @@ export default function JobsPage() {
 
       {/* Modals */}
       {isPipelineSelectorOpen && <PipelineJobSelector jobs={jobs} onClose={() => setIsPipelineSelectorOpen(false)} />}
-      {isClientInfoOpen && <ClientInfoModal onClose={() => setIsClientInfoOpen(false)} onSuccess={fetchClients} />}
+      {isClientInfoOpen && <ClientInfoModal onClose={() => setIsClientInfoOpen(false)} onSuccess={refetchClients} />}
       {viewingClient && <ClientDetailModal client={viewingClient} onClose={() => setViewingClient(null)} />}
 
       {isAddModalOpen && (

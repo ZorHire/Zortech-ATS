@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Search,
   Building2,
@@ -23,8 +23,16 @@ import {
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import { Candidate } from "../types";
-import api from "../lib/api";
-import { useAuth } from "../contexts/AuthContext";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import {
+  useGetCandidatesQuery,
+  useCreateCandidateMutation,
+  useDeleteCandidateMutation,
+  useParseResumeMutation,
+  useAddCandidateToJobMutation,
+} from "../store/api/candidateApi";
+import { useGetJobsQuery } from "../store/api/jobApi";
 import CandidateModal from "../components/candidates/CandidateModal";
 import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
 import { useSendEmail } from "../hooks/useSendEmail";
@@ -71,13 +79,9 @@ function StatusBadge({ active }: { active: boolean }) {
 // ─── Row action menu ──────────────────────────────────────────────────────────
 
 function RowMenu({
-  onView,
-  onEmail,
-  onDelete,
+  onView, onEmail, onDelete,
 }: {
-  onView: () => void;
-  onEmail: () => void;
-  onDelete: () => void;
+  onView: () => void; onEmail: () => void; onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -96,23 +100,14 @@ function RowMenu({
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1">
-              <button
-                onClick={() => { setOpen(false); onView(); }}
-                className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-              >
+              <button onClick={() => { setOpen(false); onView(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <Eye size={12} /> View Profile
               </button>
-              <button
-                onClick={() => { setOpen(false); onEmail(); }}
-                className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-              >
+              <button onClick={() => { setOpen(false); onEmail(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <Mail size={12} /> Send Email
               </button>
               <hr className="border-gray-100 my-0.5" />
-              <button
-                onClick={() => { setOpen(false); onDelete(); }}
-                className="w-full text-left px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
-              >
+              <button onClick={() => { setOpen(false); onDelete(); }} className="w-full text-left px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
                 <Trash2 size={12} /> Delete
               </button>
             </div>
@@ -152,14 +147,19 @@ function StatCard({ icon: Icon, label, value, color, bg, trend }: {
 const PAGE_SIZE = 10;
 
 export default function CandidatesPage() {
-  const { profile } = useAuth();
+  const profile = useAppSelector(selectCurrentUser);
   const isVendor = profile?.role === "vendor_user" || profile?.role === "vendor_manager";
   const isRecruiter = profile?.role === "recruiter";
 
+  const { data: candidates = [], isLoading: loading, refetch } = useGetCandidatesQuery();
+  const { data: assignedJobs = [] } = useGetJobsQuery(undefined, { skip: !(isVendor || isRecruiter) });
+  const [parseResume, { isLoading: resumeParsing }] = useParseResumeMutation();
+  const [addCandidateToJob] = useAddCandidateToJobMutation();
+  const [createCandidate] = useCreateCandidateMutation();
+  const [deleteCandidate] = useDeleteCandidateMutation();
+
   const { emailToast } = useSendEmail();
   const [composeTarget, setComposeTarget] = useState<Candidate | null>(null);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [expFilter, setExpFilter] = useState("all");
@@ -168,9 +168,7 @@ export default function CandidatesPage() {
   const [viewingCandidate, setViewingCandidate] = useState<Candidate | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const [assignedJobs, setAssignedJobs] = useState<any[]>([]);
   const [selectedJobId, setSelectedJobId] = useState("");
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "", last_name: "", email: "", phone: "",
@@ -178,54 +176,35 @@ export default function CandidatesPage() {
     current_location: "", skills: "", source: "direct",
   });
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeParsing, setResumeParsing] = useState(false);
   const [resumeParseMessage, setResumeParseMessage] = useState("");
   const [resumeParseError, setResumeParseError] = useState("");
 
-  useEffect(() => { fetchCandidates(); }, []);
-
-  useEffect(() => {
-    if (isVendor || isRecruiter) api.get("/jobs").then(setAssignedJobs).catch(() => {});
-  }, [isVendor, isRecruiter]);
-
-  const fetchCandidates = async () => {
-    try {
-      const data = await api.get("/candidates");
-      setCandidates(data);
-    } catch { /* ignore */ } finally {
-      setLoading(false);
-    }
-  };
-
   const parseResumeFile = async (file: File) => {
-    setResumeParsing(true);
-    setResumeParseMessage("");
-    setResumeParseError("");
+    setResumeParseMessage(""); setResumeParseError("");
     try {
       const body = new FormData();
       body.append("file", file);
-      const parsed = await api.post("/parse/resume", body);
-      if (!parsed || (!parsed.name && !parsed.email && !parsed.phone && (!parsed.skills || parsed.skills.length === 0))) {
+      const parsed = await parseResume(body).unwrap();
+      const p = parsed as any;
+      if (!p || (!p.name && !p.email && !p.phone && (!p.skills || p.skills.length === 0))) {
         setResumeParseError("Could not auto-fill from this resume. Please fill in the fields manually.");
         return;
       }
       setFormData((current) => ({
         ...current,
-        first_name: parsed.name?.split(" ")[0] || current.first_name,
-        last_name: parsed.name?.split(" ").slice(1).join(" ") || current.last_name,
-        email: parsed.email || current.email,
-        phone: parsed.phone || current.phone,
-        current_title: parsed.current_title || current.current_title,
-        current_company: parsed.current_company || current.current_company,
-        current_location: parsed.current_location || current.current_location,
-        experience_years: parsed.experience_years !== undefined ? parsed.experience_years : current.experience_years,
-        skills: parsed.skills?.length > 0 ? parsed.skills.join(", ") : current.skills,
+        first_name: p.name?.split(" ")[0] || current.first_name,
+        last_name: p.name?.split(" ").slice(1).join(" ") || current.last_name,
+        email: p.email || current.email,
+        phone: p.phone || current.phone,
+        current_title: p.current_title || current.current_title,
+        current_company: p.current_company || current.current_company,
+        current_location: p.current_location || current.current_location,
+        experience_years: p.experience_years !== undefined ? p.experience_years : current.experience_years,
+        skills: p.skills?.length > 0 ? p.skills.join(", ") : current.skills,
       }));
       setResumeParseMessage("Resume parsed successfully. Review and edit as needed.");
     } catch {
       setResumeParseError("Could not extract data, please fill manually.");
-    } finally {
-      setResumeParsing(false);
     }
   };
 
@@ -240,29 +219,27 @@ export default function CandidatesPage() {
       return;
     }
     try {
-      const body = new FormData();
+      const fd = new FormData();
       Object.entries(formData).forEach(([k, v]) => {
         if (k === "skills") {
-          const arr = String(v).split(",").map((s) => s.trim()).filter(Boolean);
-          body.append(k, JSON.stringify(arr));
+          fd.append(k, JSON.stringify(String(v).split(",").map((s) => s.trim()).filter(Boolean)));
         } else {
-          body.append(k, String(v));
+          fd.append(k, String(v));
         }
       });
-      if (resumeFile) body.append("resume", resumeFile);
+      if (resumeFile) fd.append("resume", resumeFile);
 
-      let newCandidate: Candidate;
       if (selectedJobId) {
-        const result = await api.post(`/jobs/${selectedJobId}/candidates`, body);
-        newCandidate = result.candidate;
+        await addCandidateToJob({ jobId: selectedJobId, body: fd }).unwrap();
       } else {
-        newCandidate = await api.post("/candidates", body);
+        await createCandidate(fd).unwrap();
       }
-      setCandidates((p) => [newCandidate, ...p]);
+
       setIsAddModalOpen(false);
       setSelectedJobId("");
       setFormData({ first_name: "", last_name: "", email: "", phone: "", current_title: "", current_company: "", experience_years: 0, current_location: "", skills: "", source: "direct" });
       setResumeFile(null);
+      setResumeParseMessage(""); setResumeParseError("");
     } catch (error: any) {
       alert(error?.data?.message || error?.message || "Failed to add candidate");
     }
@@ -271,8 +248,7 @@ export default function CandidatesPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this candidate?")) return;
     try {
-      await api.delete(`/candidates/${id}`);
-      setCandidates((p) => p.filter((c) => c.id !== id));
+      await deleteCandidate(id).unwrap();
       if (viewingCandidate?.id === id) setViewingCandidate(null);
     } catch { alert("Failed to delete candidate"); }
   };
@@ -314,7 +290,6 @@ export default function CandidatesPage() {
     link.click();
   };
 
-  // ── Stats ──
   const activeCount = candidates.filter((c) => c.is_active).length;
   const inactiveCount = candidates.length - activeCount;
 
@@ -457,8 +432,6 @@ export default function CandidatesPage() {
                             className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
                           />
                         </td>
-
-                        {/* Candidate */}
                         <td className="px-4 py-3.5 min-w-[200px]">
                           <div className="flex items-center gap-3">
                             <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
@@ -477,21 +450,15 @@ export default function CandidatesPage() {
                             </div>
                           </div>
                         </td>
-
-                        {/* Experience */}
                         <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">
                           {candidate.experience_years ? `${candidate.experience_years} Years` : "—"}
                         </td>
-
-                        {/* Current Role */}
                         <td className="px-4 py-3.5 min-w-[160px]">
                           <p className="text-sm text-gray-700 font-medium truncate">{candidate.current_title || "—"}</p>
                           {candidate.current_company && (
                             <p className="text-xs text-gray-400 truncate">{candidate.current_company}</p>
                           )}
                         </td>
-
-                        {/* Skills */}
                         <td className="px-4 py-3.5 min-w-[180px]">
                           <div className="flex flex-wrap gap-1">
                             {candidate.skills.slice(0, 3).map((s) => (
@@ -502,23 +469,15 @@ export default function CandidatesPage() {
                             )}
                           </div>
                         </td>
-
-                        {/* Source */}
                         <td className="px-4 py-3.5">
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${sourceBadgeColors[candidate.source] || "bg-gray-100 text-gray-600"}`}>
                             {sourceLabels[candidate.source] || candidate.source}
                           </span>
                         </td>
-
-                        {/* Status */}
                         <td className="px-4 py-3.5">
                           <StatusBadge active={candidate.is_active} />
                         </td>
-
-                        {/* Added On */}
                         <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">{dateStr}</td>
-
-                        {/* Actions */}
                         <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <RowMenu
                             onView={() => setViewingCandidate(candidate)}
@@ -659,7 +618,7 @@ export default function CandidatesPage() {
         <CandidateModal
           candidate={viewingCandidate}
           onClose={() => setViewingCandidate(null)}
-          onUpdate={(updated) => setCandidates((p) => p.map((c) => c.id === updated.id ? updated : c))}
+          onUpdate={(updated) => { setViewingCandidate(updated); refetch(); }}
           onDelete={handleDelete}
         />
       )}

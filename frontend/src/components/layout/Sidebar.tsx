@@ -17,7 +17,10 @@ import {
   Network,
   ClipboardList,
 } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAppDispatch } from "../../hooks/useAppDispatch";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectCurrentUser, clearCredentials } from "../../store/slices/authSlice";
+import { selectSubscription } from "../../store/slices/subscriptionSlice";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -134,7 +137,9 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
-  const { profile, signOut, subscription } = useAuth();
+  const dispatch = useAppDispatch();
+  const profile = useAppSelector(selectCurrentUser);
+  const subscription = useAppSelector(selectSubscription);
 
   const isPlatformOwner = !!subscription?.isPlatformOwner;
   const visibleItems = navItems.filter((item) => {
@@ -210,7 +215,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Footer Actions */}
       <div className="mt-auto px-3 space-y-1">
         <button
-          onClick={signOut}
+          onClick={() => dispatch(clearCredentials())}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#d7c1a5] hover:text-[#ffcda2] hover:bg-[#7f5a30]/15 transition-all ${collapsed ? "justify-center" : ""}`}
           title={collapsed ? "Sign Out" : undefined}
         >

@@ -1,11 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   ClipboardList, Search, X, Loader2, Users, Building2,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
-import { useAuth } from "../contexts/AuthContext";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import { useGetJobsQuery, useUpdateJobMutation } from "../store/api/jobApi";
+import { useGetUsersQuery } from "../store/api/adminApi";
+import { useGetVendorsQuery } from "../store/api/vendorApi";
 
 interface AssignedJob {
   id: string;
@@ -34,33 +37,24 @@ function statusLabel(s: string) {
 }
 
 export default function AssignedJDsPage() {
-  const { profile } = useAuth();
-  const [jobs, setJobs] = useState<AssignedJob[]>([]);
-  const [recruiters, setRecruiters] = useState<RecruiterInfo[]>([]);
-  const [vendors, setVendors] = useState<VendorInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const profile = useAppSelector(selectCurrentUser);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
   const canManageRecruiters = profile?.role === "super_admin" || profile?.role === "accounts_manager";
   const canManageVendors = profile?.role === "super_admin" || profile?.role === "vendor_manager" || profile?.role === "accounts_manager";
 
-  useEffect(() => {
-    Promise.all([
-      api.get("/jobs"),
-      canManageRecruiters ? api.get("/admin/users") : Promise.resolve([]),
-      canManageVendors ? api.get("/vendors") : Promise.resolve([]),
-    ])
-      .then(([jobsData, usersData, vendorsData]) => {
-        setJobs(jobsData as AssignedJob[]);
-        setRecruiters((usersData as any[]).filter((u: any) => u.role === "recruiter").map((u: any) => ({ id: u.id, full_name: u.full_name || u.email, email: u.email })));
-        setVendors((vendorsData as any[]).map((v: any) => ({ id: v.id, company_name: v.company_name })));
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { data: rawJobs = [], isLoading } = useGetJobsQuery();
+  const { data: usersData = [] } = useGetUsersQuery(undefined, { skip: !canManageRecruiters });
+  const { data: vendorsData = [] } = useGetVendorsQuery(undefined, { skip: !canManageVendors });
+  const [updateJob] = useUpdateJobMutation();
+
+  const jobs = rawJobs as unknown as AssignedJob[];
+  const recruiters: RecruiterInfo[] = usersData
+    .filter((u) => u.role === "recruiter")
+    .map((u) => ({ id: u.id, full_name: u.full_name || u.email, email: u.email }));
+  const vendors: VendorInfo[] = (vendorsData as any[]).map((v) => ({ id: v.id, company_name: v.company_name }));
 
   const removeRecruiter = async (jobId: string, recruiterId: string) => {
     const job = jobs.find((j) => j.id === jobId);
@@ -69,8 +63,7 @@ export default function AssignedJDsPage() {
     setRemoving(key);
     try {
       const newIds = (job.assigned_recruiter_ids ?? []).filter((id) => id !== recruiterId);
-      await api.patch(`/jobs/${jobId}`, { assigned_recruiter_ids: newIds });
-      setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, assigned_recruiter_ids: newIds } : j));
+      await updateJob({ id: jobId, body: { assigned_recruiter_ids: newIds } }).unwrap();
     } catch (err) { console.error("Failed to remove recruiter assignment:", err); }
     finally { setRemoving(null); }
   };
@@ -82,8 +75,7 @@ export default function AssignedJDsPage() {
     setRemoving(key);
     try {
       const newIds = (job.assigned_vendor_ids ?? []).filter((id) => id !== vendorId);
-      await api.patch(`/jobs/${jobId}`, { assigned_vendor_ids: newIds });
-      setJobs((prev) => prev.map((j) => j.id === jobId ? { ...j, assigned_vendor_ids: newIds } : j));
+      await updateJob({ id: jobId, body: { assigned_vendor_ids: newIds } }).unwrap();
     } catch (err) { console.error("Failed to remove vendor assignment:", err); }
     finally { setRemoving(null); }
   };
@@ -145,7 +137,7 @@ export default function AssignedJDsPage() {
         </div>
 
         {/* Table */}
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
             <Loader2 size={18} className="animate-spin" />
             <span className="text-sm">Loading assignments…</span>

@@ -1,5 +1,6 @@
 import React from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAppSelector } from '../../hooks/useAppSelector';
+import { selectCurrentUser } from '../../store/slices/authSlice';
 
 interface HeaderProps {
   title: string;
@@ -8,7 +9,7 @@ interface HeaderProps {
 }
 
 export default function Header({ title, subtitle, actions }: HeaderProps) {
-  const { profile } = useAuth();
+  const profile = useAppSelector(selectCurrentUser);
 
   return (
     <header className="px-4 sm:px-6 lg:px-10 py-6 sm:py-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-[#fff5ec] border-b border-[#e8d4c2]">
@@ -24,13 +25,13 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
       </div>
       <div className="flex w-full lg:w-auto flex-wrap items-center gap-3 sm:gap-4">
         {actions}
-        
+
         <div className="flex items-center gap-3 pl-4 border-l border-[#e8d4c2] ml-2">
           <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm border border-white/50 bg-white">
             {profile?.avatar_url ? (
-              <img 
-                src={profile.avatar_url} 
-                alt="Profile" 
+              <img
+                src={profile.avatar_url}
+                alt="Profile"
                 className="w-full h-full object-cover"
               />
             ) : (

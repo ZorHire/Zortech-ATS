@@ -1,23 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Users, Clock, Target, Award, ArrowUp, ArrowDown, Download } from 'lucide-react';
+import { Users, Clock, Target, Award, Download } from 'lucide-react';
 import Header from '../components/layout/Header';
-import api from '../lib/api';
-
-interface FunnelRow { stage: string; count: number; conv: number }
-interface SourceRow { source: string; count: number }
-interface MonthlyRow { label: string; count: number }
-interface RecruiterRow { recruiter_name: string; assigned_jobs: number; candidates_sourced: number; shortlisted: number; submitted: number; placements: number }
-interface VendorRow { name: string; rate: number; submits: number }
-interface Summary { total_candidates: number; active_jobs: number; total_placements: number; pending_offers: number; offer_accept_rate: number | null }
-
-interface AnalyticsData {
-  funnel: FunnelRow[];
-  sources: SourceRow[];
-  monthly: MonthlyRow[];
-  recruiters: RecruiterRow[];
-  vendors: VendorRow[];
-  summary: Summary;
-}
+import { useGetAnalyticsQuery } from '../store/api/analyticsApi';
 
 const SOURCE_COLORS: Record<string, string> = {
   linkedin: '#2563eb', indeed: '#f97316', naukri: '#16a34a',
@@ -87,15 +70,7 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
 }
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.get('/admin/analytics')
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading } = useGetAnalyticsQuery();
 
   const handleExportReport = () => {
     window.open(`${import.meta.env.VITE_API_URL || '/v1'}/admin/analytics/export`, '_blank');
@@ -120,7 +95,7 @@ export default function AnalyticsPage() {
     color: SOURCE_COLORS[s.source] ?? '#94a3b8',
   }));
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header title="Analytics & Reports" subtitle="Real-time recruitment performance insights" />

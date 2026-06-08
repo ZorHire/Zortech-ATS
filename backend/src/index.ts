@@ -14,10 +14,6 @@ import adminRoutes from "./modules/admin/admin.routes";
 import pipelineRoutes from "./modules/pipeline/pipeline.routes";
 import emailRoutes from "./modules/email/email.routes";
 import parseRoutes from "./routes/parse.routes";
-import billingRoutes from "./modules/billing/billing.routes";
-import dashboardRoutes from "./modules/dashboard/dashboard.routes";
-import campaignRoutes from "./modules/email/campaigns.routes";
-import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 
 const app = express();
 const port = env.PORT;
@@ -31,11 +27,9 @@ fs.mkdirSync(uploadsPath, { recursive: true });
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "https://zorhire.zortechs.in",
-  "http://zorhire.zortechs.in",
-  /\.run\.app$/,           // any Cloud Run frontend
-  /\.web\.app$/,           // Firebase Hosting
-  /\.firebaseapp\.com$/,   // Firebase Hosting alt
+  /\.run\.app$/, // any Cloud Run frontend
+  /\.web\.app$/, // Firebase Hosting
+  /\.firebaseapp\.com$/, // Firebase Hosting alt
 ];
 app.use(
   cors({
@@ -80,10 +74,6 @@ v1Router.use("/vendors", vendorRoutes);
 v1Router.use("/admin", adminRoutes);
 v1Router.use("/pipeline", pipelineRoutes);
 v1Router.use("/email", emailRoutes);
-v1Router.use("/billing", billingRoutes);
-v1Router.use("/dashboard", dashboardRoutes);
-v1Router.use("/email-campaigns", campaignRoutes);
-v1Router.use("/onboarding", onboardingRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);
