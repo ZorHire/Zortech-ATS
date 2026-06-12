@@ -161,6 +161,27 @@ export async function getUserTransporter(userId: string): Promise<{
   };
 }
 
+export async function getTenantTransporter(tenantId: string): Promise<{
+  transporter: nodemailer.Transporter;
+  fromEmail: string;
+} | null> {
+  const result = await pool.query(
+    `SELECT email, encrypted_password, provider
+     FROM tenant_email_config
+     WHERE tenant_id = $1 AND is_active = true LIMIT 1`,
+    [tenantId],
+  );
+  if (result.rows.length === 0) return null;
+  const { email, encrypted_password, provider } = result.rows[0];
+  try {
+    const password = decrypt(encrypted_password);
+    return { transporter: buildTransporter(email, password, provider), fromEmail: email };
+  } catch (err: any) {
+    console.error("getTenantTransporter decrypt error:", err.message);
+    return null;
+  }
+}
+
 // ─── GET /email/config ────────────────────────────────────────────────────────
 
 export const getEmailConfig = async (req: AuthRequest, res: Response) => {

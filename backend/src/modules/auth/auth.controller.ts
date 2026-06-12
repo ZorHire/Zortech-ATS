@@ -7,6 +7,7 @@ import env from "../../config/env";
 import { withCache, invalidate } from "../../lib/cache";
 import redis from "../../lib/redis";
 import { AuthRequest } from "../../middleware/auth";
+import { getTenantTransporter } from "../email/email.controller";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -99,8 +100,14 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+const ALLOWED_REGISTRATION_ROLES = new Set(['recruiter', 'vendor_user']);
+
 export const register = async (req: Request, res: Response) => {
   const { email, password, full_name, role = 'recruiter' } = req.body;
+
+  if (!ALLOWED_REGISTRATION_ROLES.has(role)) {
+    return res.status(400).json({ message: "Invalid role. Allowed: recruiter, vendor_user." });
+  }
 
   try {
     // Check if user already exists
@@ -158,27 +165,100 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
-export const resetPassword = async (req: Request, res: Response) => {
-  const { email, newPassword } = req.body;
-  if (!email || !newPassword) {
-    return res.status(400).json({ message: "Email and new password are required." });
-  }
-  if (newPassword.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters." });
-  }
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  // Always respond generically — never reveal whether the email is registered
+  const respond = () =>
+    res.json({ message: "If that email is registered, a reset link has been sent." });
+
   try {
     const userResult = await pool.query(
       "SELECT id FROM users WHERE email = $1 AND is_active = true",
       [email.trim().toLowerCase()],
     );
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: "No active account found with that email." });
+
+    if (userResult.rows.length === 0) return respond();
+
+    const userId = userResult.rows[0].id;
+    const token = crypto.randomBytes(32).toString("hex");
+
+    // Store token in Redis with a 15-minute TTL
+    await redis.setex(`pwd_reset:${token}`, 900, userId);
+
+    const resetLink = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+
+    // Try to deliver via tenant SMTP; silently degrade if none is configured
+    try {
+      const memberResult = await pool.query(
+        "SELECT tenant_id FROM tenant_memberships WHERE user_id = $1 AND is_active = true LIMIT 1",
+        [userId],
+      );
+
+      if (memberResult.rows.length > 0) {
+        const mailer = await getTenantTransporter(memberResult.rows[0].tenant_id);
+        if (mailer) {
+          await mailer.transporter.sendMail({
+            from: mailer.fromEmail,
+            to: email.trim().toLowerCase(),
+            subject: "Reset your ZorHire password",
+            html: `<p>You requested a password reset for your ZorHire account.</p>
+<p><a href="${resetLink}">Click here to reset your password</a></p>
+<p>This link expires in 15 minutes. If you didn't request this, you can safely ignore this email.</p>`,
+          });
+        } else if (env.NODE_ENV !== "production") {
+          console.log(`[DEV] Password reset link for ${email}: ${resetLink}`);
+        }
+      }
+    } catch (emailErr) {
+      // Email failure must not expose user existence or block the generic response
+      console.error("Password reset email error:", emailErr);
     }
+
+    return respond();
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    return respond();
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { token, newPassword } = req.body;
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+
+  try {
+    // Validate the one-time token from Redis
+    const userId = await redis.get(`pwd_reset:${token}`);
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired reset link. Please request a new one." });
+    }
+
+    const userResult = await pool.query(
+      "SELECT id FROM users WHERE id = $1 AND is_active = true",
+      [userId],
+    );
+
+    if (userResult.rows.length === 0) {
+      await redis.del(`pwd_reset:${token}`);
+      return res
+        .status(400)
+        .json({ message: "Invalid or expired reset link. Please request a new one." });
+    }
+
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query(
       "UPDATE users SET password = $1, must_change_password = false, updated_at = now() WHERE id = $2",
-      [hashedPassword, userResult.rows[0].id],
+      [hashedPassword, userId],
     );
+
+    // Delete token so it can only be used once
+    await redis.del(`pwd_reset:${token}`);
+
     res.json({ message: "Password reset successfully." });
   } catch (error) {
     console.error("Reset password error:", error);
