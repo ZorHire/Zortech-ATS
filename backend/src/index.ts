@@ -13,6 +13,10 @@ import vendorRoutes from "./modules/vendors/vendors.routes";
 import adminRoutes from "./modules/admin/admin.routes";
 import pipelineRoutes from "./modules/pipeline/pipeline.routes";
 import emailRoutes from "./modules/email/email.routes";
+import billingRoutes from "./modules/billing/billing.routes";
+import dashboardRoutes from "./modules/dashboard/dashboard.routes";
+import campaignRoutes from "./modules/email/campaigns.routes";
+import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import parseRoutes from "./routes/parse.routes";
 
 const app = express();
@@ -74,6 +78,10 @@ v1Router.use("/vendors", vendorRoutes);
 v1Router.use("/admin", adminRoutes);
 v1Router.use("/pipeline", pipelineRoutes);
 v1Router.use("/email", emailRoutes);
+v1Router.use("/billing", billingRoutes);
+v1Router.use("/dashboard", dashboardRoutes);
+v1Router.use("/email-campaigns", campaignRoutes);
+v1Router.use("/onboarding", onboardingRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);

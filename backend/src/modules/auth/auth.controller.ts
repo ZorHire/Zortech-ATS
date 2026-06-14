@@ -133,8 +133,8 @@ export const register = async (req: Request, res: Response) => {
 
     // Create profile
     await pool.query(
-      "INSERT INTO profiles (id, full_name) VALUES ($1, $2)",
-      [userId, full_name],
+      "INSERT INTO profiles (id, email, full_name) VALUES ($1, $2, $3)",
+      [userId, email, full_name],
     );
 
     // Get or create default tenant
@@ -146,8 +146,8 @@ export const register = async (req: Request, res: Response) => {
     
     if (!tenantId) {
       const newTenant = await pool.query(
-        "INSERT INTO tenants (name) VALUES ($1) RETURNING id",
-        ['Default']
+        "INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id",
+        ['Default', 'default']
       );
       tenantId = newTenant.rows[0].id;
     }
