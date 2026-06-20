@@ -6,6 +6,7 @@ import {
   Mail,
   Phone,
   Plus,
+  Upload,
   UserCheck,
   ChevronDown,
   X,
@@ -37,6 +38,7 @@ import CandidateModal from "../components/candidates/CandidateModal";
 import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
 import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
+import BulkResumeUploadModal from "../components/bulk/BulkResumeUploadModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -170,6 +172,7 @@ export default function CandidatesPage() {
 
   const [selectedJobId, setSelectedJobId] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "", last_name: "", email: "", phone: "",
     current_title: "", current_company: "", experience_years: 0,
@@ -299,12 +302,20 @@ export default function CandidatesPage() {
         title="Candidates"
         subtitle={`${candidates.length} total candidates · ${selectedIds.size > 0 ? `${selectedIds.size} selected` : "0 selected"}`}
         actions={
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm"
-          >
-            <Plus size={15} /> Add Candidate
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsBulkUploadOpen(true)}
+              className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all shadow-sm"
+            >
+              <Upload size={15} /> Bulk Upload
+            </button>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm"
+            >
+              <Plus size={15} /> Add Candidate
+            </button>
+          </div>
         }
       />
 
@@ -620,6 +631,13 @@ export default function CandidatesPage() {
           onClose={() => setViewingCandidate(null)}
           onUpdate={(updated) => { setViewingCandidate(updated); refetch(); }}
           onDelete={handleDelete}
+        />
+      )}
+
+      {isBulkUploadOpen && (
+        <BulkResumeUploadModal
+          onClose={() => setIsBulkUploadOpen(false)}
+          onSuccess={() => refetch()}
         />
       )}
 

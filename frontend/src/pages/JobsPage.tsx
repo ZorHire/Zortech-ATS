@@ -3,7 +3,7 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { selectCurrentUser } from "../store/slices/authSlice";
 import {
   Plus, Search, MapPin, Users, ChevronDown, Briefcase,
-  Building2, X, TrendingUp, MoreHorizontal, Trash2, Eye,
+  Building2, X, Upload, TrendingUp, MoreHorizontal, Trash2, Eye,
   ChevronLeft, ChevronRight, Layers,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -22,6 +22,7 @@ import {
 import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
 import ClientInfoModal from "../components/clients/ClientInfoModal";
 import ClientDetailModal from "../components/clients/ClientDetailModal";
+import BulkJdUploadModal from "../components/bulk/BulkJdUploadModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -190,6 +191,7 @@ export default function JobsPage() {
   const [viewingClient, setViewingClient] = useState<any | null>(null);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isBulkJdUploadOpen, setIsBulkJdUploadOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "", client_id: "", department: "", location: "",
     work_mode: "onsite" as const, employment_type: "full_time",
@@ -284,6 +286,10 @@ export default function JobsPage() {
             <button onClick={() => setIsClientInfoOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-bold hover:bg-violet-700 transition-all">
               <Building2 size={15} /> Add Client
+            </button>
+            <button onClick={() => setIsBulkJdUploadOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all">
+              <Upload size={15} /> Bulk Upload
             </button>
             <button onClick={() => setIsAddModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#111111] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all">
@@ -486,6 +492,12 @@ export default function JobsPage() {
       {isPipelineSelectorOpen && <PipelineJobSelector jobs={jobs} onClose={() => setIsPipelineSelectorOpen(false)} />}
       {isClientInfoOpen && <ClientInfoModal onClose={() => setIsClientInfoOpen(false)} onSuccess={refetchClients} />}
       {viewingClient && <ClientDetailModal client={viewingClient} onClose={() => setViewingClient(null)} />}
+      {isBulkJdUploadOpen && (
+        <BulkJdUploadModal
+          onClose={() => setIsBulkJdUploadOpen(false)}
+          onSuccess={() => {}}
+        />
+      )}
 
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">

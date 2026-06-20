@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Plus,
+  Upload,
   Search,
   Mail,
   Users,
@@ -18,6 +19,7 @@ import {
   ClipboardList,
   Loader2,
 } from "lucide-react";
+import BulkVendorUploadModal from "../components/bulk/BulkVendorUploadModal";
 import Header from "../components/layout/Header";
 import { Vendor } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
@@ -763,6 +765,7 @@ export default function VendorsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
+  const [showBulkVendorUpload, setShowBulkVendorUpload] = useState(false);
   const [showAssignJd, setShowAssignJd] = useState(false);
   const [vendorFile, setVendorFile] = useState<File | null>(null);
   const [vendorParseMessage, setVendorParseMessage] = useState("");
@@ -964,6 +967,13 @@ export default function VendorsPage() {
               Assign JD
             </button>
             <button
+              onClick={() => setShowBulkVendorUpload(true)}
+              className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Upload size={16} />
+              Bulk Import
+            </button>
+            <button
               onClick={() => setShowAddVendor(true)}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
@@ -1124,6 +1134,13 @@ export default function VendorsPage() {
       </div>
 
       {emailToast && <EmailToast {...emailToast} />}
+
+      {showBulkVendorUpload && (
+        <BulkVendorUploadModal
+          onClose={() => setShowBulkVendorUpload(false)}
+          onSuccess={() => {}}
+        />
+      )}
 
       {showAssignJd && (
         <AssignJdModal
