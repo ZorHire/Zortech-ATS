@@ -48,6 +48,13 @@ export const baseApi = createApi({
     "Companies",
     "Clients",
     "Tenants",
+    "VendorPortalJobs",
+    "VendorSubmissions",
+    "VendorProfile",
+    "ClientPortalJobs",
+    "ClientPortalCandidates",
+    "ClientProfile",
+    "ClientUsers",
   ],
   endpoints: () => ({}),
 });

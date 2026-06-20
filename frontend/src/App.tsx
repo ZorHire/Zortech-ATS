@@ -40,12 +40,22 @@ import PricingPage from "./pages/PricingPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import AssignedJDsPage from "./pages/AssignedJDsPage";
+import VendorPortalJobsPage from "./pages/vendor-portal/VendorPortalJobsPage";
+import VendorPortalSubmissionsPage from "./pages/vendor-portal/VendorPortalSubmissionsPage";
+import ClientPortalJobsPage from "./pages/client-portal/ClientPortalJobsPage";
+import ClientCandidatesPage from "./pages/client-portal/ClientCandidatesPage";
 
-// vendor_user may access /jobs, /jobs/:id, and /pipeline/:jobId
-const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline"];
+// vendor_user may access /jobs, /jobs/:id, /pipeline/:jobId, and /vendor-portal/*
+const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline", "/vendor-portal"];
+
+// client_user may only access /client-portal/*
+const CLIENT_ALLOWED_PREFIXES = ["/client-portal"];
 
 // These paths are accessible even when subscription is blocked/expired
 const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription", "/onboarding"];
+
+// Portal paths bypass the subscription gate — portal users don't control the subscription
+const PORTAL_PREFIXES = ["/vendor-portal", "/client-portal"];
 
 // Replaces the old AuthSyncer+AuthProvider bridge.
 // Calls /auth/me on load (if JWT exists) and populates Redux auth state.
@@ -127,21 +137,36 @@ function ProtectedRoute({
     return <ChangePasswordPage />;
   }
 
-  // Gate 2: vendor_user is restricted to jobs and pipeline only
+  // Gate 2a: vendor_user is restricted to jobs, pipeline, and vendor portal
   if (user.role === "vendor_user" && path) {
     const allowed = VENDOR_ALLOWED_PREFIXES.some(
       (p: string) => path === p || path.startsWith(p + "/")
     );
-    if (!allowed) return <Navigate to="/jobs" replace />;
+    if (!allowed) return <Navigate to="/vendor-portal/jobs" replace />;
+  }
+
+  // Gate 2b: client_user is restricted to client portal only
+  if (user.role === "client_user" && path) {
+    const allowed = CLIENT_ALLOWED_PREFIXES.some(
+      (p: string) => path === p || path.startsWith(p + "/")
+    );
+    if (!allowed) return <Navigate to="/client-portal/jobs" replace />;
   }
 
   // Gate 3: subscription gate — blocks onboarding companies with no active/trial plan.
   // Platform owner (ZorTech) always passes. null means still loading → fail open.
-  const isSubscriptionExempt = path
-    ? SUBSCRIPTION_EXEMPT_PATHS.some(
-        (p) => path === p || path.startsWith(p + "/")
-      )
+  // Portal paths are also exempt — portal users don't manage subscription.
+  const isPortalPath = path
+    ? PORTAL_PREFIXES.some((p) => path === p || path.startsWith(p + "/"))
     : false;
+
+  const isSubscriptionExempt =
+    isPortalPath ||
+    (path
+      ? SUBSCRIPTION_EXEMPT_PATHS.some(
+          (p) => path === p || path.startsWith(p + "/")
+        )
+      : false);
 
   if (
     !isSubscriptionExempt &&
@@ -312,6 +337,42 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Vendor Self-Service Portal */}
+      <Route
+        path="/vendor-portal/jobs"
+        element={
+          <ProtectedRoute path="/vendor-portal/jobs" noLayout>
+            <VendorPortalJobsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendor-portal/submissions"
+        element={
+          <ProtectedRoute path="/vendor-portal/submissions" noLayout>
+            <VendorPortalSubmissionsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Client Portal */}
+      <Route
+        path="/client-portal/jobs"
+        element={
+          <ProtectedRoute path="/client-portal/jobs" noLayout>
+            <ClientPortalJobsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client-portal/jobs/:jobId/candidates"
+        element={
+          <ProtectedRoute path="/client-portal/jobs/:jobId/candidates" noLayout>
+            <ClientCandidatesPage />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="*"
         element={<Navigate to={user ? "/" : "/subscribe"} replace />}
