@@ -23,6 +23,8 @@ import clientPortalRoutes from "./modules/client-portal/client-portal.routes";
 import jdLifecycleRoutes from "./modules/jd-lifecycle/jd-lifecycle.routes";
 import interviewRoutes from "./modules/interviews/interviews.routes";
 import offersRoutes from "./modules/offers/offers.routes";
+import profileRoutes from "./modules/profiles/profiles.routes";
+import notificationRoutes from "./modules/notifications/notifications.routes";
 
 const app = express();
 const port = env.PORT;
@@ -92,6 +94,8 @@ v1Router.use("/client-portal", clientPortalRoutes);
 v1Router.use("/jd-lifecycle", jdLifecycleRoutes);
 v1Router.use("/interviews", interviewRoutes);
 v1Router.use("/offers", offersRoutes);
+v1Router.use("/profile", profileRoutes);
+v1Router.use("/notifications", notificationRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);

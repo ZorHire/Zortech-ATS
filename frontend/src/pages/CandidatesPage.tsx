@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Building2,
@@ -14,6 +15,7 @@ import {
   Eye,
   Trash2,
   MoreHorizontal,
+  ExternalLink,
   Users,
   TrendingUp,
   TrendingDown,
@@ -81,9 +83,9 @@ function StatusBadge({ active }: { active: boolean }) {
 // ─── Row action menu ──────────────────────────────────────────────────────────
 
 function RowMenu({
-  onView, onEmail, onDelete,
+  onView, onEmail, onDelete, onViewFull,
 }: {
-  onView: () => void; onEmail: () => void; onDelete: () => void;
+  onView: () => void; onEmail: () => void; onDelete: () => void; onViewFull?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -101,10 +103,15 @@ function RowMenu({
         {open && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1">
+            <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1">
               <button onClick={() => { setOpen(false); onView(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <Eye size={12} /> View Profile
               </button>
+              {onViewFull && (
+                <button onClick={() => { setOpen(false); onViewFull(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+                  <ExternalLink size={12} /> Full Profile
+                </button>
+              )}
               <button onClick={() => { setOpen(false); onEmail(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
                 <Mail size={12} /> Send Email
               </button>
@@ -149,6 +156,7 @@ function StatCard({ icon: Icon, label, value, color, bg, trend }: {
 const PAGE_SIZE = 10;
 
 export default function CandidatesPage() {
+  const navigate = useNavigate();
   const profile = useAppSelector(selectCurrentUser);
   const isVendor = profile?.role === "vendor_user" || profile?.role === "vendor_manager";
   const isRecruiter = profile?.role === "recruiter";
@@ -494,6 +502,7 @@ export default function CandidatesPage() {
                             onView={() => setViewingCandidate(candidate)}
                             onEmail={() => setComposeTarget(candidate)}
                             onDelete={() => handleDelete(candidate.id)}
+                            onViewFull={() => navigate(`/candidates/${candidate.id}`)}
                           />
                         </td>
                       </tr>

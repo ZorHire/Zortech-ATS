@@ -61,6 +61,8 @@ export const baseApi = createApi({
     "VendorScorecard",
     "Interviews",
     "Offers",
+    "Profile",
+    "Notifications",
   ],
   endpoints: () => ({}),
 });

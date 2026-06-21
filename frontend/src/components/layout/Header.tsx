@@ -1,6 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentUser } from '../../store/slices/authSlice';
+import NotificationBell from '../ui/NotificationBell';
 
 interface HeaderProps {
   title: string;
@@ -26,7 +28,9 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
       <div className="flex w-full lg:w-auto flex-wrap items-center gap-3 sm:gap-4">
         {actions}
 
-        <div className="flex items-center gap-3 pl-4 border-l border-[#e8d4c2] ml-2">
+        <NotificationBell />
+
+        <Link to="/profile" className="flex items-center gap-3 pl-4 border-l border-[#e8d4c2] ml-2 hover:opacity-80 transition-opacity">
           <div className="w-9 h-9 rounded-xl overflow-hidden shadow-sm border border-white/50 bg-white">
             {profile?.avatar_url ? (
               <img
@@ -52,7 +56,7 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
               Online
             </p>
           </div>
-        </div>
+        </Link>
       </div>
     </header>
   );

@@ -43,6 +43,8 @@ import AssignedJDsPage from "./pages/AssignedJDsPage";
 import InterviewsPage from "./pages/InterviewsPage";
 import OffersPage from "./pages/OffersPage";
 import ReportsPage from "./pages/ReportsPage";
+import ProfilePage from "./pages/ProfilePage";
+import CandidateDetailPage from "./pages/CandidateDetailPage";
 import VendorPortalJobsPage from "./pages/vendor-portal/VendorPortalJobsPage";
 import VendorPortalSubmissionsPage from "./pages/vendor-portal/VendorPortalSubmissionsPage";
 import ClientPortalJobsPage from "./pages/client-portal/ClientPortalJobsPage";
@@ -261,6 +263,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/candidates/:id"
+        element={
+          <ProtectedRoute path="/candidates/:id">
+            <CandidateDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/vendors"
         element={
           <ProtectedRoute path="/vendors">
@@ -353,6 +363,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/reports">
             <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute path="/profile">
+            <ProfilePage />
           </ProtectedRoute>
         }
       />

@@ -434,6 +434,51 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ─── timeline ───────────────────────────────────────────────────────────────
+
+export const getCandidateTimeline = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT
+         ja.id,
+         ja.stage,
+         ja.notes,
+         ja.ai_score,
+         ja.created_at,
+         ja.updated_at,
+         j.id        AS job_id,
+         j.title     AS job_title,
+         j.location  AS job_location,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'id',               i.id,
+               'type',             i.interview_type,
+               'scheduled_at',     i.scheduled_at,
+               'status',           i.status,
+               'interviewer_name', i.interviewer_name,
+               'duration_minutes', i.duration_minutes
+             ) ORDER BY i.scheduled_at
+           ) FILTER (WHERE i.id IS NOT NULL),
+           '[]'
+         ) AS interviews
+       FROM job_applications ja
+       JOIN jobs j ON j.id = ja.job_id
+       LEFT JOIN interviews i ON i.application_id = ja.id
+       WHERE ja.candidate_id = $1 AND ja.tenant_id = $2
+       GROUP BY ja.id, j.id
+       ORDER BY ja.created_at DESC`,
+      [id, tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get candidate timeline error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 // ─── export ─────────────────────────────────────────────────────────────────
 
 export const exportCandidates = async (req: AuthRequest, res: Response) => {

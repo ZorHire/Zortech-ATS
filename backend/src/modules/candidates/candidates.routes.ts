@@ -30,6 +30,12 @@ router.get(
   candidateController.getCandidates,
 );
 router.get(
+  "/:id/pipeline",
+  authMiddleware,
+  tenantIsolation,
+  candidateController.getCandidateTimeline,
+);
+router.get(
   "/:id",
   authMiddleware,
   tenantIsolation,

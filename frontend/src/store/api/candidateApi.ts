@@ -1,6 +1,28 @@
 import { baseApi } from "./baseApi";
 import type { Candidate } from "../../types";
 
+export interface InterviewEntry {
+  id: string;
+  type: string;
+  scheduled_at: string;
+  status: string;
+  interviewer_name?: string;
+  duration_minutes?: number;
+}
+
+export interface ApplicationEntry {
+  id: string;
+  stage: string;
+  notes?: string;
+  ai_score?: number;
+  created_at: string;
+  updated_at: string;
+  job_id: string;
+  job_title: string;
+  job_location?: string;
+  interviews: InterviewEntry[];
+}
+
 export interface SearchFilters {
   location: string;
   experience: string;
@@ -31,6 +53,16 @@ export const candidateApi = baseApi.injectEndpoints({
     getCandidates: builder.query<Candidate[], void>({
       query: () => "/candidates",
       providesTags: ["Candidates"],
+    }),
+
+    getCandidateById: builder.query<Candidate, string>({
+      query: (id) => `/candidates/${id}`,
+      providesTags: (_result, _err, id) => [{ type: "Candidate", id }],
+    }),
+
+    getCandidateTimeline: builder.query<ApplicationEntry[], string>({
+      query: (id) => `/candidates/${id}/pipeline`,
+      providesTags: (_result, _err, id) => [{ type: "Candidate", id }],
     }),
 
     createCandidate: builder.mutation<Candidate, FormData>({
@@ -80,6 +112,8 @@ export const candidateApi = baseApi.injectEndpoints({
 
 export const {
   useGetCandidatesQuery,
+  useGetCandidateByIdQuery,
+  useGetCandidateTimelineQuery,
   useCreateCandidateMutation,
   useDeleteCandidateMutation,
   useParseResumeMutation,
