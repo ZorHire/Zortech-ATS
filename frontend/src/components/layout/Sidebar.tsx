@@ -16,6 +16,8 @@ import {
   Rocket,
   Network,
   ClipboardList,
+  CalendarDays,
+  TrendingUp,
 } from "lucide-react";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
@@ -84,6 +86,18 @@ const navItems = [
     label: "JD Assignments",
     path: "/assigned-jds",
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
+  },
+  {
+    icon: CalendarDays,
+    label: "Interviews",
+    path: "/interviews",
+    roles: ["super_admin", "accounts_manager", "recruiter"],
+  },
+  {
+    icon: TrendingUp,
+    label: "Offers",
+    path: "/offers",
+    roles: ["super_admin", "accounts_manager", "recruiter"],
   },
   {
     icon: BarChart3,

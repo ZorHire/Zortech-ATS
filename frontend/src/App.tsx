@@ -40,6 +40,8 @@ import PricingPage from "./pages/PricingPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import AssignedJDsPage from "./pages/AssignedJDsPage";
+import InterviewsPage from "./pages/InterviewsPage";
+import OffersPage from "./pages/OffersPage";
 import VendorPortalJobsPage from "./pages/vendor-portal/VendorPortalJobsPage";
 import VendorPortalSubmissionsPage from "./pages/vendor-portal/VendorPortalSubmissionsPage";
 import ClientPortalJobsPage from "./pages/client-portal/ClientPortalJobsPage";
@@ -326,6 +328,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/assigned-jds">
             <AssignedJDsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/interviews"
+        element={
+          <ProtectedRoute path="/interviews">
+            <InterviewsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/offers"
+        element={
+          <ProtectedRoute path="/offers">
+            <OffersPage />
           </ProtectedRoute>
         }
       />
