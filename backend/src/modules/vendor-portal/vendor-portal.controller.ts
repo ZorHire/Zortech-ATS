@@ -1,6 +1,7 @@
 import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { refreshVendorMetrics } from "../vendors/vendors.controller";
 
 // ── Helper: resolve vendor_id for the logged-in vendor_user ─────────────────
 async function getVendorId(userId: string): Promise<string | null> {
@@ -213,6 +214,11 @@ export const submitCandidate = async (req: AuthRequest, res: Response) => {
       candidate_id: candidateId,
       application_id: applicationId,
     });
+
+    // Refresh vendor metrics in the background — non-blocking
+    refreshVendorMetrics(vendorId, tenantId as string).catch((err) =>
+      console.error("refreshVendorMetrics error:", err),
+    );
   } catch (error) {
     console.error("Vendor portal submitCandidate error:", error);
     res.status(500).json({ message: "Internal server error" });

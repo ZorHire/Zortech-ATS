@@ -37,4 +37,12 @@ router.delete(
   vendorController.deleteVendor,
 );
 
+router.get(
+  "/:id/scorecard",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager", "vendor_manager"]),
+  vendorController.getVendorScorecard,
+);
+
 export default router;

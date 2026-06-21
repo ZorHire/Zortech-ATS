@@ -58,6 +58,7 @@ export const baseApi = createApi({
     "JobApproval",
     "JobVersions",
     "PendingApprovals",
+    "VendorScorecard",
   ],
   endpoints: () => ({}),
 });

@@ -18,6 +18,8 @@ import {
   Trash2,
   ClipboardList,
   Loader2,
+  Pencil,
+  BarChart2,
 } from "lucide-react";
 import BulkVendorUploadModal from "../components/bulk/BulkVendorUploadModal";
 import Header from "../components/layout/Header";
@@ -29,8 +31,10 @@ import { selectCurrentUser } from "../store/slices/authSlice";
 import {
   useGetVendorsQuery,
   useCreateVendorMutation,
+  useUpdateVendorMutation,
   useDeleteVendorMutation,
   useParseVendorMutation,
+  useGetVendorScorecardQuery,
 } from "../store/api/vendorApi";
 import { useGetJobsQuery, useUpdateJobMutation } from "../store/api/jobApi";
 import { useGetUsersQuery } from "../store/api/adminApi";
@@ -472,19 +476,29 @@ function AssignJdModal({
   );
 }
 
+const stageLabel: Record<string, string> = {
+  new: "New", screening: "Screening", interview: "Interview",
+  shortlisted: "Shortlisted", offered: "Offered", hired: "Hired", rejected: "Rejected",
+};
+
 function VendorDetailModal({
   vendor,
   onClose,
   onSendEmail,
   emailSending,
+  onEdit,
 }: {
   vendor: Vendor;
   onClose: () => void;
   onSendEmail: (email: string) => void;
   emailSending: boolean;
+  onEdit: (v: Vendor) => void;
 }) {
   const tier = tierConfig[vendor.tier];
   const TierIcon = tier.icon;
+  const { data: scorecard } = useGetVendorScorecardQuery(vendor.id);
+
+  const metrics = scorecard ?? vendor;
 
   return (
     <div
@@ -615,28 +629,26 @@ function VendorDetailModal({
             </div>
           )}
 
-          {/* Performance metrics */}
+          {/* Performance metrics — live from scorecard when available */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <BarChart2 size={12} />
               Performance Metrics
+              {scorecard && (
+                <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Live</span>
+              )}
             </h3>
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="text-center p-3 bg-gray-50 rounded-xl">
-                <p className="text-xl font-bold text-gray-900">
-                  {vendor.submission_count}
-                </p>
+                <p className="text-xl font-bold text-gray-900">{metrics.submission_count}</p>
                 <p className="text-xs text-gray-400 mt-0.5">Submissions</p>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-xl">
-                <p className="text-xl font-bold text-gray-900">
-                  {vendor.shortlist_rate}%
-                </p>
+                <p className="text-xl font-bold text-gray-900">{metrics.shortlist_rate}%</p>
                 <p className="text-xs text-gray-400 mt-0.5">Shortlist Rate</p>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-xl">
-                <p className="text-xl font-bold text-gray-900">
-                  {vendor.fill_rate}%
-                </p>
+                <p className="text-xl font-bold text-gray-900">{metrics.fill_rate}%</p>
                 <p className="text-xs text-gray-400 mt-0.5">Fill Rate</p>
               </div>
             </div>
@@ -644,52 +656,89 @@ function VendorDetailModal({
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <span className="flex items-center gap-1">
-                    <TrendingUp size={12} />
-                    Quality Score
-                  </span>
-                  <span className="font-semibold text-gray-700">
-                    {vendor.quality_score}%
-                  </span>
+                  <span className="flex items-center gap-1"><TrendingUp size={12} />Quality Score</span>
+                  <span className="font-semibold text-gray-700">{metrics.quality_score}%</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      vendor.quality_score >= 80
-                        ? "bg-emerald-500"
-                        : vendor.quality_score >= 60
-                          ? "bg-amber-500"
-                          : "bg-red-400"
-                    }`}
-                    style={{ width: `${vendor.quality_score}%` }}
+                    className={`h-full rounded-full transition-all ${metrics.quality_score >= 80 ? "bg-emerald-500" : metrics.quality_score >= 60 ? "bg-amber-500" : "bg-red-400"}`}
+                    style={{ width: `${metrics.quality_score}%` }}
                   />
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 size={12} />
-                    SLA Adherence
-                  </span>
-                  <span className="font-semibold text-gray-700">
-                    {vendor.sla_adherence}%
-                  </span>
+                  <span className="flex items-center gap-1"><CheckCircle2 size={12} />SLA Adherence</span>
+                  <span className="font-semibold text-gray-700">{metrics.sla_adherence}%</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      vendor.sla_adherence >= 85
-                        ? "bg-blue-500"
-                        : vendor.sla_adherence >= 65
-                          ? "bg-amber-500"
-                          : "bg-red-400"
-                    }`}
-                    style={{ width: `${vendor.sla_adherence}%` }}
+                    className={`h-full rounded-full transition-all ${metrics.sla_adherence >= 85 ? "bg-blue-500" : metrics.sla_adherence >= 65 ? "bg-amber-500" : "bg-red-400"}`}
+                    style={{ width: `${metrics.sla_adherence}%` }}
                   />
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Job breakdown — only when scorecard loaded */}
+          {scorecard && scorecard.job_breakdown.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Job Breakdown
+              </h3>
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      {["Job", "Submitted", "Shortlisted", "Hired"].map((h) => (
+                        <th key={h} className="px-3 py-2.5 font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {scorecard.job_breakdown.map((row) => (
+                      <tr key={row.job_id} className="hover:bg-gray-50/60">
+                        <td className="px-3 py-2.5 font-medium text-gray-800 max-w-[180px] truncate">{row.title}</td>
+                        <td className="px-3 py-2.5 text-gray-600">{row.submissions}</td>
+                        <td className="px-3 py-2.5 text-amber-600 font-semibold">{row.shortlisted}</td>
+                        <td className="px-3 py-2.5 text-emerald-600 font-semibold">{row.hired}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Recent submissions */}
+          {scorecard && scorecard.recent_submissions.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Recent Submissions
+              </h3>
+              <ol className="space-y-2">
+                {scorecard.recent_submissions.map((s, i) => (
+                  <li key={i} className="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{s.candidate_full_name}</p>
+                      <p className="text-xs text-gray-400 truncate">{s.job_title}</p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      {s.pipeline_stage && (
+                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                          {stageLabel[s.pipeline_stage] ?? s.pipeline_stage}
+                        </span>
+                      )}
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {new Date(s.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
 
           {/* Specializations & Geographies */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -734,19 +783,158 @@ function VendorDetailModal({
 
         {/* Footer actions */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
-          <button
-            onClick={() => onSendEmail(vendor.primary_contact_email)}
-            disabled={emailSending}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            <Mail size={14} />
-            {emailSending ? "Sending…" : "Send Job"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onSendEmail(vendor.primary_contact_email)}
+              disabled={emailSending}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Mail size={14} />
+              {emailSending ? "Sending…" : "Send Job"}
+            </button>
+            <button
+              onClick={() => onEdit(vendor)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <Pencil size={14} />
+              Edit
+            </button>
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
           >
             Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditVendorModal({
+  vendor,
+  onClose,
+}: {
+  vendor: Vendor;
+  onClose: () => void;
+}) {
+  const [updateVendor, { isLoading: saving }] = useUpdateVendorMutation();
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    company_name: vendor.company_name,
+    registration_number: vendor.registration_number ?? "",
+    gst_id: vendor.gst_id ?? "",
+    primary_contact_name: vendor.primary_contact_name,
+    primary_contact_email: vendor.primary_contact_email,
+    primary_contact_phone: vendor.primary_contact_phone ?? "",
+    industry_specializations: vendor.industry_specializations.join(", "),
+    geographies: vendor.geographies.join(", "),
+    tier: vendor.tier as string,
+    is_active: vendor.is_active,
+  });
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await updateVendor({
+        id: vendor.id,
+        body: {
+          company_name: form.company_name,
+          registration_number: form.registration_number || null,
+          gst_id: form.gst_id || null,
+          primary_contact_name: form.primary_contact_name,
+          primary_contact_email: form.primary_contact_email,
+          primary_contact_phone: form.primary_contact_phone || null,
+          industry_specializations: form.industry_specializations.split(",").map((s) => s.trim()).filter(Boolean),
+          geographies: form.geographies.split(",").map((s) => s.trim()).filter(Boolean),
+          tier: form.tier,
+          is_active: form.is_active,
+        },
+      }).unwrap();
+      onClose();
+    } catch (err: any) {
+      setError(err?.data?.message ?? "Failed to save changes.");
+    }
+  };
+
+  const field = (label: string, key: keyof typeof form, placeholder?: string, type = "text") => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type={type}
+        value={form[key] as string}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+      />
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Pencil size={16} className="text-blue-600" />
+            <h2 className="text-base font-bold text-gray-900">Edit Vendor</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+          <div className="grid gap-4 md:grid-cols-2">
+            {field("Company Name", "company_name", "Staffing Agency Ltd")}
+            {field("Contact Name", "primary_contact_name", "Primary Contact")}
+            {field("Contact Email", "primary_contact_email", "contact@agency.com")}
+            {field("Contact Phone", "primary_contact_phone", "+91-XXXXXXXXXX")}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {field("Industry Specializations", "industry_specializations", "IT staffing, healthcare")}
+            {field("Geographies", "geographies", "India, UAE")}
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Tier</label>
+              <select
+                value={form.tier}
+                onChange={(e) => setForm((f) => ({ ...f, tier: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="standard">Standard</option>
+                <option value="preferred">Preferred</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </div>
+            {field("Registration Number", "registration_number", "123456789")}
+            {field("GST ID", "gst_id", "GSTIN")}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={form.is_active}
+              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+              className="w-4 h-4 rounded border-gray-300 accent-blue-600"
+            />
+            <label htmlFor="is_active" className="text-sm font-medium text-gray-700">Active vendor</label>
+          </div>
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">{error}</p>}
+        </form>
+
+        <div className="px-6 pb-6 pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : "Save Changes"}
           </button>
         </div>
       </div>
@@ -762,6 +950,7 @@ export default function VendorsPage() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [vendorToEdit, setVendorToEdit] = useState<Vendor | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
@@ -1158,6 +1347,14 @@ export default function VendorsPage() {
             sendEmail(email, { subject: "Job Opportunity from ZorHire" })
           }
           emailSending={emailSending}
+          onEdit={(v) => { setSelectedVendor(null); setVendorToEdit(v); }}
+        />
+      )}
+
+      {vendorToEdit && (
+        <EditVendorModal
+          vendor={vendorToEdit}
+          onClose={() => setVendorToEdit(null)}
         />
       )}
 
