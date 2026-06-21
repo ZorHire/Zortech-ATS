@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useAppDispatch, useAppSelector } from "../../hooks/useAppDispatch";
+import { useAppDispatch } from "../../hooks/useAppDispatch";
+import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectCurrentUser, clearCredentials } from "../../store/slices/authSlice";
 import { useLogoutMutation } from "../../store/api/authApi";
 import { useGetClientProfileQuery } from "../../store/api/clientPortalApi";
