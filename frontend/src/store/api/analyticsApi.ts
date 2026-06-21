@@ -48,10 +48,21 @@ export interface AnalyticsData {
   summary: AnalyticsSummary;
 }
 
+export interface AnalyticsFilters {
+  from?: string;
+  to?: string;
+}
+
 export const analyticsApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getAnalytics: builder.query<AnalyticsData, void>({
-      query: () => "/admin/analytics",
+    getAnalytics: builder.query<AnalyticsData, AnalyticsFilters | void>({
+      query: (filters) => {
+        const params = new URLSearchParams();
+        if (filters?.from) params.set("from", filters.from);
+        if (filters?.to) params.set("to", filters.to);
+        const qs = params.toString();
+        return `/admin/analytics${qs ? `?${qs}` : ""}`;
+      },
       providesTags: ["Analytics"],
     }),
   }),

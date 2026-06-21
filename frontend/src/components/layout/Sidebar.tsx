@@ -18,6 +18,7 @@ import {
   ClipboardList,
   CalendarDays,
   TrendingUp,
+  FileBarChart2,
 } from "lucide-react";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
@@ -104,6 +105,12 @@ const navItems = [
     label: "Analytics",
     path: "/analytics",
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
+  },
+  {
+    icon: FileBarChart2,
+    label: "Reports",
+    path: "/reports",
+    roles: ["super_admin", "accounts_manager"],
   },
   {
     icon: Settings,

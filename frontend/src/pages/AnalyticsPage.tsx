@@ -1,6 +1,31 @@
+import React from 'react';
 import { Users, Clock, Target, Award, Download } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { useGetAnalyticsQuery } from '../store/api/analyticsApi';
+
+type Preset = 'all' | '30d' | '90d' | '6m' | '1y';
+
+function getDateRange(preset: Preset): { from?: string; to?: string } {
+  if (preset === 'all') return {};
+  const to = new Date();
+  const from = new Date();
+  if (preset === '30d') from.setDate(from.getDate() - 30);
+  else if (preset === '90d') from.setDate(from.getDate() - 90);
+  else if (preset === '6m') from.setMonth(from.getMonth() - 6);
+  else if (preset === '1y') from.setFullYear(from.getFullYear() - 1);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
+}
+
+const PRESETS: { key: Preset; label: string }[] = [
+  { key: 'all', label: 'All Time' },
+  { key: '30d', label: '30 Days' },
+  { key: '90d', label: '90 Days' },
+  { key: '6m', label: '6 Months' },
+  { key: '1y', label: '1 Year' },
+];
 
 const SOURCE_COLORS: Record<string, string> = {
   linkedin: '#2563eb', indeed: '#f97316', naukri: '#16a34a',
@@ -70,10 +95,19 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
 }
 
 export default function AnalyticsPage() {
-  const { data, isLoading } = useGetAnalyticsQuery();
+  const [preset, setPreset] = React.useState<Preset>('all');
+  const dateRange = getDateRange(preset);
+  const { data, isLoading } = useGetAnalyticsQuery(
+    preset === 'all' ? undefined : dateRange,
+  );
 
   const handleExportReport = () => {
-    window.open(`${import.meta.env.VITE_API_URL || '/v1'}/admin/analytics/export`, '_blank');
+    const base = import.meta.env.VITE_API_URL || '/v1';
+    const params = new URLSearchParams();
+    if (dateRange.from) params.set('from', dateRange.from);
+    if (dateRange.to) params.set('to', dateRange.to);
+    const qs = params.toString();
+    window.open(`${base}/admin/analytics/export${qs ? `?${qs}` : ''}`, '_blank');
   };
 
   const summary = data?.summary;
@@ -112,7 +146,23 @@ export default function AnalyticsPage() {
         title="Analytics & Reports"
         subtitle="Real-time recruitment performance insights"
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* Date range preset chips */}
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPreset(p.key)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                    preset === p.key
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
             <button
               onClick={handleExportReport}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 bg-white transition-colors"

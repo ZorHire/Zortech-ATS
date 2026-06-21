@@ -11,6 +11,18 @@ const STAGE_LABELS: Record<string, string> = {
 
 export const getAnalytics = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
+  const { from, to } = req.query as { from?: string; to?: string };
+  const hasRange = !!(from && to);
+
+  // When a date range is specified, all date-sensitive queries are scoped to it.
+  // Without a range the queries behave identically to the original all-time defaults.
+  const appParams = hasRange ? [tenantId, from, to] : [tenantId];
+  const appDateCond = hasRange ? 'AND updated_at BETWEEN $2 AND $3' : '';
+  const jaDateCond = hasRange ? 'AND ja.updated_at BETWEEN $2 AND $3' : '';
+  const cDateCond = hasRange ? 'AND c.created_at BETWEEN $2 AND $3' : '';
+  const monthlyDateCond = hasRange
+    ? 'AND updated_at BETWEEN $2 AND $3'
+    : "AND updated_at >= NOW() - INTERVAL '6 months'";
 
   try {
     const [funnelResult, sourcesResult, monthlyResult, recruiterResult, vendorResult, summaryResult] =
@@ -20,6 +32,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
            FROM job_applications
            WHERE tenant_id = $1
              AND stage NOT IN ('disqualified','offer_rejected')
+             ${appDateCond}
            GROUP BY stage
            ORDER BY CASE stage
              WHEN 'new' THEN 1 WHEN 'sourced' THEN 2 WHEN 'screened' THEN 3
@@ -28,14 +41,15 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
              WHEN 'selected' THEN 8 WHEN 'offer_extended' THEN 9
              WHEN 'offer_accepted' THEN 10 WHEN 'joined' THEN 11
              ELSE 99 END`,
-          [tenantId],
+          appParams,
         ),
         pool.query(
           `SELECT source, COUNT(*)::int AS count
            FROM candidates
            WHERE tenant_id = $1 AND deleted_at IS NULL
+             ${hasRange ? 'AND created_at BETWEEN $2 AND $3' : ''}
            GROUP BY source ORDER BY count DESC`,
-          [tenantId],
+          appParams,
         ),
         pool.query(
           `SELECT
@@ -44,10 +58,10 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
            FROM job_applications
            WHERE tenant_id = $1
              AND stage IN ('offer_accepted','joined')
-             AND updated_at >= NOW() - INTERVAL '6 months'
+             ${monthlyDateCond}
            GROUP BY DATE_TRUNC('month', updated_at)
            ORDER BY DATE_TRUNC('month', updated_at) ASC`,
-          [tenantId],
+          appParams,
         ),
         pool.query(
           `SELECT
@@ -74,13 +88,15 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
              AND j.deleted_at IS NULL
            LEFT JOIN candidates c ON c.created_by = u.id
              AND c.tenant_id = $1 AND c.deleted_at IS NULL
+             ${cDateCond}
            LEFT JOIN job_applications ja ON ja.job_id = j.id
              AND ja.tenant_id = $1
+             ${jaDateCond}
            GROUP BY u.id, p.full_name
            HAVING COUNT(DISTINCT j.id) > 0 OR COUNT(DISTINCT c.id) > 0
            ORDER BY placements DESC, submitted DESC
            LIMIT 20`,
-          [tenantId],
+          appParams,
         ),
         pool.query(
           `SELECT
@@ -96,11 +112,11 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
         ),
         pool.query(
           `SELECT
-             (SELECT COUNT(*)::int FROM candidates WHERE tenant_id = $1 AND deleted_at IS NULL) AS total_candidates,
+             (SELECT COUNT(*)::int FROM candidates WHERE tenant_id = $1 AND deleted_at IS NULL ${hasRange ? 'AND created_at BETWEEN $2 AND $3' : ''}) AS total_candidates,
              (SELECT COUNT(*)::int FROM jobs WHERE tenant_id = $1 AND status = 'active' AND deleted_at IS NULL) AS active_jobs,
-             (SELECT COUNT(*)::int FROM job_applications WHERE tenant_id = $1 AND stage IN ('offer_accepted','joined')) AS total_placements,
+             (SELECT COUNT(*)::int FROM job_applications WHERE tenant_id = $1 AND stage IN ('offer_accepted','joined') ${appDateCond}) AS total_placements,
              (SELECT COUNT(*)::int FROM job_applications WHERE tenant_id = $1 AND stage = 'offer_extended') AS pending_offers`,
-          [tenantId],
+          appParams,
         ),
       ]);
 
@@ -134,6 +150,11 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
 export const exportAnalytics = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
   const today = new Date().toISOString().slice(0, 10);
+  const { from, to } = req.query as { from?: string; to?: string };
+  const hasRange = !!(from && to);
+  const exportParams = hasRange ? [tenantId, from, to] : [tenantId];
+  const appDateCond = hasRange ? 'AND updated_at BETWEEN $2 AND $3' : '';
+  const jaDateCond = hasRange ? 'AND ja.updated_at BETWEEN $2 AND $3' : '';
 
   const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csvRow = (...cells: any[]) => cells.map(esc).join(',');
@@ -145,6 +166,7 @@ export const exportAnalytics = async (req: AuthRequest, res: Response) => {
          FROM job_applications
          WHERE tenant_id = $1
            AND stage NOT IN ('disqualified','offer_rejected')
+           ${appDateCond}
          GROUP BY stage
          ORDER BY CASE stage
            WHEN 'new' THEN 1 WHEN 'sourced' THEN 2 WHEN 'screened' THEN 3
@@ -152,7 +174,7 @@ export const exportAnalytics = async (req: AuthRequest, res: Response) => {
            WHEN 'client_interview_scheduled' THEN 6 WHEN 'interview_completed' THEN 7
            WHEN 'selected' THEN 8 WHEN 'offer_extended' THEN 9
            WHEN 'offer_accepted' THEN 10 WHEN 'joined' THEN 11 ELSE 99 END`,
-        [tenantId],
+        exportParams,
       ),
       pool.query(
         `SELECT
@@ -170,24 +192,26 @@ export const exportAnalytics = async (req: AuthRequest, res: Response) => {
          LEFT JOIN candidates c ON c.created_by = u.id
            AND c.tenant_id = $1 AND c.deleted_at IS NULL
          LEFT JOIN job_applications ja ON ja.job_id = j.id AND ja.tenant_id = $1
+           ${jaDateCond}
          GROUP BY u.id, p.full_name
          HAVING COUNT(DISTINCT j.id) > 0 OR COUNT(DISTINCT c.id) > 0
          ORDER BY placements DESC`,
-        [tenantId],
+        exportParams,
       ),
       pool.query(
         `SELECT
            (SELECT COUNT(*)::int FROM candidates WHERE tenant_id = $1 AND deleted_at IS NULL) AS total_candidates,
            (SELECT COUNT(*)::int FROM jobs WHERE tenant_id = $1 AND deleted_at IS NULL) AS total_jobs,
            (SELECT COUNT(*)::int FROM vendors WHERE tenant_id = $1 AND deleted_at IS NULL) AS total_vendors,
-           (SELECT COUNT(*)::int FROM job_applications WHERE tenant_id = $1 AND stage IN ('offer_accepted','joined')) AS total_placements`,
-        [tenantId],
+           (SELECT COUNT(*)::int FROM job_applications WHERE tenant_id = $1 AND stage IN ('offer_accepted','joined') ${appDateCond}) AS total_placements`,
+        exportParams,
       ),
     ]);
 
     const s = summaryResult.rows[0];
+    const rangeLabel = hasRange ? `${from} to ${to}` : 'All Time';
     const lines: string[] = [
-      csvRow('ZorHire Analytics Report', today),
+      csvRow('ZorHire Analytics Report', today, rangeLabel),
       '',
       csvRow('SUMMARY'),
       csvRow('Metric', 'Value'),
