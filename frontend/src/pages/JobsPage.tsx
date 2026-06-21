@@ -23,6 +23,7 @@ import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
 import ClientInfoModal from "../components/clients/ClientInfoModal";
 import ClientDetailModal from "../components/clients/ClientDetailModal";
 import BulkJdUploadModal from "../components/bulk/BulkJdUploadModal";
+import { useGetPendingApprovalsQuery } from "../store/api/jdLifecycleApi";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -172,8 +173,11 @@ export default function JobsPage() {
   const isRecruiter = profile?.role === "recruiter";
   const canManage = !isVendor && !isRecruiter;
 
+  const isApprover = profile?.role === "super_admin" || profile?.role === "accounts_manager";
+
   const { data: jobs = [], isLoading } = useGetJobsQuery();
   const { data: clients = [], refetch: refetchClients } = useGetClientsQuery();
+  const { data: pendingApprovals = [] } = useGetPendingApprovalsQuery(undefined, { skip: !isApprover });
   const [createJob] = useCreateJobMutation();
   const [updateJob] = useUpdateJobMutation();
   const [deleteJob] = useDeleteJobMutation();
@@ -307,6 +311,34 @@ export default function JobsPage() {
           <StatCard label="Pending Review" value={counts.pending} color="text-amber-600" />
           <StatCard label="Total Applicants" value={counts.total_candidates} color="text-blue-600" />
         </div>
+
+        {/* Pending approvals banner — visible to super_admin / accounts_manager only */}
+        {isApprover && pendingApprovals.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+              <p className="text-sm font-semibold text-amber-800">
+                {pendingApprovals.length} JD{pendingApprovals.length !== 1 ? "s" : ""} awaiting your approval
+              </p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {pendingApprovals.slice(0, 3).map((a) => (
+                <Link
+                  key={a.job_id}
+                  to={`/jobs/${a.job_id}`}
+                  className="text-xs bg-white border border-amber-200 text-amber-700 px-3 py-1.5 rounded-lg font-medium hover:bg-amber-100 transition-colors max-w-[160px] truncate"
+                >
+                  {a.title}
+                </Link>
+              ))}
+              {pendingApprovals.length > 3 && (
+                <span className="text-xs text-amber-600 font-medium">
+                  +{pendingApprovals.length - 3} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Tab bar */}
         {canManage && (

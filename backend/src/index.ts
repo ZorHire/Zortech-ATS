@@ -20,6 +20,7 @@ import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import parseRoutes from "./routes/parse.routes";
 import vendorPortalRoutes from "./modules/vendor-portal/vendor-portal.routes";
 import clientPortalRoutes from "./modules/client-portal/client-portal.routes";
+import jdLifecycleRoutes from "./modules/jd-lifecycle/jd-lifecycle.routes";
 
 const app = express();
 const port = env.PORT;
@@ -86,6 +87,7 @@ v1Router.use("/email-campaigns", campaignRoutes);
 v1Router.use("/onboarding", onboardingRoutes);
 v1Router.use("/vendor-portal", vendorPortalRoutes);
 v1Router.use("/client-portal", clientPortalRoutes);
+v1Router.use("/jd-lifecycle", jdLifecycleRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);

@@ -19,6 +19,8 @@ import { useGetJobQuery, useUpdateJobMutation } from '../store/api/jobApi';
 import { useAppSelector } from '../hooks/useAppSelector';
 import { selectCurrentUser } from '../store/slices/authSlice';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
+import JdApprovalPanel from '../components/jobs/JdApprovalPanel';
+import JdVersionHistory from '../components/jobs/JdVersionHistory';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -288,6 +290,18 @@ export default function JobDetailPage() {
             Open Pipeline
           </Link>
         </div>
+
+        {/* Approval Workflow + Version History — only for non-portal roles */}
+        {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
+          <>
+            <JdApprovalPanel
+              jobId={id!}
+              jobStatus={job.status}
+              userRole={profile.role}
+            />
+            <JdVersionHistory jobId={id!} />
+          </>
+        )}
       </div>
 
       {isAddCandidateOpen && id && (

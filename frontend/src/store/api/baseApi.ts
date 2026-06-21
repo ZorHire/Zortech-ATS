@@ -55,6 +55,9 @@ export const baseApi = createApi({
     "ClientPortalCandidates",
     "ClientProfile",
     "ClientUsers",
+    "JobApproval",
+    "JobVersions",
+    "PendingApprovals",
   ],
   endpoints: () => ({}),
 });
