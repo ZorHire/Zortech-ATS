@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Mail, Send, Loader2, X, Users, BarChart2, Clock,
   Search, ChevronDown, Plus, AlertCircle, CheckCircle2,
@@ -228,7 +229,12 @@ export default function EmailCampaignsPage() {
         name: campaignName || `Campaign ${new Date().toLocaleDateString('en-IN')}`,
         subject: subject.trim(), body: emailBody.trim(), status: 'draft',
       }).unwrap();
-      await sendCampaign({ id: draft.id, recipientIds: Array.from(selectedIds) }).unwrap();
+      await sendCampaign({
+        id: draft.id,
+        recipients: selectedCandidates.map(c => ({ email: c.email, name: `${c.first_name} ${c.last_name}`.trim() })),
+        track_opens: trackOpens,
+        track_clicks: trackClicks,
+      }).unwrap();
       resetWizard(); setMode('list');
     } catch (err: any) {
       setSaveError(err?.message || 'Failed to send campaign');
@@ -774,10 +780,13 @@ export default function EmailCampaignsPage() {
                           </button>
                         )}
                         {campaign.status === 'sent' && (
-                          <div className="flex items-center gap-1">
-                            <BarChart2 size={13} className="text-emerald-500" />
-                            <span className="text-xs text-emerald-600 font-bold">Sent</span>
-                          </div>
+                          <RouterLink
+                            to={`/campaigns/${campaign.id}`}
+                            className="flex items-center gap-1 text-xs text-emerald-600 font-bold hover:text-emerald-700 transition-colors"
+                          >
+                            <BarChart2 size={13} />
+                            Analytics
+                          </RouterLink>
                         )}
                         <button onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
                           className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete campaign">

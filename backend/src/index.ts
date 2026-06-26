@@ -25,6 +25,7 @@ import interviewRoutes from "./modules/interviews/interviews.routes";
 import offersRoutes from "./modules/offers/offers.routes";
 import profileRoutes from "./modules/profiles/profiles.routes";
 import notificationRoutes from "./modules/notifications/notifications.routes";
+import jobBoardRoutes from "./modules/job-boards/job-boards.routes";
 
 const app = express();
 const port = env.PORT;
@@ -96,6 +97,7 @@ v1Router.use("/interviews", interviewRoutes);
 v1Router.use("/offers", offersRoutes);
 v1Router.use("/profile", profileRoutes);
 v1Router.use("/notifications", notificationRoutes);
+v1Router.use("/job-boards", jobBoardRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);

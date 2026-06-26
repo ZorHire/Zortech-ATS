@@ -1,6 +1,13 @@
 import { Router } from "express";
 import * as emailController from "./email.controller";
 import {
+  handleOpenPixel,
+  handleClickRedirect,
+  handleUnsubscribe,
+  listUnsubscribes,
+  removeUnsubscribe,
+} from "./email-tracking.controller";
+import {
   authMiddleware,
   authorize,
   tenantIsolation,
@@ -83,6 +90,28 @@ router.post(
   tenantIsolation,
   authorize(["super_admin", "accounts_manager"]),
   emailController.assignJdRecruiter,
+);
+
+// ─── Tracking — public (no auth, called by email clients / recipients) ────────
+
+router.get("/track/open/:trackingId",   handleOpenPixel);
+router.get("/track/click/:trackingId",  handleClickRedirect);
+router.get("/unsubscribe/:trackingId",  handleUnsubscribe);
+
+// ─── Unsubscribe list management (authenticated) ──────────────────────────────
+
+router.get(
+  "/unsubscribes",
+  authMiddleware,
+  tenantIsolation,
+  listUnsubscribes,
+);
+
+router.delete(
+  "/unsubscribes/:email",
+  authMiddleware,
+  tenantIsolation,
+  removeUnsubscribe,
 );
 
 export default router;

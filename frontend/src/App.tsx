@@ -45,6 +45,8 @@ import OffersPage from "./pages/OffersPage";
 import ReportsPage from "./pages/ReportsPage";
 import ProfilePage from "./pages/ProfilePage";
 import CandidateDetailPage from "./pages/CandidateDetailPage";
+import JobBoardsSettingsPage from "./pages/JobBoardsSettingsPage";
+import EmailCampaignDetailPage from "./pages/EmailCampaignDetailPage";
 import VendorPortalJobsPage from "./pages/vendor-portal/VendorPortalJobsPage";
 import VendorPortalSubmissionsPage from "./pages/vendor-portal/VendorPortalSubmissionsPage";
 import ClientPortalJobsPage from "./pages/client-portal/ClientPortalJobsPage";
@@ -311,10 +313,26 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/settings/job-boards"
+        element={
+          <ProtectedRoute path="/settings/job-boards">
+            <JobBoardsSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/campaigns"
         element={
           <ProtectedRoute path="/campaigns">
             <EmailCampaignsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/campaigns/:id"
+        element={
+          <ProtectedRoute path="/campaigns/:id">
+            <EmailCampaignDetailPage />
           </ProtectedRoute>
         }
       />

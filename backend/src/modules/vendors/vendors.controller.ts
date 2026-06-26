@@ -162,6 +162,63 @@ export const deleteVendor = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ─── GET /vendors/leaderboard ────────────────────────────────────────────────
+export const getVendorLeaderboard = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT
+         id, company_name, tier, submission_count, shortlist_rate,
+         fill_rate, quality_score, sla_adherence, is_active,
+         ROW_NUMBER() OVER (ORDER BY quality_score DESC, submission_count DESC)::int AS rank
+       FROM vendors
+       WHERE tenant_id = $1 AND deleted_at IS NULL
+       ORDER BY quality_score DESC, submission_count DESC`,
+      [tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('getVendorLeaderboard error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── PATCH /vendors/:id/submissions/:submissionId/feedback ───────────────────
+export const addSubmissionFeedback = async (req: AuthRequest, res: Response) => {
+  const { id, submissionId } = req.params;
+  const tenantId = req.user!.tenant_id;
+  const userId = req.user!.id;
+  const { recruiter_rating, recruiter_notes } = req.body;
+
+  if (
+    recruiter_rating !== undefined &&
+    recruiter_rating !== null &&
+    (Number(recruiter_rating) < 1 || Number(recruiter_rating) > 5)
+  ) {
+    return res.status(400).json({ message: 'recruiter_rating must be between 1 and 5' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE vendor_portal_submissions
+       SET recruiter_rating  = $1,
+           recruiter_notes   = $2,
+           feedback_given_by = $3,
+           feedback_given_at = now()
+       WHERE id = $4 AND vendor_id = $5 AND tenant_id = $6
+       RETURNING id, recruiter_rating, recruiter_notes, feedback_given_at`,
+      [recruiter_rating ?? null, recruiter_notes ?? null, userId, submissionId, id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('addSubmissionFeedback error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 // ─── GET /vendors/:id/scorecard ───────────────────────────────────────────────
 export const getVendorScorecard = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
@@ -197,7 +254,8 @@ export const getVendorScorecard = async (req: AuthRequest, res: Response) => {
       ),
       pool.query(
         `SELECT
-           vps.candidate_full_name, vps.candidate_email, vps.created_at,
+           vps.id AS submission_id, vps.candidate_full_name, vps.candidate_email, vps.created_at,
+           vps.recruiter_rating, vps.recruiter_notes,
            j.title AS job_title, ja.stage AS pipeline_stage
          FROM vendor_portal_submissions vps
          JOIN jobs j ON j.id = vps.job_id

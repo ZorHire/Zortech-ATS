@@ -12,6 +12,7 @@ import {
   Building2,
   TrendingUp,
   UserPlus,
+  Globe,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { jobStatusLabels } from '../lib/mockData';
@@ -21,6 +22,8 @@ import { selectCurrentUser } from '../store/slices/authSlice';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
 import JdApprovalPanel from '../components/jobs/JdApprovalPanel';
 import JdVersionHistory from '../components/jobs/JdVersionHistory';
+import JobBoardStatusSection from '../components/jobs/JobBoardStatusSection';
+import JobBoardPublishModal from '../components/jobs/JobBoardPublishModal';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -61,6 +64,7 @@ export default function JobDetailPage() {
   const { data: job, isLoading, error, refetch } = useGetJobQuery(id!, { skip: !id });
   const [updateJob, { isLoading: statusChanging }] = useUpdateJobMutation();
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
+  const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
 
   const canEditStatus =
     profile?.role === 'super_admin' ||
@@ -136,6 +140,15 @@ export default function JobDetailPage() {
               <Mail size={14} />
               Send to Vendors
             </button>
+            {canEditStatus && (
+              <button
+                onClick={() => setIsPublishBoardsOpen(true)}
+                className="flex items-center gap-2 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                <Globe size={14} />
+                Publish to Boards
+              </button>
+            )}
           </div>
         }
       />
@@ -291,6 +304,11 @@ export default function JobDetailPage() {
           </Link>
         </div>
 
+        {/* Job Board Distribution */}
+        {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
+          <JobBoardStatusSection jobId={id!} />
+        )}
+
         {/* Approval Workflow + Version History — only for non-portal roles */}
         {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
           <>
@@ -309,6 +327,14 @@ export default function JobDetailPage() {
           jobId={id}
           onClose={() => setIsAddCandidateOpen(false)}
           onSuccess={() => { refetch(); }}
+        />
+      )}
+
+      {isPublishBoardsOpen && id && (
+        <JobBoardPublishModal
+          jobId={id}
+          onClose={() => setIsPublishBoardsOpen(false)}
+          onSuccess={() => {}}
         />
       )}
     </div>

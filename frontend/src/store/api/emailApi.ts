@@ -1,6 +1,40 @@
 import { baseApi } from "./baseApi";
 import type { EmailCampaign } from "../../types";
 
+export interface CampaignAnalytics {
+  delivered: number;
+  unique_opens: number;
+  total_opens: number;
+  unique_clicks: number;
+  total_clicks: number;
+  unsubscribes: number;
+  bounced: number;
+  failed: number;
+  open_rate: number;
+  click_rate: number;
+}
+
+export interface CampaignRecipient {
+  id: string;
+  email: string;
+  name: string | null;
+  status: 'pending' | 'delivered' | 'bounced' | 'failed';
+  delivered_at: string | null;
+  bounce_reason: string | null;
+  last_opened_at: string | null;
+  last_clicked_at: string | null;
+  open_count: number;
+  click_count: number;
+  unsubscribed: boolean;
+}
+
+export interface Unsubscribe {
+  id: string;
+  email: string;
+  unsubscribed_at: string;
+  campaign_name: string | null;
+}
+
 export interface EmailConfig {
   configured: boolean;
   email?: string;
@@ -51,11 +85,14 @@ export const emailApi = baseApi.injectEndpoints({
       invalidatesTags: ["EmailCampaigns"],
     }),
 
-    sendCampaign: builder.mutation<void, { id: string; recipientIds: string[] }>({
-      query: ({ id, recipientIds }) => ({
+    sendCampaign: builder.mutation<
+      void,
+      { id: string; recipients: Array<{ email: string; name?: string }>; track_opens?: boolean; track_clicks?: boolean }
+    >({
+      query: ({ id, recipients, track_opens = true, track_clicks = true }) => ({
         url: `/email-campaigns/${id}/send`,
         method: "POST",
-        body: { recipient_ids: recipientIds },
+        body: { recipients, track_opens, track_clicks },
       }),
       invalidatesTags: ["EmailCampaigns"],
     }),
@@ -63,6 +100,31 @@ export const emailApi = baseApi.injectEndpoints({
     deleteCampaign: builder.mutation<void, string>({
       query: (id) => ({ url: `/email-campaigns/${id}`, method: "DELETE" }),
       invalidatesTags: ["EmailCampaigns"],
+    }),
+
+    getCampaignAnalytics: builder.query<
+      { campaign: EmailCampaign; analytics: CampaignAnalytics; top_links: { url: string; clicks: number }[] },
+      string
+    >({
+      query: (id) => `/email-campaigns/${id}/analytics`,
+      providesTags: (_r, _e, id) => [{ type: "EmailCampaigns", id }],
+    }),
+
+    getCampaignRecipients: builder.query<{ recipients: CampaignRecipient[] }, string>({
+      query: (id) => `/email-campaigns/${id}/recipients`,
+    }),
+
+    listUnsubscribes: builder.query<{ unsubscribes: Unsubscribe[] }, void>({
+      query: () => "/email/unsubscribes",
+      providesTags: ["EmailUnsubscribes"],
+    }),
+
+    removeUnsubscribe: builder.mutation<void, string>({
+      query: (email) => ({
+        url: `/email/unsubscribes/${encodeURIComponent(email)}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["EmailUnsubscribes"],
     }),
 
     sendSingleEmail: builder.mutation<void, SendSingleEmailPayload>({
@@ -92,4 +154,8 @@ export const {
   useSendSingleEmailMutation,
   useAssignJdMutation,
   useAssignJdRecruiterMutation,
+  useGetCampaignAnalyticsQuery,
+  useGetCampaignRecipientsQuery,
+  useListUnsubscribesQuery,
+  useRemoveUnsubscribeMutation,
 } = emailApi;

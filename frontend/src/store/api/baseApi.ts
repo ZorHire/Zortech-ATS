@@ -63,6 +63,9 @@ export const baseApi = createApi({
     "Offers",
     "Profile",
     "Notifications",
+    "JobBoards",
+    "JobBoardPostings",
+    "EmailUnsubscribes",
   ],
   endpoints: () => ({}),
 });
