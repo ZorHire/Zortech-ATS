@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Upload,
@@ -20,6 +21,11 @@ import {
   Loader2,
   Pencil,
   BarChart2,
+  Trophy,
+  Star,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import BulkVendorUploadModal from "../components/bulk/BulkVendorUploadModal";
 import Header from "../components/layout/Header";
@@ -35,7 +41,13 @@ import {
   useDeleteVendorMutation,
   useParseVendorMutation,
   useGetVendorScorecardQuery,
+  useListVendorContractsQuery,
+  useCreateVendorContractMutation,
+  useUpdateVendorContractMutation,
+  useDeleteVendorContractMutation,
+  useAddSubmissionFeedbackMutation,
 } from "../store/api/vendorApi";
+import type { VendorContract } from "../store/api/vendorApi";
 import { useGetJobsQuery, useUpdateJobMutation } from "../store/api/jobApi";
 import { useGetUsersQuery } from "../store/api/adminApi";
 import {
@@ -497,8 +509,59 @@ function VendorDetailModal({
   const tier = tierConfig[vendor.tier];
   const TierIcon = tier.icon;
   const { data: scorecard } = useGetVendorScorecardQuery(vendor.id);
-
   const metrics = scorecard ?? vendor;
+
+  const [addSubmissionFeedback] = useAddSubmissionFeedbackMutation();
+  const { data: contracts = [] } = useListVendorContractsQuery(vendor.id);
+  const [createVendorContract, { isLoading: contractCreating }] = useCreateVendorContractMutation();
+  const [updateVendorContract] = useUpdateVendorContractMutation();
+  const [deleteVendorContract] = useDeleteVendorContractMutation();
+
+  const emptyContractForm = { title: "", contract_type: "msa", start_date: "", end_date: "", status: "active", value: "", notes: "" };
+  const [showContractForm, setShowContractForm] = useState(false);
+  const [editingContract, setEditingContract] = useState<VendorContract | null>(null);
+  const [contractForm, setContractForm] = useState(emptyContractForm);
+  const [contractError, setContractError] = useState("");
+  const [localFeedback, setLocalFeedback] = useState<Record<string, { rating: number | null; notes: string; saving: boolean }>>({});
+
+  const handleSaveContract = async () => {
+    setContractError("");
+    if (!contractForm.title || !contractForm.start_date) { setContractError("Title and start date are required."); return; }
+    try {
+      const body = {
+        title: contractForm.title, contract_type: contractForm.contract_type,
+        start_date: contractForm.start_date, end_date: contractForm.end_date || null,
+        status: contractForm.status, value: contractForm.value ? Number(contractForm.value) : null,
+        notes: contractForm.notes || null,
+      };
+      if (editingContract) {
+        await updateVendorContract({ vendorId: vendor.id, contractId: editingContract.id, body }).unwrap();
+      } else {
+        await createVendorContract({ vendorId: vendor.id, body }).unwrap();
+      }
+      setShowContractForm(false); setEditingContract(null); setContractForm(emptyContractForm);
+    } catch { setContractError("Failed to save contract."); }
+  };
+
+  const handleDeleteContract = async (contractId: string) => {
+    if (!window.confirm("Delete this contract?")) return;
+    await deleteVendorContract({ vendorId: vendor.id, contractId }).unwrap();
+  };
+
+  const handleSaveFeedback = async (submissionId: string) => {
+    const fb = localFeedback[submissionId];
+    if (!fb) return;
+    setLocalFeedback((prev) => ({ ...prev, [submissionId]: { ...fb, saving: true } }));
+    try {
+      await addSubmissionFeedback({ vendorId: vendor.id, submissionId, body: { recruiter_rating: fb.rating, recruiter_notes: fb.notes || null } }).unwrap();
+    } catch {}
+    setLocalFeedback((prev) => ({ ...prev, [submissionId]: { ...prev[submissionId], saving: false } }));
+  };
+
+  const contractStatusColor: Record<string, string> = {
+    active: "bg-emerald-50 text-emerald-700", draft: "bg-gray-100 text-gray-600",
+    expired: "bg-amber-50 text-amber-700", terminated: "bg-red-50 text-red-600",
+  };
 
   return (
     <div
@@ -718,27 +781,198 @@ function VendorDetailModal({
                 Recent Submissions
               </h3>
               <ol className="space-y-2">
-                {scorecard.recent_submissions.map((s, i) => (
-                  <li key={i} className="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{s.candidate_full_name}</p>
-                      <p className="text-xs text-gray-400 truncate">{s.job_title}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      {s.pipeline_stage && (
-                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                          {stageLabel[s.pipeline_stage] ?? s.pipeline_stage}
-                        </span>
+                {scorecard.recent_submissions.map((s) => {
+                  const fb = localFeedback[s.submission_id];
+                  const currentRating = fb !== undefined ? fb.rating : s.recruiter_rating;
+                  const currentNotes = fb !== undefined ? fb.notes : (s.recruiter_notes ?? "");
+                  const isDirty = fb !== undefined && (fb.rating !== s.recruiter_rating || fb.notes !== (s.recruiter_notes ?? ""));
+                  return (
+                    <li key={s.submission_id} className="p-3 bg-gray-50 rounded-xl space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{s.candidate_full_name}</p>
+                          <p className="text-xs text-gray-400 truncate">{s.job_title}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          {s.pipeline_stage && (
+                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                              {stageLabel[s.pipeline_stage] ?? s.pipeline_stage}
+                            </span>
+                          )}
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {new Date(s.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                          </p>
+                        </div>
+                      </div>
+                      {/* Star rating */}
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setLocalFeedback((prev) => ({
+                              ...prev,
+                              [s.submission_id]: { rating: star === currentRating ? null : star, notes: currentNotes, saving: false },
+                            }))}
+                            className="transition-colors"
+                          >
+                            <Star
+                              size={14}
+                              className={star <= (currentRating ?? 0) ? "text-amber-400 fill-amber-400" : "text-gray-300"}
+                            />
+                          </button>
+                        ))}
+                        {isDirty && (
+                          <button
+                            onClick={() => handleSaveFeedback(s.submission_id)}
+                            disabled={fb?.saving}
+                            className="ml-2 text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded-full font-semibold disabled:opacity-50"
+                          >
+                            {fb?.saving ? "Saving…" : "Save"}
+                          </button>
+                        )}
+                      </div>
+                      {isDirty && (
+                        <input
+                          type="text"
+                          placeholder="Add a note…"
+                          value={currentNotes}
+                          onChange={(e) => setLocalFeedback((prev) => ({
+                            ...prev,
+                            [s.submission_id]: { ...prev[s.submission_id], notes: e.target.value },
+                          }))}
+                          className="w-full text-xs px-2 py-1 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
                       )}
-                      <p className="text-[10px] text-gray-400 mt-0.5">
-                        {new Date(s.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
-                      </p>
-                    </div>
-                  </li>
-                ))}
+                      {!isDirty && s.recruiter_notes && (
+                        <p className="text-xs text-gray-400 italic">"{s.recruiter_notes}"</p>
+                      )}
+                    </li>
+                  );
+                })}
               </ol>
             </div>
           )}
+
+          {/* Contracts */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText size={12} />
+                Contracts
+                {contracts.length > 0 && (
+                  <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">{contracts.length}</span>
+                )}
+              </h3>
+              <button
+                onClick={() => { setEditingContract(null); setContractForm(emptyContractForm); setContractError(""); setShowContractForm((v) => !v); }}
+                className="flex items-center gap-1 text-xs text-blue-600 font-semibold hover:text-blue-800"
+              >
+                {showContractForm && !editingContract ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {showContractForm && !editingContract ? "Cancel" : "Add"}
+              </button>
+            </div>
+
+            {/* Add/Edit contract form */}
+            {showContractForm && (
+              <div className="bg-gray-50 rounded-xl p-4 mb-3 space-y-3 border border-gray-100">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+                    <input type="text" value={contractForm.title} onChange={(e) => setContractForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder="Master Service Agreement 2025"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                    <select value={contractForm.contract_type} onChange={(e) => setContractForm((f) => ({ ...f, contract_type: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                      <option value="msa">MSA</option>
+                      <option value="nda">NDA</option>
+                      <option value="sow">SOW</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                    <select value={contractForm.status} onChange={(e) => setContractForm((f) => ({ ...f, status: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                      <option value="active">Active</option>
+                      <option value="draft">Draft</option>
+                      <option value="expired">Expired</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Start Date *</label>
+                    <input type="date" value={contractForm.start_date} onChange={(e) => setContractForm((f) => ({ ...f, start_date: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+                    <input type="date" value={contractForm.end_date} onChange={(e) => setContractForm((f) => ({ ...f, end_date: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Value (INR)</label>
+                    <input type="number" value={contractForm.value} onChange={(e) => setContractForm((f) => ({ ...f, value: e.target.value }))}
+                      placeholder="500000"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                    <input type="text" value={contractForm.notes} onChange={(e) => setContractForm((f) => ({ ...f, notes: e.target.value }))}
+                      placeholder="Optional notes…"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                </div>
+                {contractError && <p className="text-xs text-red-600">{contractError}</p>}
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setShowContractForm(false); setEditingContract(null); setContractForm(emptyContractForm); }}
+                    className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button>
+                  <button onClick={handleSaveContract} disabled={contractCreating}
+                    className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    {contractCreating ? "Saving…" : editingContract ? "Update" : "Add Contract"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Contracts list */}
+            {contracts.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">No contracts yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {contracts.map((c) => (
+                  <div key={c.id} className="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-sm font-medium text-gray-800 truncate">{c.title}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${contractStatusColor[c.status] ?? "bg-gray-100 text-gray-600"}`}>
+                          {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {c.contract_type.toUpperCase()} · {new Date(c.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        {c.end_date && ` → ${new Date(c.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                        {c.value ? ` · ₹${Number(c.value).toLocaleString("en-IN")}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => { setEditingContract(c); setContractForm({ title: c.title, contract_type: c.contract_type, start_date: c.start_date, end_date: c.end_date ?? "", status: c.status, value: c.value ? String(c.value) : "", notes: c.notes ?? "" }); setContractError(""); setShowContractForm(true); }}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => handleDeleteContract(c.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Specializations & Geographies */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -943,6 +1177,7 @@ function EditVendorModal({
 }
 
 export default function VendorsPage() {
+  const navigate = useNavigate();
   const user = useAppSelector(selectCurrentUser);
   const userRole: string = user?.role ?? "";
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
@@ -1148,6 +1383,13 @@ export default function VendorsPage() {
         subtitle="Manage staffing partners and track performance"
         actions={
           <div className="flex gap-2">
+            <button
+              onClick={() => navigate("/vendors/leaderboard")}
+              className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Trophy size={16} className="text-amber-500" />
+              Leaderboard
+            </button>
             <button
               onClick={() => setShowAssignJd(true)}
               className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"

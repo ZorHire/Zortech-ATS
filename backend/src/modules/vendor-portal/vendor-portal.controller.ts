@@ -2,6 +2,7 @@ import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { refreshVendorMetrics } from "../vendors/vendors.controller";
+import { createNotification } from "../notifications/notifications.controller";
 
 // ── Helper: resolve vendor_id for the logged-in vendor_user ─────────────────
 async function getVendorId(userId: string): Promise<string | null> {
@@ -219,6 +220,39 @@ export const submitCandidate = async (req: AuthRequest, res: Response) => {
     refreshVendorMetrics(vendorId, tenantId as string).catch((err) =>
       console.error("refreshVendorMetrics error:", err),
     );
+
+    // Notify recruiters/admins of the new submission — fire-and-forget
+    const submissionId = submissionResult.rows[0].id;
+    ;(async () => {
+      try {
+        const [jobRes, vendorRes, recipientsRes] = await Promise.all([
+          pool.query("SELECT title FROM jobs WHERE id = $1", [job_id]),
+          pool.query("SELECT company_name FROM vendors WHERE id = $1", [vendorId]),
+          pool.query(
+            `SELECT id FROM users WHERE tenant_id = $1
+             AND role IN ('recruiter','super_admin','accounts_manager','vendor_manager')
+             AND deleted_at IS NULL`,
+            [tenantId],
+          ),
+        ]);
+        const jobTitle = jobRes.rows[0]?.title ?? "a job";
+        const vendorName = vendorRes.rows[0]?.company_name ?? "a vendor";
+        await Promise.allSettled(
+          recipientsRes.rows.map((u) =>
+            createNotification(
+              u.id,
+              "info",
+              "New Vendor Submission",
+              `${vendorName} submitted ${candidate_full_name} for "${jobTitle}"`,
+              "vendor_submission",
+              submissionId,
+            ),
+          ),
+        );
+      } catch (err) {
+        console.error("vendor submission notification error:", err);
+      }
+    })();
   } catch (error) {
     console.error("Vendor portal submitCandidate error:", error);
     res.status(500).json({ message: "Internal server error" });

@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import pool from "../../db";
 import env from "../../config/env";
 import { AuthRequest } from "../../middleware/auth";
+import { createNotification } from "../notifications/notifications.controller";
 
 // ─── Encryption helpers ──────────────────────────────────────────────────────
 // Passwords are stored as AES-256-GCM ciphertext: "<iv_hex>:<tag_hex>:<ct_hex>"
@@ -433,6 +434,33 @@ export const assignJd = async (req: AuthRequest, res: Response) => {
         html: `<div style="font-family:sans-serif;line-height:1.6">${body}</div>`,
       });
       res.json({ message: "Assignment email sent successfully" });
+
+      // Notify vendor_user accounts linked to this vendor — fire-and-forget
+      ;(async () => {
+        try {
+          const usersRes = await pool.query(
+            `SELECT u.id FROM users u
+             JOIN profiles p ON p.id = u.id
+             WHERE u.tenant_id = $1 AND u.role = 'vendor_user'
+               AND p.vendor_id = $2 AND u.deleted_at IS NULL`,
+            [tenantId, vendor_id],
+          );
+          await Promise.allSettled(
+            usersRes.rows.map((u) =>
+              createNotification(
+                u.id,
+                "info",
+                "New JD Assignment",
+                `You have been assigned "${job.title}". Submit candidates within ${dayLabel}.`,
+                "job",
+                job_id,
+              ),
+            ),
+          );
+        } catch (err) {
+          console.error("JD assignment notification error:", err);
+        }
+      })();
     } catch (sendError: any) {
       console.error("Assign JD send email error:", sendError);
       const { code, message } = classifySmtpError(sendError);

@@ -47,6 +47,7 @@ import ProfilePage from "./pages/ProfilePage";
 import CandidateDetailPage from "./pages/CandidateDetailPage";
 import JobBoardsSettingsPage from "./pages/JobBoardsSettingsPage";
 import EmailCampaignDetailPage from "./pages/EmailCampaignDetailPage";
+import VendorLeaderboardPage from "./pages/VendorLeaderboardPage";
 import VendorPortalJobsPage from "./pages/vendor-portal/VendorPortalJobsPage";
 import VendorPortalSubmissionsPage from "./pages/vendor-portal/VendorPortalSubmissionsPage";
 import ClientPortalJobsPage from "./pages/client-portal/ClientPortalJobsPage";
@@ -277,6 +278,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/vendors">
             <VendorsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/vendors/leaderboard"
+        element={
+          <ProtectedRoute path="/vendors/leaderboard">
+            <VendorLeaderboardPage />
           </ProtectedRoute>
         }
       />
