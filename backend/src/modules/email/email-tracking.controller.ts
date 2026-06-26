@@ -279,7 +279,7 @@ export const listUnsubscribes = async (req: AuthRequest, res: Response) => {
 
 export const removeUnsubscribe = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user!.tenant_id;
-  const email = decodeURIComponent(req.params.email);
+  const email = decodeURIComponent(req.params.email as string);
   try {
     await pool.query(
       `DELETE FROM email_unsubscribes WHERE tenant_id = $1 AND email = $2`,

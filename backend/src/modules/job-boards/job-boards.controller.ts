@@ -71,7 +71,7 @@ export const listBoards = async (req: AuthRequest, res: Response) => {
 // ── Connect a board (save / update credentials) ───────────────────────────────
 
 export const connectBoard = async (req: AuthRequest, res: Response) => {
-  const { boardKey } = req.params;
+  const boardKey = req.params.boardKey as string;
   const { access_token, refresh_token, token_expires_at, webhook_secret, extra_config } = req.body as {
     access_token?: string;
     refresh_token?: string;
@@ -295,7 +295,8 @@ export const publishJob = async (req: AuthRequest, res: Response) => {
 // ── Withdraw a job from a board ───────────────────────────────────────────────
 
 export const withdrawJob = async (req: AuthRequest, res: Response) => {
-  const { jobId, boardKey } = req.params;
+  const { jobId } = req.params;
+  const boardKey = req.params.boardKey as string;
   const tenantId = req.user?.tenant_id;
 
   const adapter = getAdapter(boardKey);
@@ -337,7 +338,7 @@ export const withdrawJob = async (req: AuthRequest, res: Response) => {
 // Verifies webhook_secret when stored (compares X-Webhook-Secret header).
 
 export const handleWebhook = async (req: Request, res: Response) => {
-  const { boardKey } = req.params;
+  const boardKey = req.params.boardKey as string;
   const adapter = getAdapter(boardKey);
   if (!adapter) return res.status(400).json({ message: 'Unknown board' });
 
