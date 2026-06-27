@@ -39,6 +39,8 @@ fs.mkdirSync(uploadsPath, { recursive: true });
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "https://zorhire.zortechs.in",
+  "http://zorhire.zortechs.in",
   /\.run\.app$/, // any Cloud Run frontend
   /\.web\.app$/, // Firebase Hosting
   /\.firebaseapp\.com$/, // Firebase Hosting alt
@@ -75,6 +77,12 @@ pool.connect((err, client, release) => {
   release();
 });
 
+// Health check — registered before the v1Router so it is never shadowed by
+// route middleware. curl and Docker healthcheck both hit this path.
+app.get("/v1/health", (_req, res) => {
+  res.json({ status: "ok", message: "Backend is running" });
+});
+
 // Routes
 const v1Router = express.Router();
 
@@ -101,11 +109,6 @@ v1Router.use("/job-boards", jobBoardRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);
-
-// Health Check
-app.get("/v1/health", (req, res) => {
-  res.json({ status: "ok", message: "Backend is running" });
-});
 
 // Global error handler — converts thrown/middleware errors to JSON (e.g. multer rejections)
 app.use(

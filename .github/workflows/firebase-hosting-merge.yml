@@ -144,8 +144,10 @@ jobs:
             docker compose up -d
             echo "Waiting for backend to be ready (migrations run on startup)..."
             for i in $(seq 1 36); do
-              if docker compose exec -T backend node -e \
-                "require('http').get('http://localhost:8080/v1/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))" \
+              # timeout 10: kills docker exec if it hangs (e.g. server accepts TCP but never responds)
+              # req.setTimeout inside the script: aborts the HTTP request after 5s so node exits cleanly
+              if timeout 10 docker compose exec -T backend node -e \
+                "const r=require('http').get('http://localhost:8080/v1/health',res=>{process.exit(res.statusCode===200?0:1)});r.setTimeout(5000,()=>{r.destroy();process.exit(1)});r.on('error',()=>process.exit(1))" \
                 > /dev/null 2>&1; then
                 echo "Backend ready after $(( i * 5 ))s"
                 exit 0
@@ -153,21 +155,22 @@ jobs:
               echo "  [${i}/36] Not ready yet ($(( i * 5 ))s elapsed)..."
               sleep 5
             done
-            echo "Health check failed — rolling back to previous image..."
+            echo "Health check failed after 3 minutes — rolling back to previous image..."
+            docker compose logs backend --tail=50 || true
             bash /opt/zortech/rollback.sh
             exit 1
 
       - name: Verify backend via public URL
         if: github.ref == 'refs/heads/main'
         run: |
-          for i in 1 2 3; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://zorhire.zortechs.in/v1/health)
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -sf --max-time 15 -o /dev/null -w "%{http_code}" https://zorhire.zortechs.in/v1/health 2>/dev/null || echo "000")
             if [ "$STATUS" = "200" ]; then
-              echo "Backend healthy (HTTP $STATUS)"
+              echo "Backend healthy via public URL (HTTP $STATUS)"
               exit 0
             fi
-            echo "Attempt $i: got HTTP $STATUS, retrying in 10s..."
-            sleep 10
+            echo "Attempt $i/5: got HTTP $STATUS, retrying in 15s..."
+            sleep 15
           done
-          echo "ERROR: Backend health check failed after 3 attempts"
+          echo "ERROR: Public URL health check failed after 5 attempts"
           exit 1

@@ -3,6 +3,7 @@ import {
   Briefcase,
   Users,
   Building2,
+  Building,
   Mail,
   BarChart3,
   Settings,
@@ -81,6 +82,12 @@ const navItems = [
     label: "Vendors",
     path: "/vendors",
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
+  },
+  {
+    icon: Building,
+    label: "Clients",
+    path: "/clients",
+    roles: ["super_admin", "accounts_manager", "vendor_manager", "recruiter"],
   },
   {
     icon: ClipboardList,

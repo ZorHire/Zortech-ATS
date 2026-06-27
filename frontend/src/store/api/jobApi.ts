@@ -37,6 +37,16 @@ export const jobApi = baseApi.injectEndpoints({
       providesTags: ["Clients"],
     }),
 
+    createClient: builder.mutation<Client, Record<string, unknown>>({
+      query: (body) => ({ url: "/clients", method: "POST", body }),
+      invalidatesTags: ["Clients"],
+    }),
+
+    updateClient: builder.mutation<Client, { id: string; body: Record<string, unknown> }>({
+      query: ({ id, body }) => ({ url: `/clients/${id}`, method: "PATCH", body }),
+      invalidatesTags: (_r, _e, { id }) => ["Clients", { type: "Client" as const, id }],
+    }),
+
     deleteClient: builder.mutation<void, string>({
       query: (id) => ({ url: `/clients/${id}`, method: "DELETE" }),
       invalidatesTags: ["Clients"],
@@ -53,5 +63,7 @@ export const {
   useDeleteJobMutation,
   useParseJdMutation,
   useGetClientsQuery,
+  useCreateClientMutation,
+  useUpdateClientMutation,
   useDeleteClientMutation,
 } = jobApi;
