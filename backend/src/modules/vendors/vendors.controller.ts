@@ -162,6 +162,37 @@ export const deleteVendor = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ─── PATCH /vendors/:id/blacklist ───────────────────────────────────────────
+export const setVendorBlacklist = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  const { blacklisted, reason } = req.body as { blacklisted: boolean; reason?: string };
+
+  if (typeof blacklisted !== "boolean") {
+    return res.status(400).json({ message: "blacklisted (boolean) is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE vendors
+       SET is_blacklisted = $1,
+           blacklist_reason = $2,
+           blacklisted_at = CASE WHEN $1 THEN now() ELSE NULL END,
+           updated_at = now()
+       WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL
+       RETURNING id, company_name, is_blacklisted, blacklist_reason, blacklisted_at`,
+      [blacklisted, blacklisted ? (reason || null) : null, id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("setVendorBlacklist error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 // ─── GET /vendors/leaderboard ────────────────────────────────────────────────
 export const getVendorLeaderboard = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user!.tenant_id;

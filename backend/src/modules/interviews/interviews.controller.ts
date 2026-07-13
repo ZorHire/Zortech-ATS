@@ -1,6 +1,7 @@
 import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { createNotification } from "../notifications/notifications.controller";
 
 // GET /interviews — all interviews for the tenant (optional filters: status, from, to, job_id)
 export const listInterviews = async (req: AuthRequest, res: Response) => {
@@ -33,7 +34,7 @@ export const listInterviews = async (req: AuthRequest, res: Response) => {
       `SELECT
          i.id, i.interview_type, i.scheduled_at, i.duration_minutes,
          i.interviewer_name, i.interviewer_email, i.meeting_link,
-         i.feedback_score, i.feedback_notes, i.status, i.created_at,
+         i.feedback_score, i.feedback_notes, i.feedback_ratings, i.feedback_locked, i.status, i.created_at,
          i.application_id,
          c.id AS candidate_id,
          c.first_name, c.last_name, c.email AS candidate_email,
@@ -125,7 +126,44 @@ export const createInterview = async (req: AuthRequest, res: Response) => {
       ],
     );
 
-    res.status(201).json(result.rows[0]);
+    const interview = result.rows[0];
+    res.status(201).json(interview);
+
+    // Fire-and-forget: notify admins/managers about scheduled interview
+    (async () => {
+      try {
+        const infoResult = await pool.query(
+          `SELECT c.first_name, c.last_name, j.title AS job_title
+           FROM job_applications ja
+           JOIN candidates c ON c.id = ja.candidate_id
+           JOIN jobs j ON j.id = ja.job_id
+           WHERE ja.id = $1`,
+          [application_id],
+        );
+        if (infoResult.rows.length === 0) return;
+        const { first_name, last_name, job_title } = infoResult.rows[0];
+        const dateStr = new Date(scheduled_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+
+        const recipientsResult = await pool.query(
+          `SELECT u.id FROM users u
+           JOIN tenant_memberships tm ON tm.user_id = u.id
+           WHERE tm.tenant_id = $1 AND tm.is_active = true
+             AND tm.role IN ('super_admin','accounts_manager')
+             AND u.id != $2`,
+          [tenantId, createdBy],
+        );
+        for (const row of recipientsResult.rows) {
+          await createNotification(
+            row.id,
+            "info",
+            "Interview Scheduled",
+            `${first_name} ${last_name} — ${job_title} (${type}, ${dateStr})`,
+            "interview",
+            interview.id,
+          );
+        }
+      } catch {}
+    })();
   } catch (error) {
     console.error("createInterview error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -136,7 +174,7 @@ export const createInterview = async (req: AuthRequest, res: Response) => {
 export const updateInterview = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
   const { id } = req.params;
-  const { status, feedback_score, feedback_notes } = req.body;
+  const { status, feedback_score, feedback_notes, feedback_ratings, lock_feedback } = req.body;
 
   const validStatuses = ["scheduled", "completed", "cancelled", "no_show"];
   if (status !== undefined && !validStatuses.includes(status)) {
@@ -145,11 +183,17 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
 
   try {
     const check = await pool.query(
-      "SELECT id FROM interviews WHERE id = $1 AND tenant_id = $2",
+      "SELECT id, feedback_locked FROM interviews WHERE id = $1 AND tenant_id = $2",
       [id, tenantId],
     );
     if (check.rows.length === 0) {
       return res.status(404).json({ message: "Interview not found" });
+    }
+
+    // Prevent editing feedback once locked
+    const isFeedbackChange = feedback_score !== undefined || feedback_notes !== undefined || feedback_ratings !== undefined;
+    if (isFeedbackChange && check.rows[0].feedback_locked) {
+      return res.status(409).json({ message: "Feedback is locked and cannot be edited" });
     }
 
     const sets: string[] = ["updated_at = now()"];
@@ -168,6 +212,13 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
       sets.push(`feedback_notes = $${idx++}`);
       params.push(feedback_notes);
     }
+    if (feedback_ratings !== undefined) {
+      sets.push(`feedback_ratings = $${idx++}`);
+      params.push(JSON.stringify(feedback_ratings));
+    }
+    if (lock_feedback === true) {
+      sets.push(`feedback_locked = true`);
+    }
 
     params.push(id);
     const result = await pool.query(
@@ -178,6 +229,24 @@ export const updateInterview = async (req: AuthRequest, res: Response) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error("updateInterview error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const deleteInterview = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user?.tenant_id;
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `DELETE FROM interviews WHERE id = $1 AND tenant_id = $2 RETURNING id`,
+      [id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Interview not found" });
+    }
+    res.json({ message: "Interview deleted" });
+  } catch (error) {
+    console.error("deleteInterview error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

@@ -26,6 +26,11 @@ import offersRoutes from "./modules/offers/offers.routes";
 import profileRoutes from "./modules/profiles/profiles.routes";
 import notificationRoutes from "./modules/notifications/notifications.routes";
 import jobBoardRoutes from "./modules/job-boards/job-boards.routes";
+import savedSearchRoutes from "./modules/saved-searches/saved-searches.routes";
+import invoicesRoutes from "./modules/invoices/invoices.routes";
+import analyticsEnhancedRoutes from "./modules/analytics/analytics-enhanced.routes";
+import integrationsRoutes from "./modules/integrations/integrations.routes";
+import { startScheduler } from "./scheduler";
 
 const app = express();
 const port = env.PORT;
@@ -106,6 +111,10 @@ v1Router.use("/offers", offersRoutes);
 v1Router.use("/profile", profileRoutes);
 v1Router.use("/notifications", notificationRoutes);
 v1Router.use("/job-boards", jobBoardRoutes);
+v1Router.use("/saved-searches", savedSearchRoutes);
+v1Router.use("/invoices", invoicesRoutes);
+v1Router.use("/analytics-enhanced", analyticsEnhancedRoutes);
+v1Router.use("/integrations", integrationsRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);
@@ -133,6 +142,7 @@ app.use((req: express.Request, res: express.Response) => {
 // Start Server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+  startScheduler();
 });
 
 export default app;

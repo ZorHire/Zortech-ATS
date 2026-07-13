@@ -50,3 +50,24 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const uploadAvatar = async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.id;
+  const tenantId = req.user?.tenant_id;
+  if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+  const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  if (!allowedMimes.includes(req.file.mimetype)) {
+    return res.status(400).json({ message: 'Only JPEG, PNG, and WebP images are allowed' });
+  }
+  const avatarUrl = '/uploads/' + req.file.filename;
+  try {
+    await pool.query(
+      'UPDATE users SET avatar_url=$1, updated_at=now() WHERE id=$2 AND tenant_id=$3',
+      [avatarUrl, userId, tenantId]
+    );
+    res.json({ avatar_url: avatarUrl });
+  } catch (err) {
+    console.error('uploadAvatar error:', err);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};

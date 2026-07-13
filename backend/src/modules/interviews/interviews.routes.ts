@@ -42,4 +42,13 @@ router.patch(
   interviewController.updateInterview,
 );
 
+// Delete an interview
+router.delete(
+  "/:id",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager", "recruiter"]),
+  interviewController.deleteInterview,
+);
+
 export default router;

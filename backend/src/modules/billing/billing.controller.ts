@@ -338,3 +338,60 @@ export const cancelSubscription = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Failed to cancel subscription" });
   }
 };
+
+export const refundPayment = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user?.tenant_id;
+  const { payment_id, amount, notes } = req.body;
+  if (!payment_id) return res.status(400).json({ message: 'payment_id is required' });
+  try {
+    // Razorpay refund via REST API
+    const Razorpay = require('razorpay');
+    const razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+    const refund = await razorpay.payments.refund(payment_id, {
+      amount: amount ? Math.round(amount * 100) : undefined,
+      notes: notes ? { reason: notes } : undefined,
+    });
+    // Update subscription/billing record
+    await pool.query(
+      `UPDATE subscriptions SET updated_at=now() WHERE payment_id=$1 AND tenant_id=$2`,
+      [payment_id, tenantId]
+    );
+    res.json({ message: 'Refund initiated', refund_id: refund.id, status: refund.status });
+  } catch (err: any) {
+    console.error('refundPayment error:', err);
+    res.status(500).json({ error: err?.error?.description || 'Refund failed' });
+  }
+};
+
+export const razorpayWebhook = async (req: any, res: Response) => {
+  const signature = req.headers['x-razorpay-signature'];
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+  try {
+    const crypto = require('crypto');
+    const body = JSON.stringify(req.body);
+    const expectedSig = crypto.createHmac('sha256', secret).update(body).digest('hex');
+    if (signature !== expectedSig) {
+      return res.status(400).json({ message: 'Invalid webhook signature' });
+    }
+    const event = req.body;
+    if (event.event === 'payment.captured') {
+      const paymentId = event.payload?.payment?.entity?.id;
+      const amount = event.payload?.payment?.entity?.amount;
+      const notes = event.payload?.payment?.entity?.notes || {};
+      if (notes.tenant_id) {
+        await pool.query(
+          `UPDATE subscriptions SET status='active', payment_id=$1, updated_at=now()
+           WHERE tenant_id=$2 AND status='pending'`,
+          [paymentId, notes.tenant_id]
+        );
+      }
+    }
+    res.json({ received: true });
+  } catch (err) {
+    console.error('razorpayWebhook error:', err);
+    res.status(500).json({ message: 'Webhook processing failed' });
+  }
+};

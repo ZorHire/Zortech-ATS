@@ -25,7 +25,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
     : "AND updated_at >= NOW() - INTERVAL '6 months'";
 
   try {
-    const [funnelResult, sourcesResult, monthlyResult, recruiterResult, vendorResult, summaryResult] =
+    const [funnelResult, sourcesResult, monthlyResult, recruiterResult, vendorResult, summaryResult, timeToFillResult, sourceConversionResult] =
       await Promise.all([
         pool.query(
           `SELECT stage, COUNT(*)::int AS count
@@ -118,6 +118,37 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
              (SELECT COUNT(*)::int FROM job_applications WHERE tenant_id = $1 AND stage = 'offer_extended') AS pending_offers`,
           appParams,
         ),
+        // Time-to-Fill: average days from job creation to placement
+        pool.query(
+          `SELECT
+             ROUND(AVG(EXTRACT(EPOCH FROM (pe.created_at - j.created_at)) / 86400)::numeric, 1) AS avg_days_to_fill,
+             COUNT(*)::int AS total_filled
+           FROM pipeline_events pe
+           JOIN job_applications ja ON pe.application_id = ja.id
+           JOIN jobs j ON ja.job_id = j.id
+           WHERE pe.tenant_id = $1
+             AND pe.to_stage IN ('offer_accepted','joined')
+             ${hasRange ? 'AND pe.created_at BETWEEN $2 AND $3' : ''}`,
+          appParams,
+        ),
+        // Source conversion: volume + placement rate per source
+        pool.query(
+          `SELECT
+             c.source,
+             COUNT(DISTINCT c.id)::int AS total,
+             COUNT(DISTINCT CASE WHEN ja.stage IN ('offer_accepted','joined') THEN c.id END)::int AS placements,
+             ROUND(
+               COUNT(DISTINCT CASE WHEN ja.stage IN ('offer_accepted','joined') THEN c.id END)::numeric /
+               NULLIF(COUNT(DISTINCT c.id), 0) * 100, 1
+             )::float AS conversion_rate
+           FROM candidates c
+           LEFT JOIN job_applications ja ON ja.candidate_id = c.id AND ja.tenant_id = $1
+           WHERE c.tenant_id = $1 AND c.deleted_at IS NULL
+           ${hasRange ? 'AND c.created_at BETWEEN $2 AND $3' : ''}
+           GROUP BY c.source
+           ORDER BY total DESC`,
+          appParams,
+        ),
       ]);
 
     const summary = summaryResult.rows[0];
@@ -140,6 +171,11 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
       recruiters: recruiterResult.rows,
       vendors: vendorResult.rows,
       summary: { ...summary, offer_accept_rate: offerAcceptRate },
+      time_to_fill: {
+        avg_days: timeToFillResult.rows[0]?.avg_days_to_fill ?? null,
+        total_filled: timeToFillResult.rows[0]?.total_filled ?? 0,
+      },
+      source_conversion: sourceConversionResult.rows,
     });
   } catch (error) {
     console.error('Analytics error:', error);

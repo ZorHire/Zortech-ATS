@@ -130,6 +130,18 @@ export const submitCandidate = async (req: AuthRequest, res: Response) => {
         .json({ message: "job_id, candidate_full_name, and candidate_email are required." });
     }
 
+    // Check vendor is not blacklisted
+    const blacklistCheck = await pool.query(
+      "SELECT is_blacklisted, blacklist_reason FROM vendors WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      [vendorId, tenantId],
+    );
+    if (blacklistCheck.rows[0]?.is_blacklisted) {
+      const reason = blacklistCheck.rows[0].blacklist_reason;
+      return res.status(403).json({
+        message: `Your vendor account has been blacklisted and cannot submit candidates.${reason ? ` Reason: ${reason}` : ""}`,
+      });
+    }
+
     // Verify job is assigned to this vendor
     const jobCheck = await pool.query(
       `SELECT id FROM jobs
@@ -142,6 +154,36 @@ export const submitCandidate = async (req: AuthRequest, res: Response) => {
       return res
         .status(403)
         .json({ message: "This job is not assigned to your vendor or is not active." });
+    }
+
+    // Cross-vendor duplicate block: same candidate email already submitted by any vendor for this job
+    const crossDupCheck = await pool.query(
+      `SELECT id FROM vendor_portal_submissions
+       WHERE job_id = $1 AND tenant_id = $2 AND candidate_email = $3`,
+      [job_id, tenantId, candidate_email.toLowerCase().trim()],
+    );
+    if (crossDupCheck.rows.length > 0) {
+      return res.status(409).json({
+        message: "This candidate has already been submitted for this job by another vendor.",
+      });
+    }
+
+    // Check vendor submission limit for this job
+    const limitCheck = await pool.query(
+      `SELECT j.vendor_submission_limit,
+         (SELECT COUNT(*)::int FROM vendor_portal_submissions
+          WHERE job_id = $1 AND vendor_id = $2 AND tenant_id = $3) AS my_count
+       FROM jobs j WHERE j.id = $1 AND j.tenant_id = $3`,
+      [job_id, vendorId, tenantId],
+    );
+    if (limitCheck.rows.length > 0) {
+      const limit = limitCheck.rows[0].vendor_submission_limit;
+      const myCount = limitCheck.rows[0].my_count;
+      if (limit !== null && myCount >= limit) {
+        return res.status(400).json({
+          message: `Submission limit of ${limit} reached for this job. Contact the recruiter to increase the limit.`,
+        });
+      }
     }
 
     // Check for duplicate submission by this vendor for this job
@@ -292,6 +334,89 @@ export const getSubmissions = async (req: AuthRequest, res: Response) => {
     res.json(result.rows);
   } catch (error) {
     console.error("Vendor portal getSubmissions error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// GET /vendor-portal/all-submissions — admin view of all vendor submissions
+export const getAllSubmissions = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    const { vendor_id, job_id, status } = req.query;
+
+    const conditions: string[] = ["vps.tenant_id = $1"];
+    const params: any[] = [tenantId];
+    let idx = 2;
+
+    if (vendor_id) { conditions.push(`vps.vendor_id = $${idx++}`); params.push(vendor_id); }
+    if (job_id)    { conditions.push(`vps.job_id = $${idx++}`); params.push(job_id); }
+    if (status)    { conditions.push(`vps.status = $${idx++}`); params.push(status); }
+
+    const result = await pool.query(
+      `SELECT
+         vps.id, vps.candidate_full_name, vps.candidate_email, vps.candidate_phone,
+         vps.experience_years, vps.skills, vps.cover_note, vps.status,
+         vps.rejection_reason, vps.created_at,
+         v.company_name AS vendor_name,
+         j.id AS job_id, j.title AS job_title,
+         ja.stage AS pipeline_stage
+       FROM vendor_portal_submissions vps
+       JOIN vendors v ON v.id = vps.vendor_id
+       JOIN jobs j ON j.id = vps.job_id
+       LEFT JOIN job_applications ja ON ja.id = vps.application_id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY vps.created_at DESC
+       LIMIT 200`,
+      params,
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("getAllSubmissions error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const REJECTION_REASONS = [
+  "overqualified",
+  "underqualified",
+  "salary_mismatch",
+  "location_mismatch",
+  "duplicate_candidate",
+  "skills_mismatch",
+  "not_available",
+  "client_declined",
+  "other",
+] as const;
+
+// PATCH /vendor-portal/submissions/:id/reject
+export const rejectSubmission = async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    const { id } = req.params;
+    const { rejection_reason } = req.body;
+
+    if (!rejection_reason || !REJECTION_REASONS.includes(rejection_reason)) {
+      return res.status(400).json({
+        message: `rejection_reason must be one of: ${REJECTION_REASONS.join(", ")}`,
+      });
+    }
+
+    const result = await pool.query(
+      `UPDATE vendor_portal_submissions
+       SET status = 'rejected', rejection_reason = $1
+       WHERE id = $2 AND tenant_id = $3
+       RETURNING id, status, rejection_reason`,
+      [rejection_reason, id, tenantId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("rejectSubmission error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

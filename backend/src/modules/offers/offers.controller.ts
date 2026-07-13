@@ -131,3 +131,53 @@ export const listPlacements = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: "Failed to fetch placements" });
   }
 };
+
+export const updateOfferStage = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user?.tenant_id;
+  const { id } = req.params;
+  const { stage } = req.body;
+  const validStages = ["offer_extended", "offer_accepted", "offer_rejected", "joined"];
+  if (!stage || !validStages.includes(stage as string)) {
+    return res.status(400).json({ message: "stage must be one of: " + validStages.join(", ") });
+  }
+  try {
+    const result = await pool.query(
+      `UPDATE job_applications SET stage = $1, updated_at = now()
+       WHERE id = $2 AND tenant_id = $3
+       RETURNING id, stage, updated_at`,
+      [stage, id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+    res.json(result.rows[0]);
+
+    if (stage === 'joined') {
+      (async () => {
+        try {
+          const app = await pool.query(
+            `SELECT ja.*, j.client_id, j.title as job_title, c.id as cand_id
+             FROM job_applications ja
+             JOIN jobs j ON j.id = ja.job_id
+             JOIN candidates c ON c.id = ja.candidate_id
+             WHERE ja.id = $1`,
+            [id]
+          );
+          if (app.rows[0] && app.rows[0].client_id) {
+            const a = app.rows[0];
+            const invoiceNum = 'INV-' + Date.now().toString().slice(-8);
+            await pool.query(
+              `INSERT INTO invoices (tenant_id, client_id, job_id, candidate_id, application_id, invoice_number, status)
+               VALUES ($1,$2,$3,$4,$5,$6,'draft')
+               ON CONFLICT DO NOTHING`,
+              [tenantId, a.client_id, a.job_id, a.cand_id, id, invoiceNum]
+            );
+          }
+        } catch(e) { console.error('auto-invoice error:', e); }
+      })();
+    }
+  } catch (err) {
+    console.error("updateOfferStage error:", err);
+    res.status(500).json({ error: "Failed to update offer stage" });
+  }
+};
