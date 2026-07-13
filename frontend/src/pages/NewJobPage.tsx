@@ -130,6 +130,12 @@ export default function NewJobPage() {
     }
   };
 
+  const titleFlagged = isLowConfidence(lowConfidenceFields, "title");
+  const departmentFlagged = isLowConfidence(lowConfidenceFields, "department");
+  const workModeFlagged = isLowConfidence(lowConfidenceFields, "work_mode");
+  const mandatorySkillsFlagged = isLowConfidence(lowConfidenceFields, "mandatory_skills", "required_skills");
+  const preferredSkillsFlagged = isLowConfidence(lowConfidenceFields, "preferred_skills");
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
@@ -212,7 +218,7 @@ export default function NewJobPage() {
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                   Job Title
-                  {isLowConfidence(lowConfidenceFields, "title") && <span className={ConfidenceBadge}>needs review</span>}
+                  {titleFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
                 <input
                   required
@@ -220,7 +226,7 @@ export default function NewJobPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "title"))}`}
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(titleFlagged)}`}
                   placeholder="Senior Product Designer"
                 />
               </div>
@@ -285,28 +291,28 @@ export default function NewJobPage() {
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                   Department
-                  {isLowConfidence(lowConfidenceFields, "department") && <span className={ConfidenceBadge}>needs review</span>}
+                  {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
                 <input
                   value={formData.department}
                   onChange={(e) =>
                     setFormData({ ...formData, department: e.target.value })
                   }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "department"))}`}
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(departmentFlagged)}`}
                   placeholder="Engineering"
                 />
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                   Work Mode
-                  {isLowConfidence(lowConfidenceFields, "work_mode") && <span className={ConfidenceBadge}>needs review</span>}
+                  {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
                 <select
                   value={formData.work_mode}
                   onChange={(e) =>
                     setFormData({ ...formData, work_mode: e.target.value })
                   }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "work_mode"))}`}
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(workModeFlagged)}`}
                 >
                   <option value="onsite">Onsite</option>
                   <option value="hybrid">Hybrid</option>
@@ -428,14 +434,14 @@ export default function NewJobPage() {
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                 Primary Skills
-                {isLowConfidence(lowConfidenceFields, "mandatory_skills", "required_skills") && <span className={ConfidenceBadge}>needs review</span>}
+                {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 value={formData.mandatory_skills}
                 onChange={(e) =>
                   setFormData({ ...formData, mandatory_skills: e.target.value })
                 }
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "mandatory_skills", "required_skills"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(mandatorySkillsFlagged)}`}
                 placeholder="React, Node.js, Product Management"
               />
             </div>
@@ -443,14 +449,14 @@ export default function NewJobPage() {
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                 Preferred Skills
-                {isLowConfidence(lowConfidenceFields, "preferred_skills") && <span className={ConfidenceBadge}>needs review</span>}
+                {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 value={formData.preferred_skills}
                 onChange={(e) =>
                   setFormData({ ...formData, preferred_skills: e.target.value })
                 }
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "preferred_skills"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(preferredSkillsFlagged)}`}
                 placeholder="GraphQL, Kubernetes (good to have)"
               />
             </div>

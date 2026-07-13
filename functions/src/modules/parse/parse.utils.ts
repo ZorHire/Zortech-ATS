@@ -475,7 +475,7 @@ const parseVendorTextRegex = (content: string): ParsedVendorData => {
   const normalized = normalizeText(content);
   return {
     company_name:
-      findSectionText(normalized, /(?:company|organization|vendor)[:\s]*/i) ||
+      findSectionText(normalized, /(?:^|\n)\s*(?:company|organization|vendor)(?:\s+name)?\s*[:\-]\s*/im) ||
       normalized.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] ||
       "",
     primary_contact_name: parseName(normalized),

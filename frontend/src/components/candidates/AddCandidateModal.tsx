@@ -125,6 +125,18 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
     }
   };
 
+  const nameFlagged = isLowConfidence(lowConfidenceFields, "name");
+  const emailFlagged = isLowConfidence(lowConfidenceFields, "email");
+  const phoneFlagged = isLowConfidence(lowConfidenceFields, "phone");
+  const currentTitleFlagged = isLowConfidence(lowConfidenceFields, "current_title");
+  const currentCompanyFlagged = isLowConfidence(lowConfidenceFields, "current_company");
+  const currentLocationFlagged = isLowConfidence(lowConfidenceFields, "current_location");
+  const preferredLocationFlagged = isLowConfidence(lowConfidenceFields, "preferred_location");
+  const noticePeriodFlagged = isLowConfidence(lowConfidenceFields, "notice_period_days");
+  const currentCtcFlagged = isLowConfidence(lowConfidenceFields, "current_ctc");
+  const expectedCtcFlagged = isLowConfidence(lowConfidenceFields, "expected_ctc");
+  const skillsFlagged = isLowConfidence(lowConfidenceFields, "skills");
+
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -142,80 +154,80 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 First Name
-                {isLowConfidence(lowConfidenceFields, "name") && <span className={ConfidenceBadge}>needs review</span>}
+                {nameFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 required
                 type="text"
                 value={formData.first_name}
                 onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "name"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(nameFlagged)}`}
                 placeholder="e.g. John"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Last Name
-                {isLowConfidence(lowConfidenceFields, "name") && <span className={ConfidenceBadge}>needs review</span>}
+                {nameFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 required
                 type="text"
                 value={formData.last_name}
                 onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "name"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(nameFlagged)}`}
                 placeholder="e.g. Doe"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Email Address
-                {isLowConfidence(lowConfidenceFields, "email") && <span className={ConfidenceBadge}>needs review</span>}
+                {emailFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "email"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(emailFlagged)}`}
                 placeholder="john.doe@example.com"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Phone Number
-                {isLowConfidence(lowConfidenceFields, "phone") && <span className={ConfidenceBadge}>needs review</span>}
+                {phoneFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="text"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "phone"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(phoneFlagged)}`}
                 placeholder="+91 XXXXX XXXXX"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Current Title
-                {isLowConfidence(lowConfidenceFields, "current_title") && <span className={ConfidenceBadge}>needs review</span>}
+                {currentTitleFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="text"
                 value={formData.current_title}
                 onChange={(e) => setFormData({ ...formData, current_title: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "current_title"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentTitleFlagged)}`}
                 placeholder="e.g. Senior Software Engineer"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Current Company
-                {isLowConfidence(lowConfidenceFields, "current_company") && <span className={ConfidenceBadge}>needs review</span>}
+                {currentCompanyFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="text"
                 value={formData.current_company}
                 onChange={(e) => setFormData({ ...formData, current_company: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "current_company"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentCompanyFlagged)}`}
                 placeholder="e.g. Google"
               />
             </div>
@@ -232,80 +244,80 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Location
-                {isLowConfidence(lowConfidenceFields, "current_location") && <span className={ConfidenceBadge}>needs review</span>}
+                {currentLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="text"
                 value={formData.current_location}
                 onChange={(e) => setFormData({ ...formData, current_location: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "current_location"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentLocationFlagged)}`}
                 placeholder="e.g. New York"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Preferred Location
-                {isLowConfidence(lowConfidenceFields, "preferred_location") && <span className={ConfidenceBadge}>needs review</span>}
+                {preferredLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="text"
                 value={formData.preferred_location}
                 onChange={(e) => setFormData({ ...formData, preferred_location: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "preferred_location"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(preferredLocationFlagged)}`}
                 placeholder="e.g. Bangalore or Remote"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Notice Period (days)
-                {isLowConfidence(lowConfidenceFields, "notice_period_days") && <span className={ConfidenceBadge}>needs review</span>}
+                {noticePeriodFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="number"
                 min={0}
                 value={formData.notice_period_days}
                 onChange={(e) => setFormData({ ...formData, notice_period_days: Number(e.target.value) })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "notice_period_days"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(noticePeriodFlagged)}`}
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Current CTC (annual)
-                {isLowConfidence(lowConfidenceFields, "current_ctc") && <span className={ConfidenceBadge}>needs review</span>}
+                {currentCtcFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="number"
                 min={0}
                 value={formData.current_ctc}
                 onChange={(e) => setFormData({ ...formData, current_ctc: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "current_ctc"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentCtcFlagged)}`}
                 placeholder="e.g. 1200000"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Expected CTC (annual)
-                {isLowConfidence(lowConfidenceFields, "expected_ctc") && <span className={ConfidenceBadge}>needs review</span>}
+                {expectedCtcFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="number"
                 min={0}
                 value={formData.expected_ctc}
                 onChange={(e) => setFormData({ ...formData, expected_ctc: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "expected_ctc"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(expectedCtcFlagged)}`}
                 placeholder="e.g. 1500000"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                 Skills (comma separated)
-                {isLowConfidence(lowConfidenceFields, "skills") && <span className={ConfidenceBadge}>needs review</span>}
+                {skillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 type="text"
                 value={formData.skills}
                 onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "skills"))}`}
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(skillsFlagged)}`}
                 placeholder="React, Node.js, TypeScript"
               />
             </div>

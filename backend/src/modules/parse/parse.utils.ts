@@ -20,7 +20,7 @@ import crypto from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import env from "../../config/env";
 import redis from "../../lib/redis";
-import { getModelForAgent, AgentId } from "../../services/modelRouter";
+import { getModelForAgent } from "../../services/modelRouter";
 import { logAiCall, estimateCostUsd, categorizeError, PROMPT_VERSION } from "../../services/aiCallLog";
 
 // ---------------------------------------------------------------------------
@@ -72,19 +72,23 @@ export type ParsedJobData = {
 type GeminiModel = ReturnType<InstanceType<typeof GoogleGenerativeAI>["getGenerativeModel"]>;
 const _geminiModelCache = new Map<string, GeminiModel>();
 
-const getGeminiModel = (agentId: AgentId) => {
+/** Takes the already-resolved model string (not an AgentId) so callers that also need the
+ * resolved string for cache keys/logging only call getModelForAgent() once. */
+const getGeminiModel = (model: string) => {
   if (!env.GEMINI_API_KEY) return null;
-  const model = getModelForAgent(agentId);
   const cached = _geminiModelCache.get(model);
   if (cached) return cached;
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  const instance = genAI.getGenerativeModel({
-    model,
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: "application/json",
+  const instance = genAI.getGenerativeModel(
+    {
+      model,
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+      },
     },
-  });
+    { timeout: 20000 },
+  );
   _geminiModelCache.set(model, instance);
   return instance;
 };
@@ -154,9 +158,11 @@ const asUncertainFields = (v: unknown, allowed: readonly string[]): string[] => 
   return [...new Set(v.filter((s): s is string => typeof s === "string" && allowedSet.has(s)))];
 };
 
-const asEnum = <T extends string>(v: unknown, options: readonly T[], fallback: T): T => {
+/** fallback is plain `string` (not `T`) so callers can pass "" for "leave unset" — a matched
+ * value never overwrites a JD field the document didn't actually state (see JD parser). */
+const asEnum = <T extends string>(v: unknown, options: readonly T[], fallback: string): string => {
   const s = typeof v === "string" ? v.toLowerCase().trim() : "";
-  return (options as readonly string[]).includes(s) ? (s as T) : fallback;
+  return (options as readonly string[]).includes(s) ? s : fallback;
 };
 
 const RESUME_FIELDS = [
@@ -183,8 +189,8 @@ const PRIORITIES = ["low", "medium", "high", "critical"] as const;
 // ---------------------------------------------------------------------------
 const GEMINI_CACHE_TTL_SECONDS = 24 * 60 * 60;
 
-const geminiCacheKey = (kind: string, model: string, text: string): string =>
-  `parse:${kind}:${model}:${PROMPT_VERSION}:${crypto.createHash("sha256").update(text).digest("hex")}`;
+const geminiCacheKey = (kind: string, model: string, tenantId: string, text: string): string =>
+  `parse:${kind}:${model}:${PROMPT_VERSION}:${tenantId}:${crypto.createHash("sha256").update(text).digest("hex")}`;
 
 const getCachedGeminiResult = async <T>(key: string): Promise<T | null> => {
   try {
@@ -787,14 +793,26 @@ const parseBudget = (rawContent: string) => {
 // ---------------------------------------------------------------------------
 
 const parseResumeWithGemini = async (text: string, tenantId: string): Promise<ParsedResumeData | null> => {
-  const model = getGeminiModel("resume_parser");
+  const resolvedModel = getModelForAgent("resume_parser");
+  const model = getGeminiModel(resolvedModel);
   if (!model) return null;
 
-  const resolvedModel = getModelForAgent("resume_parser");
-  const cacheKey = geminiCacheKey("resume", resolvedModel, text);
+  const cacheKey = geminiCacheKey("resume", resolvedModel, tenantId, text);
   const cached = await getCachedGeminiResult<ParsedResumeData>(cacheKey);
   if (cached) {
     console.log("[Gemini] Resume parse cache hit");
+    // Still log the hit — no fresh Gemini spend, but a real call happened
+    // from the tenant's perspective and should count toward audit visibility.
+    void logAiCall({
+      tenantId,
+      agentId: "resume_parser",
+      entityType: "resume",
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSION,
+      costUsd: 0,
+      latencyMs: 0,
+      success: true,
+    });
     return cached;
   }
 
@@ -853,7 +871,7 @@ Critical rules:
       low_confidence_fields: asUncertainFields(parsed.uncertain_fields, RESUME_FIELDS),
     };
 
-    await logAiCall({
+    void logAiCall({
       tenantId,
       agentId: "resume_parser",
       entityType: "resume",
@@ -867,11 +885,11 @@ Critical rules:
       success: true,
     });
 
-    await setCachedGeminiResult(cacheKey, data);
+    void setCachedGeminiResult(cacheKey, data);
     return data;
   } catch (err) {
     console.error("[Gemini] Resume parse failed:", err instanceof Error ? err.message : err);
-    await logAiCall({
+    void logAiCall({
       tenantId,
       agentId: "resume_parser",
       entityType: "resume",
@@ -886,14 +904,24 @@ Critical rules:
 };
 
 const parseJobWithGemini = async (text: string, tenantId: string): Promise<ParsedJobData | null> => {
-  const model = getGeminiModel("jd_parser");
+  const resolvedModel = getModelForAgent("jd_parser");
+  const model = getGeminiModel(resolvedModel);
   if (!model) return null;
 
-  const resolvedModel = getModelForAgent("jd_parser");
-  const cacheKey = geminiCacheKey("jd", resolvedModel, text);
+  const cacheKey = geminiCacheKey("jd", resolvedModel, tenantId, text);
   const cached = await getCachedGeminiResult<ParsedJobData>(cacheKey);
   if (cached) {
     console.log("[Gemini] JD parse cache hit");
+    void logAiCall({
+      tenantId,
+      agentId: "jd_parser",
+      entityType: "job_description",
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSION,
+      costUsd: 0,
+      latencyMs: 0,
+      success: true,
+    });
     return cached;
   }
 
@@ -914,8 +942,8 @@ JSON schema (use null for any field you cannot determine):
   "salary_max": "maximum salary as a number",
   "description": "full cleaned job description text, max 2000 characters",
   "department": "department/team name if stated (e.g. 'Engineering'), else empty string",
-  "work_mode": "one of: remote, hybrid, onsite",
-  "priority": "one of: low, medium, high, critical — infer from urgency language if not explicit, default medium",
+  "work_mode": "one of: remote, hybrid, onsite — ONLY if the JD clearly states or strongly implies it, else empty string",
+  "priority": "one of: low, medium, high, critical — ONLY if urgency language is explicit in the JD, else empty string",
   "headcount": "number of open positions if stated, else omit",
   "uncertain_fields": ["names of fields above that you had to infer or guess rather than found explicitly stated in the JD"]
 }
@@ -924,6 +952,7 @@ Critical rules:
 - mandatory_skills / preferred_skills: split explicitly-required skills from good-to-have/nice-to-have skills
 - experience_min/max: in years as plain numbers
 - salary_min/max: strip currency symbols and commas, plain numbers only
+- work_mode/priority: leave as empty string rather than guessing — a human will fill these in if left blank
 - Return ONLY the JSON object`;
 
   const prompt = wrapUntrustedDocument(schemaAndInstructions, "job description file", text.slice(0, 10000));
@@ -957,13 +986,13 @@ Critical rules:
       salary_max: typeof parsed.salary_max === "number" ? parsed.salary_max : undefined,
       description: typeof parsed.description === "string" ? parsed.description.slice(0, 3000) : text.slice(0, 3000),
       department: typeof parsed.department === "string" ? parsed.department : "",
-      work_mode: asEnum(parsed.work_mode, WORK_MODES, "onsite"),
-      priority: asEnum(parsed.priority, PRIORITIES, "medium"),
+      work_mode: asEnum(parsed.work_mode, WORK_MODES, ""),
+      priority: asEnum(parsed.priority, PRIORITIES, ""),
       headcount: typeof parsed.headcount === "number" ? parsed.headcount : undefined,
       low_confidence_fields: asUncertainFields(parsed.uncertain_fields, JD_FIELDS),
     };
 
-    await logAiCall({
+    void logAiCall({
       tenantId,
       agentId: "jd_parser",
       entityType: "job_description",
@@ -977,11 +1006,11 @@ Critical rules:
       success: true,
     });
 
-    await setCachedGeminiResult(cacheKey, data);
+    void setCachedGeminiResult(cacheKey, data);
     return data;
   } catch (err) {
     console.error("[Gemini] JD parse failed:", err instanceof Error ? err.message : err);
-    await logAiCall({
+    void logAiCall({
       tenantId,
       agentId: "jd_parser",
       entityType: "job_description",

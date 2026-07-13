@@ -283,6 +283,12 @@ export default function JobsPage() {
     total_candidates: jobs.reduce((s, j) => s + (j.application_count || 0), 0),
   };
 
+  const departmentFlagged = isLowConfidence(jobLowConfidenceFields, "department");
+  const jdLocationFlagged = isLowConfidence(jobLowConfidenceFields, "location");
+  const workModeFlagged = isLowConfidence(jobLowConfidenceFields, "work_mode");
+  const mandatorySkillsFlagged = isLowConfidence(jobLowConfidenceFields, "mandatory_skills", "required_skills");
+  const preferredSkillsFlagged = isLowConfidence(jobLowConfidenceFields, "preferred_skills");
+
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
@@ -528,26 +534,26 @@ export default function JobsPage() {
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     Department
-                    {isLowConfidence(jobLowConfidenceFields, "department") && <span className={ConfidenceBadge}>needs review</span>}
+                    {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
                   <input type="text" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "department"))}`} placeholder="e.g. Engineering" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(departmentFlagged)}`} placeholder="e.g. Engineering" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     Location
-                    {isLowConfidence(jobLowConfidenceFields, "location") && <span className={ConfidenceBadge}>needs review</span>}
+                    {jdLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
                   <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "location"))}`} placeholder="e.g. Bangalore, India" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(jdLocationFlagged)}`} placeholder="e.g. Bangalore, India" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     Work Mode
-                    {isLowConfidence(jobLowConfidenceFields, "work_mode") && <span className={ConfidenceBadge}>needs review</span>}
+                    {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
                   <select value={formData.work_mode} onChange={(e) => setFormData({ ...formData, work_mode: e.target.value as any })}
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "work_mode"))}`}>
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none ${confidenceInputClass(workModeFlagged)}`}>
                     <option value="onsite">Onsite</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option>
                   </select>
                 </div>
@@ -571,18 +577,18 @@ export default function JobsPage() {
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     Mandatory Skills (comma-separated)
-                    {isLowConfidence(jobLowConfidenceFields, "mandatory_skills", "required_skills") && <span className={ConfidenceBadge}>needs review</span>}
+                    {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
                   <input type="text" value={formData.mandatory_skills} onChange={(e) => setFormData({ ...formData, mandatory_skills: e.target.value })}
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "mandatory_skills", "required_skills"))}`} placeholder="React, TypeScript, Node.js" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(mandatorySkillsFlagged)}`} placeholder="React, TypeScript, Node.js" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
                     Preferred Skills (comma-separated)
-                    {isLowConfidence(jobLowConfidenceFields, "preferred_skills") && <span className={ConfidenceBadge}>needs review</span>}
+                    {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
                   <input type="text" value={formData.preferred_skills} onChange={(e) => setFormData({ ...formData, preferred_skills: e.target.value })}
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "preferred_skills"))}`} placeholder="GraphQL, Kubernetes (good to have)" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(preferredSkillsFlagged)}`} placeholder="GraphQL, Kubernetes (good to have)" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Job Description</label>

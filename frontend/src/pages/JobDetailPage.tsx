@@ -19,6 +19,8 @@ import { Job } from '../types';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
+import { generateBooleanQueries } from '../lib/booleanQueryGenerator';
+import CopyButton from '../components/common/CopyButton';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -125,6 +127,15 @@ export default function JobDetailPage() {
     job.salary_min && job.salary_max
       ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L – INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
       : 'Not specified';
+
+  const booleanQueries = generateBooleanQueries({
+    title: job.title,
+    mandatory_skills: job.mandatory_skills ?? [],
+    preferred_skills: job.preferred_skills ?? [],
+    location: job.location ?? '',
+    experience_min: job.experience_min,
+    experience_max: job.experience_max,
+  });
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -279,6 +290,29 @@ export default function JobDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Sourcing — boolean search strings for external job boards */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Sourcing — Boolean Search
+            </p>
+            <div className="space-y-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <p className="text-xs font-medium text-gray-500">LinkedIn (X-ray search via Google)</p>
+                  <CopyButton text={booleanQueries.linkedin} />
+                </div>
+                <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.linkedin}</p>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <p className="text-xs font-medium text-gray-500">Naukri, Indeed, Monster, Glassdoor</p>
+                  <CopyButton text={booleanQueries.generic} />
+                </div>
+                <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.generic}</p>
+              </div>
+            </div>
+          </div>
 
           {/* Description */}
           {job.description && (

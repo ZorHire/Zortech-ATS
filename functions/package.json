@@ -9,7 +9,8 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "eval": "ts-node --files eval/runHarness.ts"
   },
   "engines": {
     "node": "20"
@@ -48,6 +49,7 @@
     "eslint-config-google": "^0.14.0",
     "eslint-plugin-import": "^2.25.4",
     "firebase-functions-test": "^3.4.1",
+    "ts-node": "^10.9.2",
     "typescript": "^6.0.0"
   },
   "private": true

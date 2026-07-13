@@ -635,12 +635,19 @@ export default function CandidatesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                    Skills (comma separated)
-                    {isLowConfidence(lowConfidenceFields, "skills") && <span className={ConfidenceBadge}>needs review</span>}
-                  </label>
-                  <input type="text" value={formData.skills} onChange={(e) => setFormData((f) => ({ ...f, skills: e.target.value }))}
-                    placeholder="React, Node.js, TypeScript" className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "skills"))}`} />
+                  {(() => {
+                    const skillsFlagged = isLowConfidence(lowConfidenceFields, "skills");
+                    return (
+                      <>
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                          Skills (comma separated)
+                          {skillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                        </label>
+                        <input type="text" value={formData.skills} onChange={(e) => setFormData((f) => ({ ...f, skills: e.target.value }))}
+                          placeholder="React, Node.js, TypeScript" className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(skillsFlagged)}`} />
+                      </>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Source</label>
