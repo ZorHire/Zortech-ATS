@@ -1,8 +1,9 @@
 import axios from "axios";
 import env from "../config/env";
+import { getModelForAgent } from "./modelRouter";
+import { logAiCall, estimateCostUsd, categorizeError, SchemaInvalidError, PROMPT_VERSION } from "./aiCallLog.service";
 
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
+const GEMINI_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -40,13 +41,25 @@ const withRetry = async <T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> =>
   throw lastErr;
 };
 
-const callGemini = async (prompt: string): Promise<string> => {
+interface GeminiUsageMetadata {
+  promptTokenCount: number;
+  candidatesTokenCount: number;
+  totalTokenCount: number;
+  cachedContentTokenCount?: number;
+}
+
+interface GeminiCallResult {
+  text: string;
+  usageMetadata?: GeminiUsageMetadata;
+}
+
+const callGemini = async (prompt: string, model: string): Promise<GeminiCallResult> => {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
   const response = await withRetry(() =>
     axios.post(
-      `${GEMINI_URL}?key=${apiKey}`,
+      `${GEMINI_URL_BASE}/${model}:generateContent?key=${apiKey}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
@@ -61,7 +74,7 @@ const callGemini = async (prompt: string): Promise<string> => {
   const text: string | undefined =
     response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Empty Gemini response");
-  return text;
+  return { text, usageMetadata: response.data?.usageMetadata };
 };
 
 const safeJson = (raw: string): any => {
@@ -144,6 +157,7 @@ export interface GeminiResumeResult {
 
 export const parseResumeWithGemini = async (
   text: string,
+  tenantId: string,
 ): Promise<GeminiResumeResult> => {
   const schemaAndInstructions = `Parse the following resume and return ONLY a JSON object with these exact fields. Use empty string for missing text fields, empty array for missing arrays, and omit numeric fields if not found.
 
@@ -165,27 +179,59 @@ export const parseResumeWithGemini = async (
 }`;
 
   const prompt = wrapUntrustedDocument(schemaAndInstructions, "resume file", text.slice(0, 9000));
+  const model = getModelForAgent("resume_parser");
+  const startedAt = Date.now();
 
-  const raw = await callGemini(prompt);
-  const parsed = safeJson(raw);
-  if (!parsed) throw new Error("Gemini returned unparseable JSON for resume");
+  try {
+    const { text: raw, usageMetadata } = await callGemini(prompt, model);
+    const parsed = safeJson(raw);
+    if (!parsed) throw new SchemaInvalidError("Gemini returned unparseable JSON for resume");
 
-  return {
-    name: asString(parsed.name),
-    email: asString(parsed.email),
-    phone: asString(parsed.phone),
-    skills: asArray(parsed.skills),
-    experience_years: asNumber(parsed.experience_years),
-    current_title: asString(parsed.current_title),
-    current_company: asString(parsed.current_company),
-    current_location: asString(parsed.current_location),
-    summary: asString(parsed.summary),
-    preferred_location: asString(parsed.preferred_location),
-    notice_period_days: asNumber(parsed.notice_period_days),
-    current_ctc: asNumber(parsed.current_ctc),
-    expected_ctc: asNumber(parsed.expected_ctc),
-    uncertain_fields: asUncertainFields(parsed.uncertain_fields, RESUME_FIELDS),
-  };
+    const result: GeminiResumeResult = {
+      name: asString(parsed.name),
+      email: asString(parsed.email),
+      phone: asString(parsed.phone),
+      skills: asArray(parsed.skills),
+      experience_years: asNumber(parsed.experience_years),
+      current_title: asString(parsed.current_title),
+      current_company: asString(parsed.current_company),
+      current_location: asString(parsed.current_location),
+      summary: asString(parsed.summary),
+      preferred_location: asString(parsed.preferred_location),
+      notice_period_days: asNumber(parsed.notice_period_days),
+      current_ctc: asNumber(parsed.current_ctc),
+      expected_ctc: asNumber(parsed.expected_ctc),
+      uncertain_fields: asUncertainFields(parsed.uncertain_fields, RESUME_FIELDS),
+    };
+
+    await logAiCall({
+      tenantId,
+      agentId: "resume_parser",
+      entityType: "resume",
+      model,
+      promptVersion: PROMPT_VERSION,
+      inputTokens: usageMetadata?.promptTokenCount,
+      outputTokens: usageMetadata?.candidatesTokenCount,
+      cachedTokens: usageMetadata?.cachedContentTokenCount,
+      costUsd: estimateCostUsd(model, usageMetadata?.promptTokenCount, usageMetadata?.candidatesTokenCount),
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
+    return result;
+  } catch (err) {
+    await logAiCall({
+      tenantId,
+      agentId: "resume_parser",
+      entityType: "resume",
+      model,
+      promptVersion: PROMPT_VERSION,
+      latencyMs: Date.now() - startedAt,
+      success: false,
+      errorReason: categorizeError(err),
+    });
+    throw err;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -222,6 +268,7 @@ export interface GeminiJobResult {
 
 export const parseJobDescriptionWithGemini = async (
   text: string,
+  tenantId: string,
 ): Promise<GeminiJobResult> => {
   const schemaAndInstructions = `Parse the following job description and return ONLY a JSON object with these exact fields. Use empty string/array for missing text fields. For salary numbers use raw integers (no currency symbols).
 
@@ -244,34 +291,66 @@ export const parseJobDescriptionWithGemini = async (
 }`;
 
   const prompt = wrapUntrustedDocument(schemaAndInstructions, "job description file", text.slice(0, 9000));
+  const model = getModelForAgent("jd_parser");
+  const startedAt = Date.now();
 
-  const raw = await callGemini(prompt);
-  const parsed = safeJson(raw);
-  if (!parsed) throw new Error("Gemini returned unparseable JSON for JD");
+  try {
+    const { text: raw, usageMetadata } = await callGemini(prompt, model);
+    const parsed = safeJson(raw);
+    if (!parsed) throw new SchemaInvalidError("Gemini returned unparseable JSON for JD");
 
-  const mandatory_skills = asArray(parsed.mandatory_skills);
-  const preferred_skills = asArray(parsed.preferred_skills);
-  // required_skills kept as a union for backward compat — frontend still reads this field.
-  const required_skills = [...new Set([...mandatory_skills, ...preferred_skills])];
+    const mandatory_skills = asArray(parsed.mandatory_skills);
+    const preferred_skills = asArray(parsed.preferred_skills);
+    // required_skills kept as a union for backward compat — frontend still reads this field.
+    const required_skills = [...new Set([...mandatory_skills, ...preferred_skills])];
 
-  return {
-    title: asString(parsed.title),
-    location: asString(parsed.location),
-    required_skills,
-    mandatory_skills,
-    preferred_skills,
-    experience_min: asNumber(parsed.experience_min),
-    experience_max: asNumber(parsed.experience_max),
-    salary_min: asNumber(parsed.salary_min),
-    salary_max: asNumber(parsed.salary_max),
-    budget_text: asString(parsed.budget_text),
-    description: asString(parsed.description),
-    department: asString(parsed.department),
-    work_mode: asEnum(parsed.work_mode, WORK_MODES, "onsite"),
-    priority: asEnum(parsed.priority, PRIORITIES, "medium"),
-    headcount: asNumber(parsed.headcount),
-    uncertain_fields: asUncertainFields(parsed.uncertain_fields, JD_FIELDS),
-  };
+    const result: GeminiJobResult = {
+      title: asString(parsed.title),
+      location: asString(parsed.location),
+      required_skills,
+      mandatory_skills,
+      preferred_skills,
+      experience_min: asNumber(parsed.experience_min),
+      experience_max: asNumber(parsed.experience_max),
+      salary_min: asNumber(parsed.salary_min),
+      salary_max: asNumber(parsed.salary_max),
+      budget_text: asString(parsed.budget_text),
+      description: asString(parsed.description),
+      department: asString(parsed.department),
+      work_mode: asEnum(parsed.work_mode, WORK_MODES, "onsite"),
+      priority: asEnum(parsed.priority, PRIORITIES, "medium"),
+      headcount: asNumber(parsed.headcount),
+      uncertain_fields: asUncertainFields(parsed.uncertain_fields, JD_FIELDS),
+    };
+
+    await logAiCall({
+      tenantId,
+      agentId: "jd_parser",
+      entityType: "job_description",
+      model,
+      promptVersion: PROMPT_VERSION,
+      inputTokens: usageMetadata?.promptTokenCount,
+      outputTokens: usageMetadata?.candidatesTokenCount,
+      cachedTokens: usageMetadata?.cachedContentTokenCount,
+      costUsd: estimateCostUsd(model, usageMetadata?.promptTokenCount, usageMetadata?.candidatesTokenCount),
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
+    return result;
+  } catch (err) {
+    await logAiCall({
+      tenantId,
+      agentId: "jd_parser",
+      entityType: "job_description",
+      model,
+      promptVersion: PROMPT_VERSION,
+      latencyMs: Date.now() - startedAt,
+      success: false,
+      errorReason: categorizeError(err),
+    });
+    throw err;
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -295,6 +374,7 @@ export interface GeminiVendorResult {
 
 export const parseVendorWithGemini = async (
   text: string,
+  tenantId: string,
 ): Promise<GeminiVendorResult> => {
   const schemaAndInstructions = `Parse the following vendor or staffing agency profile and return ONLY a JSON object with these exact fields. Use empty string for missing text fields and empty array for missing arrays.
 
@@ -309,18 +389,50 @@ export const parseVendorWithGemini = async (
 }`;
 
   const prompt = wrapUntrustedDocument(schemaAndInstructions, "vendor profile file", text.slice(0, 9000));
+  const model = getModelForAgent("vendor_parser");
+  const startedAt = Date.now();
 
-  const raw = await callGemini(prompt);
-  const parsed = safeJson(raw);
-  if (!parsed) throw new Error("Gemini returned unparseable JSON for vendor");
+  try {
+    const { text: raw, usageMetadata } = await callGemini(prompt, model);
+    const parsed = safeJson(raw);
+    if (!parsed) throw new SchemaInvalidError("Gemini returned unparseable JSON for vendor");
 
-  return {
-    company_name: asString(parsed.company_name),
-    primary_contact_name: asString(parsed.primary_contact_name),
-    primary_contact_email: asString(parsed.primary_contact_email),
-    primary_contact_phone: asString(parsed.primary_contact_phone),
-    industry_specializations: asArray(parsed.industry_specializations),
-    geographies: asArray(parsed.geographies),
-    uncertain_fields: asUncertainFields(parsed.uncertain_fields, VENDOR_FIELDS),
-  };
+    const result: GeminiVendorResult = {
+      company_name: asString(parsed.company_name),
+      primary_contact_name: asString(parsed.primary_contact_name),
+      primary_contact_email: asString(parsed.primary_contact_email),
+      primary_contact_phone: asString(parsed.primary_contact_phone),
+      industry_specializations: asArray(parsed.industry_specializations),
+      geographies: asArray(parsed.geographies),
+      uncertain_fields: asUncertainFields(parsed.uncertain_fields, VENDOR_FIELDS),
+    };
+
+    await logAiCall({
+      tenantId,
+      agentId: "vendor_parser",
+      entityType: "vendor_profile",
+      model,
+      promptVersion: PROMPT_VERSION,
+      inputTokens: usageMetadata?.promptTokenCount,
+      outputTokens: usageMetadata?.candidatesTokenCount,
+      cachedTokens: usageMetadata?.cachedContentTokenCount,
+      costUsd: estimateCostUsd(model, usageMetadata?.promptTokenCount, usageMetadata?.candidatesTokenCount),
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
+    return result;
+  } catch (err) {
+    await logAiCall({
+      tenantId,
+      agentId: "vendor_parser",
+      entityType: "vendor_profile",
+      model,
+      promptVersion: PROMPT_VERSION,
+      latencyMs: Date.now() - startedAt,
+      success: false,
+      errorReason: categorizeError(err),
+    });
+    throw err;
+  }
 };

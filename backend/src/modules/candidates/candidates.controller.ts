@@ -115,7 +115,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
 
   const resumeText =
     (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-  const parsed = await parseResumeText(resumeText);
+  const parsed = await parseResumeText(resumeText, tenantId!);
 
   const first_name =
     body.first_name || parsed.name?.split(" ")[0] || "Candidate";

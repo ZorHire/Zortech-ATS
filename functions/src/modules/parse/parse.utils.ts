@@ -438,13 +438,13 @@ const parseResumeTextRegex = (content: string): ParsedResumeData => {
   };
 };
 
-export const parseResumeText = async (content: string): Promise<ParsedResumeData> => {
+export const parseResumeText = async (content: string, tenantId: string): Promise<ParsedResumeData> => {
   let result: ParsedResumeData;
   let uncertainFields: string[] = [];
 
   if (env.GEMINI_API_KEY) {
     try {
-      const geminiResult = await parseResumeWithGemini(content);
+      const geminiResult = await parseResumeWithGemini(content, tenantId);
       console.log("[Parse] Gemini resume parse succeeded");
       uncertainFields = geminiResult.uncertain_fields;
       result = geminiResult;
@@ -486,10 +486,10 @@ const parseVendorTextRegex = (content: string): ParsedVendorData => {
   };
 };
 
-export const parseVendorText = async (content: string): Promise<ParsedVendorData> => {
+export const parseVendorText = async (content: string, tenantId: string): Promise<ParsedVendorData> => {
   if (env.GEMINI_API_KEY) {
     try {
-      const result = await parseVendorWithGemini(content);
+      const result = await parseVendorWithGemini(content, tenantId);
       console.log("[Parse] Gemini vendor parse succeeded");
       return { ...result, low_confidence_fields: result.uncertain_fields };
     } catch (err) {
@@ -518,13 +518,13 @@ const parseJobDescriptionTextRegex = (content: string): ParsedJobData => {
   };
 };
 
-export const parseJobDescriptionText = async (content: string): Promise<ParsedJobData> => {
+export const parseJobDescriptionText = async (content: string, tenantId: string): Promise<ParsedJobData> => {
   let result: ParsedJobData;
   let uncertainFields: string[] = [];
 
   if (env.GEMINI_API_KEY) {
     try {
-      const geminiResult = await parseJobDescriptionWithGemini(content);
+      const geminiResult = await parseJobDescriptionWithGemini(content, tenantId);
       console.log("[Parse] Gemini JD parse succeeded");
       uncertainFields = geminiResult.uncertain_fields;
       result = geminiResult;

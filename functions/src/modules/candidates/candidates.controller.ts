@@ -107,7 +107,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     // so errors return 500 rather than reaching the global 400 handler.
     const resumeText =
       (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-    const parsed = await parseResumeText(resumeText);
+    const parsed = await parseResumeText(resumeText, tenantId!);
 
     const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
     const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";
@@ -525,7 +525,7 @@ export const createCandidateForJob = async (req: AuthRequest, res: Response) => 
 
     const resumeText =
       (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-    const parsed = await parseResumeText(resumeText);
+    const parsed = await parseResumeText(resumeText, tenantId!);
 
     const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
     const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";

@@ -20,6 +20,8 @@ import crypto from "crypto";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import env from "../../config/env";
 import redis from "../../lib/redis";
+import { getModelForAgent, AgentId } from "../../services/modelRouter";
+import { logAiCall, estimateCostUsd, categorizeError, PROMPT_VERSION } from "../../services/aiCallLog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,20 +69,24 @@ export type ParsedJobData = {
 // ---------------------------------------------------------------------------
 // Gemini client (lazy, only created when API key present)
 // ---------------------------------------------------------------------------
-let _geminiModel: ReturnType<InstanceType<typeof GoogleGenerativeAI>["getGenerativeModel"]> | null = null;
+type GeminiModel = ReturnType<InstanceType<typeof GoogleGenerativeAI>["getGenerativeModel"]>;
+const _geminiModelCache = new Map<string, GeminiModel>();
 
-const getGeminiModel = () => {
-  if (_geminiModel) return _geminiModel;
+const getGeminiModel = (agentId: AgentId) => {
   if (!env.GEMINI_API_KEY) return null;
+  const model = getModelForAgent(agentId);
+  const cached = _geminiModelCache.get(model);
+  if (cached) return cached;
   const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-  _geminiModel = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-lite",
+  const instance = genAI.getGenerativeModel({
+    model,
     generationConfig: {
       temperature: 0.1,
       responseMimeType: "application/json",
     },
   });
-  return _geminiModel;
+  _geminiModelCache.set(model, instance);
+  return instance;
 };
 
 /** Strip markdown code fences that Gemini sometimes wraps JSON in. */
@@ -172,14 +178,13 @@ const PRIORITIES = ["low", "medium", "high", "critical"] as const;
 // Idempotency cache — avoids re-spending Gemini tokens on repeat uploads of
 // identical text. Caches only the raw Gemini call result (pre-plausibility-check),
 // so later pipeline changes still apply fresh on cache hits. Key includes
-// PROMPT_VERSION so a prompt-template edit invalidates stale cached shapes —
-// bump this constant whenever the prompt schemas above change.
+// PROMPT_VERSION (imported from ../../services/aiCallLog) so a prompt-template
+// edit invalidates stale cached shapes.
 // ---------------------------------------------------------------------------
-const PROMPT_VERSION = "v2-2026-07-13";
 const GEMINI_CACHE_TTL_SECONDS = 24 * 60 * 60;
 
-const geminiCacheKey = (kind: string, text: string): string =>
-  `parse:${kind}:gemini-2.5-flash-lite:${PROMPT_VERSION}:${crypto.createHash("sha256").update(text).digest("hex")}`;
+const geminiCacheKey = (kind: string, model: string, text: string): string =>
+  `parse:${kind}:${model}:${PROMPT_VERSION}:${crypto.createHash("sha256").update(text).digest("hex")}`;
 
 const getCachedGeminiResult = async <T>(key: string): Promise<T | null> => {
   try {
@@ -781,16 +786,19 @@ const parseBudget = (rawContent: string) => {
 // Gemini parsers
 // ---------------------------------------------------------------------------
 
-const parseResumeWithGemini = async (text: string): Promise<ParsedResumeData | null> => {
-  const model = getGeminiModel();
+const parseResumeWithGemini = async (text: string, tenantId: string): Promise<ParsedResumeData | null> => {
+  const model = getGeminiModel("resume_parser");
   if (!model) return null;
 
-  const cacheKey = geminiCacheKey("resume", text);
+  const resolvedModel = getModelForAgent("resume_parser");
+  const cacheKey = geminiCacheKey("resume", resolvedModel, text);
   const cached = await getCachedGeminiResult<ParsedResumeData>(cacheKey);
   if (cached) {
     console.log("[Gemini] Resume parse cache hit");
     return cached;
   }
+
+  const startedAt = Date.now();
 
   const schemaAndInstructions = `You are an expert resume parser for an ATS (Applicant Tracking System). Extract ALL structured information from the resume text below and return ONLY a valid JSON object — no markdown, no explanation, no extra text.
 
@@ -826,6 +834,7 @@ Critical rules:
     const responseText = result.response.text();
     console.log("[Gemini] Resume response length:", responseText.length);
     const parsed = extractJSON(responseText);
+    const usage = result.response.usageMetadata;
 
     const data: ParsedResumeData = {
       name: typeof parsed.name === "string" ? parsed.name : "",
@@ -844,24 +853,51 @@ Critical rules:
       low_confidence_fields: asUncertainFields(parsed.uncertain_fields, RESUME_FIELDS),
     };
 
+    await logAiCall({
+      tenantId,
+      agentId: "resume_parser",
+      entityType: "resume",
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSION,
+      inputTokens: usage?.promptTokenCount,
+      outputTokens: usage?.candidatesTokenCount,
+      cachedTokens: usage?.cachedContentTokenCount,
+      costUsd: estimateCostUsd(resolvedModel, usage?.promptTokenCount, usage?.candidatesTokenCount),
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
     await setCachedGeminiResult(cacheKey, data);
     return data;
   } catch (err) {
     console.error("[Gemini] Resume parse failed:", err instanceof Error ? err.message : err);
+    await logAiCall({
+      tenantId,
+      agentId: "resume_parser",
+      entityType: "resume",
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSION,
+      latencyMs: Date.now() - startedAt,
+      success: false,
+      errorReason: categorizeError(err),
+    });
     return null;
   }
 };
 
-const parseJobWithGemini = async (text: string): Promise<ParsedJobData | null> => {
-  const model = getGeminiModel();
+const parseJobWithGemini = async (text: string, tenantId: string): Promise<ParsedJobData | null> => {
+  const model = getGeminiModel("jd_parser");
   if (!model) return null;
 
-  const cacheKey = geminiCacheKey("jd", text);
+  const resolvedModel = getModelForAgent("jd_parser");
+  const cacheKey = geminiCacheKey("jd", resolvedModel, text);
   const cached = await getCachedGeminiResult<ParsedJobData>(cacheKey);
   if (cached) {
     console.log("[Gemini] JD parse cache hit");
     return cached;
   }
+
+  const startedAt = Date.now();
 
   const schemaAndInstructions = `You are an expert job description parser for an ATS (Applicant Tracking System). Extract ALL structured information from the job description below and return ONLY a valid JSON object — no markdown, no explanation, no extra text.
 
@@ -897,6 +933,7 @@ Critical rules:
     const responseText = result.response.text();
     console.log("[Gemini] JD response length:", responseText.length);
     const parsed = extractJSON(responseText);
+    const usage = result.response.usageMetadata;
 
     const mandatory_skills = Array.isArray(parsed.mandatory_skills)
       ? (parsed.mandatory_skills as string[]).filter((s) => typeof s === "string")
@@ -926,10 +963,34 @@ Critical rules:
       low_confidence_fields: asUncertainFields(parsed.uncertain_fields, JD_FIELDS),
     };
 
+    await logAiCall({
+      tenantId,
+      agentId: "jd_parser",
+      entityType: "job_description",
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSION,
+      inputTokens: usage?.promptTokenCount,
+      outputTokens: usage?.candidatesTokenCount,
+      cachedTokens: usage?.cachedContentTokenCount,
+      costUsd: estimateCostUsd(resolvedModel, usage?.promptTokenCount, usage?.candidatesTokenCount),
+      latencyMs: Date.now() - startedAt,
+      success: true,
+    });
+
     await setCachedGeminiResult(cacheKey, data);
     return data;
   } catch (err) {
     console.error("[Gemini] JD parse failed:", err instanceof Error ? err.message : err);
+    await logAiCall({
+      tenantId,
+      agentId: "jd_parser",
+      entityType: "job_description",
+      model: resolvedModel,
+      promptVersion: PROMPT_VERSION,
+      latencyMs: Date.now() - startedAt,
+      success: false,
+      errorReason: categorizeError(err),
+    });
     return null;
   }
 };
@@ -938,7 +999,7 @@ Critical rules:
 // Public API — Gemini primary, regex fallback
 // ---------------------------------------------------------------------------
 
-export const parseResumeText = async (content: string): Promise<ParsedResumeData> => {
+export const parseResumeText = async (content: string, tenantId: string): Promise<ParsedResumeData> => {
   console.log("[Parse] Resume parsing started");
   const normalized = cleanText(content);
 
@@ -947,7 +1008,7 @@ export const parseResumeText = async (content: string): Promise<ParsedResumeData
   const workHistory = parseWorkHistory(map, normalized);
 
   // 1. Try Gemini
-  const geminiResult = await parseResumeWithGemini(normalized);
+  const geminiResult = await parseResumeWithGemini(normalized, tenantId);
   if (geminiResult) {
     const hasKeyFields = !!(geminiResult.name || geminiResult.email || geminiResult.phone);
     if (hasKeyFields) {
@@ -1033,11 +1094,11 @@ const RESUME_TO_VENDOR_FIELD: Record<string, string> = {
   skills: "industry_specializations",
 };
 
-export const parseVendorText = async (content: string) => {
+export const parseVendorText = async (content: string, tenantId: string) => {
   console.log("[Parse] Vendor parsing started");
   const normalized = cleanText(content);
   const map = buildSectionMap(normalized);
-  const resume = await parseResumeText(normalized);
+  const resume = await parseResumeText(normalized, tenantId);
   const companySection = resume.current_company || "";
   const contactName =
     resume.name ||
@@ -1066,12 +1127,12 @@ export const parseVendorText = async (content: string) => {
   };
 };
 
-export const parseJobDescriptionText = async (content: string): Promise<ParsedJobData> => {
+export const parseJobDescriptionText = async (content: string, tenantId: string): Promise<ParsedJobData> => {
   console.log("[Parse] JD parsing started");
   const normalized = cleanText(content);
 
   // 1. Try Gemini
-  const geminiResult = await parseJobWithGemini(normalized);
+  const geminiResult = await parseJobWithGemini(normalized, tenantId);
   if (geminiResult?.title) {
     console.log("[Parse] JD parsed via Gemini:", JSON.stringify({ title: geminiResult.title, skills_count: geminiResult.required_skills?.length }));
     const { data, flagged } = checkJobPlausibility({ ...geminiResult, parsed: true });
