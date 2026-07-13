@@ -29,18 +29,30 @@ export type ParsedResumeData = {
   current_company?: string;
   current_location?: string;
   summary?: string;
+  preferred_location?: string;
+  notice_period_days?: number;
+  current_ctc?: number;
+  expected_ctc?: number;
+  low_confidence_fields?: string[];
 };
 
 export type ParsedJobData = {
   title?: string;
   location?: string;
   required_skills?: string[];
+  mandatory_skills?: string[];
+  preferred_skills?: string[];
   experience_min?: number;
   experience_max?: number;
   budget_text?: string;
   salary_min?: number;
   salary_max?: number;
   description?: string;
+  department?: string;
+  work_mode?: string;
+  priority?: string;
+  headcount?: number;
+  low_confidence_fields?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -313,6 +325,84 @@ const parseBudget = (content: string) => {
   };
 };
 
+// ---------------------------------------------------------------------------
+// Deterministic plausibility checks — applied once after Gemini/regex result
+// is chosen, so both paths get checked. Hard-invalid values are clamped and
+// flagged (they'd otherwise corrupt a Postgres numeric/integer column). Soft
+// anomalies are flagged only, value left untouched, since they might be
+// genuinely correct.
+// ---------------------------------------------------------------------------
+const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
+export const checkResumePlausibility = (
+  data: ParsedResumeData,
+): { data: ParsedResumeData; flagged: string[] } => {
+  const flagged: string[] = [];
+  const out = { ...data };
+
+  if (out.experience_years !== undefined && (out.experience_years < 0 || out.experience_years > 50)) {
+    out.experience_years = clamp(out.experience_years, 0, 50);
+    flagged.push("experience_years");
+  }
+  if (out.notice_period_days !== undefined && (out.notice_period_days < 0 || out.notice_period_days > 180)) {
+    out.notice_period_days = clamp(out.notice_period_days, 0, 180);
+    flagged.push("notice_period_days");
+  }
+  if (out.current_ctc !== undefined && out.current_ctc <= 0) {
+    out.current_ctc = undefined;
+    flagged.push("current_ctc");
+  }
+  if (out.expected_ctc !== undefined && out.expected_ctc <= 0) {
+    out.expected_ctc = undefined;
+    flagged.push("expected_ctc");
+  }
+  if (out.current_ctc && out.expected_ctc) {
+    const ratio = out.expected_ctc / out.current_ctc;
+    if ((ratio < 0.5 || ratio > 10) && !flagged.includes("expected_ctc")) {
+      flagged.push("expected_ctc"); // soft anomaly — flag only, value untouched
+    }
+  }
+
+  return { data: out, flagged };
+};
+
+export const checkJobPlausibility = (
+  data: ParsedJobData,
+): { data: ParsedJobData; flagged: string[] } => {
+  const flagged: string[] = [];
+  const out = { ...data };
+
+  if (
+    out.experience_min !== undefined &&
+    out.experience_max !== undefined &&
+    out.experience_min > out.experience_max
+  ) {
+    [out.experience_min, out.experience_max] = [out.experience_max, out.experience_min];
+    flagged.push("experience_min", "experience_max");
+  }
+  (["experience_min", "experience_max"] as const).forEach((key) => {
+    const v = out[key];
+    if (v !== undefined && (v < 0 || v > 50)) {
+      out[key] = clamp(v, 0, 50);
+      if (!flagged.includes(key)) flagged.push(key);
+    }
+  });
+  if (
+    out.salary_min !== undefined &&
+    out.salary_max !== undefined &&
+    out.salary_min > out.salary_max
+  ) {
+    [out.salary_min, out.salary_max] = [out.salary_max, out.salary_min];
+    flagged.push("salary_min", "salary_max");
+  }
+  if (out.headcount !== undefined && out.headcount < 1) {
+    out.headcount = 1;
+    flagged.push("headcount");
+  }
+
+  return { data: out, flagged };
+};
+
 export const extractFileText = async (file?: Express.Multer.File) => {
   if (!file || !file.buffer) return "";
   console.log("[Parse] File:", file.originalname, "| MIME:", file.mimetype);
@@ -349,25 +439,36 @@ const parseResumeTextRegex = (content: string): ParsedResumeData => {
 };
 
 export const parseResumeText = async (content: string): Promise<ParsedResumeData> => {
+  let result: ParsedResumeData;
+  let uncertainFields: string[] = [];
+
   if (env.GEMINI_API_KEY) {
     try {
-      const result = await parseResumeWithGemini(content);
+      const geminiResult = await parseResumeWithGemini(content);
       console.log("[Parse] Gemini resume parse succeeded");
-      return result;
+      uncertainFields = geminiResult.uncertain_fields;
+      result = geminiResult;
     } catch (err) {
       console.warn("[Parse] Gemini resume parse failed, falling back to regex:", err instanceof Error ? err.message : err);
+      result = parseResumeTextRegex(content);
     }
+  } else {
+    result = parseResumeTextRegex(content);
   }
-  return parseResumeTextRegex(content);
+
+  const { data, flagged } = checkResumePlausibility(result);
+  data.low_confidence_fields = [...new Set([...uncertainFields, ...flagged])];
+  return data;
 };
 
 export type ParsedVendorData = {
   company_name?: string;
-  email?: string;
-  phone?: string;
-  skills?: string[];
-  location?: string;
-  summary?: string;
+  primary_contact_name?: string;
+  primary_contact_email?: string;
+  primary_contact_phone?: string;
+  industry_specializations?: string[];
+  geographies?: string[];
+  low_confidence_fields?: string[];
 };
 
 const parseVendorTextRegex = (content: string): ParsedVendorData => {
@@ -377,11 +478,11 @@ const parseVendorTextRegex = (content: string): ParsedVendorData => {
       findSectionText(normalized, /(?:company|organization|vendor)[:\s]*/i) ||
       normalized.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)[0] ||
       "",
-    email: parseEmail(normalized),
-    phone: parsePhone(normalized),
-    skills: parseSkills(normalized),
-    location: parseLocation(normalized),
-    summary: findSectionText(normalized, /(?:summary|about|overview|profile)[:\s]*/i) || "",
+    primary_contact_name: parseName(normalized),
+    primary_contact_email: parseEmail(normalized),
+    primary_contact_phone: parsePhone(normalized),
+    industry_specializations: parseSkills(normalized),
+    geographies: [],
   };
 };
 
@@ -390,7 +491,7 @@ export const parseVendorText = async (content: string): Promise<ParsedVendorData
     try {
       const result = await parseVendorWithGemini(content);
       console.log("[Parse] Gemini vendor parse succeeded");
-      return result;
+      return { ...result, low_confidence_fields: result.uncertain_fields };
     } catch (err) {
       console.warn("[Parse] Gemini vendor parse failed, falling back to regex:", err instanceof Error ? err.message : err);
     }
@@ -418,14 +519,24 @@ const parseJobDescriptionTextRegex = (content: string): ParsedJobData => {
 };
 
 export const parseJobDescriptionText = async (content: string): Promise<ParsedJobData> => {
+  let result: ParsedJobData;
+  let uncertainFields: string[] = [];
+
   if (env.GEMINI_API_KEY) {
     try {
-      const result = await parseJobDescriptionWithGemini(content);
+      const geminiResult = await parseJobDescriptionWithGemini(content);
       console.log("[Parse] Gemini JD parse succeeded");
-      return result;
+      uncertainFields = geminiResult.uncertain_fields;
+      result = geminiResult;
     } catch (err) {
       console.warn("[Parse] Gemini JD parse failed, falling back to regex:", err instanceof Error ? err.message : err);
+      result = parseJobDescriptionTextRegex(content);
     }
+  } else {
+    result = parseJobDescriptionTextRegex(content);
   }
-  return parseJobDescriptionTextRegex(content);
+
+  const { data, flagged } = checkJobPlausibility(result);
+  data.low_confidence_fields = [...new Set([...uncertainFields, ...flagged])];
+  return data;
 };

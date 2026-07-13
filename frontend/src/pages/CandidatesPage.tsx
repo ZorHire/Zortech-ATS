@@ -28,6 +28,7 @@ import { useAuth } from "../contexts/AuthContext";
 import CandidateModal from "../components/candidates/CandidateModal";
 import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
 import { useSendEmail } from "../hooks/useSendEmail";
+import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import EmailToast from "../components/ui/EmailToast";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -176,11 +177,13 @@ export default function CandidatesPage() {
     first_name: "", last_name: "", email: "", phone: "",
     current_title: "", current_company: "", experience_years: 0,
     current_location: "", skills: "", source: "direct",
+    preferred_location: "", notice_period_days: 30, current_ctc: "", expected_ctc: "",
   });
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeParsing, setResumeParsing] = useState(false);
   const [resumeParseMessage, setResumeParseMessage] = useState("");
   const [resumeParseError, setResumeParseError] = useState("");
+  const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
 
   useEffect(() => { fetchCandidates(); }, []);
 
@@ -220,7 +223,12 @@ export default function CandidatesPage() {
         current_location: parsed.current_location || current.current_location,
         experience_years: parsed.experience_years !== undefined ? parsed.experience_years : current.experience_years,
         skills: parsed.skills?.length > 0 ? parsed.skills.join(", ") : current.skills,
+        preferred_location: parsed.preferred_location || current.preferred_location,
+        notice_period_days: parsed.notice_period_days !== undefined ? parsed.notice_period_days : current.notice_period_days,
+        current_ctc: parsed.current_ctc !== undefined ? String(parsed.current_ctc) : current.current_ctc,
+        expected_ctc: parsed.expected_ctc !== undefined ? String(parsed.expected_ctc) : current.expected_ctc,
       }));
+      setLowConfidenceFields(parsed.low_confidence_fields || []);
       setResumeParseMessage("Resume parsed successfully. Review and edit as needed.");
     } catch {
       setResumeParseError("Could not extract data, please fill manually.");
@@ -261,7 +269,8 @@ export default function CandidatesPage() {
       setCandidates((p) => [newCandidate, ...p]);
       setIsAddModalOpen(false);
       setSelectedJobId("");
-      setFormData({ first_name: "", last_name: "", email: "", phone: "", current_title: "", current_company: "", experience_years: 0, current_location: "", skills: "", source: "direct" });
+      setFormData({ first_name: "", last_name: "", email: "", phone: "", current_title: "", current_company: "", experience_years: 0, current_location: "", skills: "", source: "direct", preferred_location: "", notice_period_days: 30, current_ctc: "", expected_ctc: "" });
+      setLowConfidenceFields([]);
       setResumeFile(null);
     } catch (error: any) {
       alert(error?.data?.message || error?.message || "Failed to add candidate");
@@ -593,32 +602,45 @@ export default function CandidatesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  ["First Name", "first_name", "text", "e.g. John", true],
-                  ["Last Name", "last_name", "text", "e.g. Doe", true],
-                  ["Email Address", "email", "email", "john@example.com", false],
-                  ["Phone Number", "phone", "text", "+91 XXXXX XXXXX", false],
-                  ["Current Title", "current_title", "text", "e.g. Senior Engineer", false],
-                  ["Current Company", "current_company", "text", "e.g. Google", false],
-                ].map(([label, field, type, placeholder, required]) => (
-                  <div key={field as string}>
-                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">{label as string}</label>
-                    <input
-                      required={required as boolean}
-                      type={type as string}
-                      value={(formData as any)[field as string]}
-                      onChange={(e) => setFormData((f) => ({ ...f, [field as string]: e.target.value }))}
-                      placeholder={placeholder as string}
-                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                ))}
+                  ["First Name", "first_name", "text", "e.g. John", true, ["name"]],
+                  ["Last Name", "last_name", "text", "e.g. Doe", true, ["name"]],
+                  ["Email Address", "email", "email", "john@example.com", false, []],
+                  ["Phone Number", "phone", "text", "+91 XXXXX XXXXX", false, []],
+                  ["Current Title", "current_title", "text", "e.g. Senior Engineer", false, []],
+                  ["Current Company", "current_company", "text", "e.g. Google", false, []],
+                  ["Preferred Location", "preferred_location", "text", "e.g. Bangalore or Remote", false, []],
+                  ["Notice Period (days)", "notice_period_days", "number", "e.g. 30", false, []],
+                  ["Current CTC (annual)", "current_ctc", "number", "e.g. 1200000", false, []],
+                  ["Expected CTC (annual)", "expected_ctc", "number", "e.g. 1500000", false, []],
+                ].map(([label, field, type, placeholder, required, aliases]) => {
+                  const flagged = isLowConfidence(lowConfidenceFields, field as string, ...((aliases as string[]) || []));
+                  return (
+                    <div key={field as string}>
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        {label as string}
+                        {flagged && <span className={ConfidenceBadge}>needs review</span>}
+                      </label>
+                      <input
+                        required={required as boolean}
+                        type={type as string}
+                        value={(formData as any)[field as string]}
+                        onChange={(e) => setFormData((f) => ({ ...f, [field as string]: e.target.value }))}
+                        placeholder={placeholder as string}
+                        className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(flagged)}`}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Skills (comma separated)</label>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Skills (comma separated)
+                    {isLowConfidence(lowConfidenceFields, "skills") && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.skills} onChange={(e) => setFormData((f) => ({ ...f, skills: e.target.value }))}
-                    placeholder="React, Node.js, TypeScript" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    placeholder="React, Node.js, TypeScript" className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "skills"))}`} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Source</label>

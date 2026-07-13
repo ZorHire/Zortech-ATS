@@ -130,10 +130,10 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
   );
   const current_location =
     body.current_location || parsed.current_location || "";
-  const preferred_location = body.preferred_location || "";
-  const notice_period_days = Number(body.notice_period_days || 30);
-  const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
-  const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
+  const preferred_location = body.preferred_location || parsed.preferred_location || "";
+  const notice_period_days = Number(body.notice_period_days || parsed.notice_period_days || 30);
+  const current_ctc = body.current_ctc ? Number(body.current_ctc) : parsed.current_ctc ?? null;
+  const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : parsed.expected_ctc ?? null;
   const skills = normalizeSkills(body.skills || parsed.skills);
   const summary = body.summary || parsed.summary || "";
   const source = body.source || "direct";

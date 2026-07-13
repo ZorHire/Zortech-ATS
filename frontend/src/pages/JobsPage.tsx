@@ -13,6 +13,7 @@ import api from "../lib/api";
 import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
 import ClientInfoModal from "../components/clients/ClientInfoModal";
 import ClientDetailModal from "../components/clients/ClientDetailModal";
+import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -180,7 +181,9 @@ export default function JobsPage() {
     work_mode: "onsite" as const, employment_type: "full_time",
     experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0,
     headcount: 1, priority: "medium" as const, description: "", mandatory_skills: "",
+    preferred_skills: "",
   });
+  const [jobLowConfidenceFields, setJobLowConfidenceFields] = useState<string[]>([]);
   const [jobFile, setJobFile] = useState<File | null>(null);
   const [jobParsing, setJobParsing] = useState(false);
   const [jobParseMessage, setJobParseMessage] = useState("");
@@ -210,12 +213,16 @@ export default function JobsPage() {
         title: parsed.title || cur.title,
         location: parsed.location || cur.location,
         description: parsed.description || cur.description,
+        department: parsed.department || cur.department,
+        work_mode: parsed.work_mode || cur.work_mode,
         experience_min: parsed.experience_min !== undefined ? parsed.experience_min : cur.experience_min,
         experience_max: parsed.experience_max !== undefined ? parsed.experience_max : cur.experience_max,
         salary_min: parsed.salary_min !== undefined ? parsed.salary_min : cur.salary_min,
         salary_max: parsed.salary_max !== undefined ? parsed.salary_max : cur.salary_max,
-        mandatory_skills: parsed.required_skills?.length > 0 ? parsed.required_skills.join(", ") : cur.mandatory_skills,
+        mandatory_skills: parsed.mandatory_skills?.length > 0 ? parsed.mandatory_skills.join(", ") : parsed.required_skills?.length > 0 ? parsed.required_skills.join(", ") : cur.mandatory_skills,
+        preferred_skills: parsed.preferred_skills?.length > 0 ? parsed.preferred_skills.join(", ") : cur.preferred_skills,
       }));
+      setJobLowConfidenceFields(parsed.low_confidence_fields || []);
       setJobParseMessage("JD parsed successfully. Review and edit the auto-filled details.");
     } catch { setJobParseError("Could not extract data, please fill manually."); }
     finally { setJobParsing(false); }
@@ -224,11 +231,16 @@ export default function JobsPage() {
   const handleAddJD = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = { ...formData, mandatory_skills: formData.mandatory_skills.split(",").map((s) => s.trim()).filter(Boolean) };
+      const payload = {
+        ...formData,
+        mandatory_skills: formData.mandatory_skills.split(",").map((s) => s.trim()).filter(Boolean),
+        preferred_skills: formData.preferred_skills.split(",").map((s) => s.trim()).filter(Boolean),
+      };
       const newJob = await api.post("/jobs", payload, { headers: { "Content-Type": "application/json" } });
       setJobs([newJob, ...jobs]);
       setIsAddModalOpen(false);
-      setFormData({ title: "", client_id: "", department: "", location: "", work_mode: "onsite", employment_type: "full_time", experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0, headcount: 1, priority: "medium", description: "", mandatory_skills: "" });
+      setFormData({ title: "", client_id: "", department: "", location: "", work_mode: "onsite", employment_type: "full_time", experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0, headcount: 1, priority: "medium", description: "", mandatory_skills: "", preferred_skills: "" });
+      setJobLowConfidenceFields([]);
       setJobFile(null);
     } catch { alert("Failed to add job description"); }
   };
@@ -514,19 +526,28 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Department</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Department
+                    {isLowConfidence(jobLowConfidenceFields, "department") && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Engineering" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "department"))}`} placeholder="e.g. Engineering" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Location</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Location
+                    {isLowConfidence(jobLowConfidenceFields, "location") && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Bangalore, India" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "location"))}`} placeholder="e.g. Bangalore, India" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Work Mode</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Work Mode
+                    {isLowConfidence(jobLowConfidenceFields, "work_mode") && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <select value={formData.work_mode} onChange={(e) => setFormData({ ...formData, work_mode: e.target.value as any })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "work_mode"))}`}>
                     <option value="onsite">Onsite</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option>
                   </select>
                 </div>
@@ -548,9 +569,20 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Mandatory Skills (comma-separated)</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Mandatory Skills (comma-separated)
+                    {isLowConfidence(jobLowConfidenceFields, "mandatory_skills", "required_skills") && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.mandatory_skills} onChange={(e) => setFormData({ ...formData, mandatory_skills: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="React, TypeScript, Node.js" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "mandatory_skills", "required_skills"))}`} placeholder="React, TypeScript, Node.js" />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Preferred Skills (comma-separated)
+                    {isLowConfidence(jobLowConfidenceFields, "preferred_skills") && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
+                  <input type="text" value={formData.preferred_skills} onChange={(e) => setFormData({ ...formData, preferred_skills: e.target.value })}
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(isLowConfidence(jobLowConfidenceFields, "preferred_skills"))}`} placeholder="GraphQL, Kubernetes (good to have)" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Job Description</label>

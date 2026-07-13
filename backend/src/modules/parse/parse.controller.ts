@@ -12,23 +12,35 @@ const defaultResumeResponse = {
   email: "",
   phone: "",
   skills: [] as string[],
-  experience_years: undefined,
+  experience_years: undefined as number | undefined,
   current_title: "",
   current_company: "",
   current_location: "",
   summary: "",
+  preferred_location: "",
+  notice_period_days: undefined as number | undefined,
+  current_ctc: undefined as number | undefined,
+  expected_ctc: undefined as number | undefined,
+  low_confidence_fields: [] as string[],
 };
 
 const defaultJobResponse = {
   title: "",
   location: "",
   required_skills: [] as string[],
-  experience_min: undefined,
-  experience_max: undefined,
+  mandatory_skills: [] as string[],
+  preferred_skills: [] as string[],
+  experience_min: undefined as number | undefined,
+  experience_max: undefined as number | undefined,
   budget_text: "",
-  salary_min: undefined,
-  salary_max: undefined,
+  salary_min: undefined as number | undefined,
+  salary_max: undefined as number | undefined,
   description: "",
+  department: "",
+  work_mode: "",
+  priority: "",
+  headcount: undefined as number | undefined,
+  low_confidence_fields: [] as string[],
 };
 
 const defaultVendorResponse = {
@@ -38,6 +50,7 @@ const defaultVendorResponse = {
   primary_contact_phone: "",
   industry_specializations: [] as string[],
   geographies: [] as string[],
+  low_confidence_fields: [] as string[],
 };
 
 export const parseResume = async (req: AuthRequest, res: Response) => {
@@ -102,6 +115,11 @@ export const parseResume = async (req: AuthRequest, res: Response) => {
       current_company: parsed.current_company || "",
       current_location: parsed.current_location || "",
       summary: parsed.summary || "",
+      preferred_location: parsed.preferred_location || "",
+      notice_period_days: parsed.notice_period_days,
+      current_ctc: parsed.current_ctc,
+      expected_ctc: parsed.expected_ctc,
+      low_confidence_fields: parsed.low_confidence_fields || [],
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Parse error";
@@ -144,6 +162,7 @@ export const parseVendor = async (req: AuthRequest, res: Response) => {
       primary_contact_phone: parsed.primary_contact_phone || "",
       industry_specializations: parsed.industry_specializations || [],
       geographies: parsed.geographies || [],
+      low_confidence_fields: parsed.low_confidence_fields || [],
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Parse error";
@@ -180,12 +199,19 @@ export const parseJobDescription = async (req: AuthRequest, res: Response) => {
       title: parsed.title || "",
       location: parsed.location || "",
       required_skills: parsed.required_skills || [],
+      mandatory_skills: parsed.mandatory_skills || [],
+      preferred_skills: parsed.preferred_skills || [],
       experience_min: parsed.experience_min,
       experience_max: parsed.experience_max,
       budget_text: parsed.budget_text || "",
       salary_min: parsed.salary_min,
       salary_max: parsed.salary_max,
       description: parsed.description || "",
+      department: parsed.department || "",
+      work_mode: parsed.work_mode || "",
+      priority: parsed.priority || "",
+      headcount: parsed.headcount,
+      low_confidence_fields: parsed.low_confidence_fields || [],
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Parse error";
