@@ -5,6 +5,7 @@ import {
   authorize,
   tenantIsolation,
 } from "../../middleware/auth";
+import { createScreeningInvite } from "../screening/screening.controller";
 
 const router = Router();
 
@@ -59,6 +60,13 @@ router.get(
   authMiddleware,
   tenantIsolation,
   pipelineController.getApplicationHistory,
+);
+router.post(
+  "/applications/:id/screening-invite",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager", "recruiter"]),
+  createScreeningInvite,
 );
 
 export default router;

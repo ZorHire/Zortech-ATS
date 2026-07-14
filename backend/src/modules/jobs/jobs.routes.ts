@@ -10,6 +10,14 @@ const router = Router();
 
 router.get("/", authMiddleware, tenantIsolation, jobController.getJobs);
 router.get("/:id", authMiddleware, tenantIsolation, jobController.getJobById);
+router.post("/:id/matches", authMiddleware, tenantIsolation, jobController.getJobMatches);
+router.post(
+  "/:id/shortlist",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager", "recruiter"]),
+  jobController.runJobShortlisting,
+);
 router.post(
   "/",
   authMiddleware,

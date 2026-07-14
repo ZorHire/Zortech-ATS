@@ -10,7 +10,7 @@
  * Gemini call site (it delegates to parseResumeText), so it reuses
  * resume_parser's config by virtue of reusing the resume code path.
  */
-export type AgentId = "resume_parser" | "jd_parser";
+export type AgentId = "resume_parser" | "jd_parser" | "candidate_scorer" | "screening_chat";
 
 interface AgentModelConfig {
   model: string;
@@ -30,6 +30,16 @@ const MODEL_CONFIG: Record<AgentId, AgentModelConfig> = {
     model: "gemini-2.5-flash-lite",
     fallback: "gpt-5.4-mini",
     capUsdMonth: 20,
+  },
+  candidate_scorer: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gpt-5.4-mini",
+    capUsdMonth: 40,
+  },
+  screening_chat: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gpt-5.4-mini",
+    capUsdMonth: 30,
   },
 };
 

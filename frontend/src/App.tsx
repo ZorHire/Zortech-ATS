@@ -24,6 +24,7 @@ import PricingPage from "./pages/PricingPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import AssignedJDsPage from "./pages/AssignedJDsPage";
+import ScreeningChatPage from "./pages/ScreeningChatPage";
 
 // vendor_user may access /jobs, /jobs/:id, and /pipeline/:jobId
 const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline"];
@@ -90,6 +91,7 @@ function AppRoutes() {
         element={user ? <Navigate to="/" replace /> : <LoginPage />}
       />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/screening/:sessionId" element={<ScreeningChatPage />} />
       {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}
       <Route
         path="/pricing"

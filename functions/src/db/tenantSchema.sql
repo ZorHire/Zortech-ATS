@@ -17,6 +17,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ─── Clients ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS clients (
@@ -159,11 +160,18 @@ CREATE TABLE IF NOT EXISTS candidates (
                        CHECK (source IN ('linkedin','indeed','naukri','monster','glassdoor','vendor','referral','direct','other')),
   gdpr_consent       boolean     DEFAULT false,
   is_active          boolean     DEFAULT true,
+  embedding          vector(768),
+  embedding_updated_at timestamptz,
   created_by         uuid,       -- references platform DB users(id), no FK
   created_at         timestamptz NOT NULL DEFAULT now(),
   updated_at         timestamptz NOT NULL DEFAULT now(),
   deleted_at         timestamptz
 );
+
+-- HNSW: no training step required (unlike IVFFlat), which matters for a freshly
+-- provisioned tenant DB that starts with zero embedded candidates.
+CREATE INDEX IF NOT EXISTS idx_candidates_embedding ON candidates
+  USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64);
 
 -- ─── Job Applications (pipeline) ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS job_applications (
@@ -195,6 +203,7 @@ CREATE TABLE IF NOT EXISTS pipeline_events (
   to_stage       text        NOT NULL,
   changed_by     uuid,       -- references platform DB users(id), no FK
   note           text,
+  actor_type     text        CHECK (actor_type IN ('human','ai')) DEFAULT 'human',
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 

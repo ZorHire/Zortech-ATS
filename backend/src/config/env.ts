@@ -19,6 +19,9 @@ export const env = {
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "",
   FRONTEND_URL: process.env.SERVER_FRONTEND_URL || "https://zorhire.zortechs.in",
+  // A5 dark-build gate — defaults false in every environment. Must be explicitly set
+  // to "true" for the screening-invite endpoint to create sessions or send emails.
+  SCREENING_CHAT_ENABLED: process.env.SCREENING_CHAT_ENABLED === "true",
 };
 
 export default env;

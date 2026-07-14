@@ -2,6 +2,44 @@ import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { getAtsPool } from "../../db/poolRouter";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
+import { embedText } from "../../services/embedding.service";
+
+const buildEmbeddingInput = (candidate: {
+  current_title?: string | null;
+  current_company?: string | null;
+  summary?: string | null;
+  skills?: string[] | null;
+}): string =>
+  [candidate.current_title, candidate.current_company, candidate.summary, (candidate.skills || []).join(", ")]
+    .filter(Boolean)
+    .join(". ");
+
+const toVectorLiteral = (embedding: number[]): string => `[${embedding.join(",")}]`;
+
+/** Fire-and-forget — never blocks the candidate response, never throws into the caller. */
+const embedCandidateAsync = (
+  db: { query: (sql: string, params: any[]) => Promise<any> },
+  candidateId: string,
+  tenantId: string,
+  candidate: {
+    current_title?: string | null;
+    current_company?: string | null;
+    summary?: string | null;
+    skills?: string[] | null;
+  },
+): void => {
+  const input = buildEmbeddingInput(candidate);
+  if (!input.trim()) return;
+  embedText(input, "RETRIEVAL_DOCUMENT", tenantId, "candidate")
+    .then((embedding) => {
+      if (!embedding) return;
+      return db.query(
+        `UPDATE candidates SET embedding = $1::vector, embedding_updated_at = now() WHERE id = $2`,
+        [toVectorLiteral(embedding), candidateId],
+      );
+    })
+    .catch((err) => console.error("[Candidate embedding] Failed:", err instanceof Error ? err.message : err));
+};
 
 const normalizeSkills = (value: any) => {
   if (!value) return [];
@@ -165,6 +203,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       candidate = updated.rows[0];
     }
 
+    embedCandidateAsync(db, candidate.id, tenantId!, candidate);
     res.status(201).json(candidate);
   } catch (error: any) {
     console.error("Create candidate error:", error);
@@ -251,6 +290,7 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Candidate not found" });
     }
+    embedCandidateAsync(db, result.rows[0].id, tenantId!, result.rows[0]);
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update candidate error:", error);
@@ -579,6 +619,8 @@ export const createCandidateForJob = async (req: AuthRequest, res: Response) => 
       );
       candidate = updated.rows[0];
     }
+
+    embedCandidateAsync(db, candidate.id, tenantId!, candidate);
 
     const appResult = await db.query(
       `INSERT INTO job_applications (tenant_id, job_id, candidate_id, stage, assigned_to)

@@ -3,6 +3,7 @@ import cors from "cors";
 import fs from "fs";
 import path from "path";
 import morgan from "morgan";
+import rateLimit from "express-rate-limit";
 import pool from "./db";
 import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
@@ -18,9 +19,13 @@ import billingRoutes from "./modules/billing/billing.routes";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import campaignRoutes from "./modules/email/campaigns.routes";
 import onboardingRoutes from "./modules/onboarding/onboarding.routes";
+import screeningRoutes from "./modules/screening/screening.routes";
 
 const app = express();
 const port = env.PORT;
+
+// Trust the reverse proxy so express-rate-limit reads the real client IP.
+app.set("trust proxy", 1);
 
 const uploadsPath = path.resolve(
   env.UPLOAD_DIR || path.resolve(__dirname, "../uploads"),
@@ -56,6 +61,17 @@ const parseRouter = express.Router();
 parseRouter.use("/", parseRoutes);
 app.use("/v1/parse", parseRouter);
 
+// A5 screening chat is the first unauthenticated, LLM-cost-exposed public endpoint
+// in this backend — no rate limiting existed here at all before this.
+const screeningLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests. Please slow down." },
+});
+app.use("/v1/screening", screeningLimiter);
+
 app.use(express.json());
 app.use(express.static(uploadsPath));
 app.use(morgan("dev"));
@@ -84,6 +100,7 @@ v1Router.use("/billing", billingRoutes);
 v1Router.use("/dashboard", dashboardRoutes);
 v1Router.use("/email-campaigns", campaignRoutes);
 v1Router.use("/onboarding", onboardingRoutes);
+v1Router.use("/screening", screeningRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);

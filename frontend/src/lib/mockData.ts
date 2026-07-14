@@ -27,14 +27,14 @@ export const mockCandidates: Candidate[] = [
 ];
 
 export const mockApplications: JobApplication[] = [
-  { id: 'app-001', job_id: '11111111-1111-1111-1111-111111111112', candidate_id: 'c-001', stage: 'shortlisted', ai_score: 92, ai_match_breakdown: { skills: 95, experience: 90, location: 100, education: 85 }, created_at: '2024-03-11T11:00:00Z', updated_at: '2024-03-12T10:00:00Z' },
-  { id: 'app-002', job_id: '11111111-1111-1111-1111-111111111112', candidate_id: 'c-007', stage: 'screened', ai_score: 87, ai_match_breakdown: { skills: 90, experience: 85, location: 100, education: 80 }, created_at: '2024-03-15T11:00:00Z', updated_at: '2024-03-15T14:00:00Z' },
-  { id: 'app-003', job_id: '22222222-2222-2222-2222-222222222223', candidate_id: 'c-002', stage: 'submitted_to_client', ai_score: 89, ai_match_breakdown: { skills: 92, experience: 88, location: 80, education: 90 }, created_at: '2024-03-09T11:00:00Z', updated_at: '2024-03-11T09:00:00Z' },
-  { id: 'app-004', job_id: '22222222-2222-2222-2222-222222222223', candidate_id: 'c-008', stage: 'new', ai_score: 74, ai_match_breakdown: { skills: 78, experience: 72, location: 70, education: 85 }, created_at: '2024-03-14T11:00:00Z', updated_at: '2024-03-14T11:00:00Z' },
-  { id: 'app-005', job_id: '33333333-3333-3333-3333-333333333334', candidate_id: 'c-003', stage: 'client_interview_scheduled', ai_score: 91, ai_match_breakdown: { skills: 88, experience: 95, location: 85, education: 90 }, created_at: '2024-03-07T11:00:00Z', updated_at: '2024-03-10T09:00:00Z' },
-  { id: 'app-006', job_id: '44444444-4444-4444-4444-444444444444', candidate_id: 'c-004', stage: 'sourced', ai_score: 83, ai_match_breakdown: { skills: 85, experience: 82, location: 90, education: 75 }, created_at: '2024-03-13T11:00:00Z', updated_at: '2024-03-13T11:00:00Z' },
-  { id: 'app-007', job_id: '55555555-5555-5555-5555-555555555555', candidate_id: 'c-005', stage: 'offer_extended', ai_score: 79, ai_match_breakdown: { skills: 82, experience: 78, location: 90, education: 70 }, created_at: '2024-03-06T11:00:00Z', updated_at: '2024-03-12T15:00:00Z' },
-  { id: 'app-008', job_id: '66666666-6666-6666-6666-666666666666', candidate_id: 'c-006', stage: 'offer_accepted', ai_score: 95, ai_match_breakdown: { skills: 98, experience: 90, location: 100, education: 95 }, created_at: '2024-03-04T11:00:00Z', updated_at: '2024-03-10T16:00:00Z' },
+  { id: 'app-001', job_id: '11111111-1111-1111-1111-111111111112', candidate_id: 'c-001', stage: 'shortlisted', ai_score: 92, created_at: '2024-03-11T11:00:00Z', updated_at: '2024-03-12T10:00:00Z' },
+  { id: 'app-002', job_id: '11111111-1111-1111-1111-111111111112', candidate_id: 'c-007', stage: 'screened', ai_score: 87, created_at: '2024-03-15T11:00:00Z', updated_at: '2024-03-15T14:00:00Z' },
+  { id: 'app-003', job_id: '22222222-2222-2222-2222-222222222223', candidate_id: 'c-002', stage: 'submitted_to_client', ai_score: 89, created_at: '2024-03-09T11:00:00Z', updated_at: '2024-03-11T09:00:00Z' },
+  { id: 'app-004', job_id: '22222222-2222-2222-2222-222222222223', candidate_id: 'c-008', stage: 'new', ai_score: 74, created_at: '2024-03-14T11:00:00Z', updated_at: '2024-03-14T11:00:00Z' },
+  { id: 'app-005', job_id: '33333333-3333-3333-3333-333333333334', candidate_id: 'c-003', stage: 'client_interview_scheduled', ai_score: 91, created_at: '2024-03-07T11:00:00Z', updated_at: '2024-03-10T09:00:00Z' },
+  { id: 'app-006', job_id: '44444444-4444-4444-4444-444444444444', candidate_id: 'c-004', stage: 'sourced', ai_score: 83, created_at: '2024-03-13T11:00:00Z', updated_at: '2024-03-13T11:00:00Z' },
+  { id: 'app-007', job_id: '55555555-5555-5555-5555-555555555555', candidate_id: 'c-005', stage: 'offer_extended', ai_score: 79, created_at: '2024-03-06T11:00:00Z', updated_at: '2024-03-12T15:00:00Z' },
+  { id: 'app-008', job_id: '66666666-6666-6666-6666-666666666666', candidate_id: 'c-006', stage: 'offer_accepted', ai_score: 95, created_at: '2024-03-04T11:00:00Z', updated_at: '2024-03-10T16:00:00Z' },
 ];
 
 export const mockVendors: Vendor[] = [

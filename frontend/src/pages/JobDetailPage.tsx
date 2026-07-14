@@ -12,6 +12,7 @@ import {
   Building2,
   TrendingUp,
   UserPlus,
+  Sparkles,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { jobStatusLabels } from '../lib/mockData';
@@ -45,6 +46,16 @@ const workModeLabel: Record<string, string> = {
   onsite: 'Onsite',
 };
 
+interface CandidateMatch {
+  id: string;
+  first_name: string;
+  last_name: string;
+  current_title: string | null;
+  current_location: string | null;
+  skills: string[] | null;
+  similarity: number;
+}
+
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'pending_review', label: 'Pending Review' },
@@ -63,6 +74,23 @@ export default function JobDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
   const [statusChanging, setStatusChanging] = useState(false);
+  const [matches, setMatches] = useState<CandidateMatch[] | null>(null);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
+
+  const handleFindMatches = async () => {
+    if (!id) return;
+    setMatchesLoading(true);
+    setMatchesError(null);
+    try {
+      const data = await api.post(`/jobs/${id}/matches`, {});
+      setMatches(data.matches ?? []);
+    } catch (err: any) {
+      setMatchesError(err.message || 'Failed to find matching candidates');
+    } finally {
+      setMatchesLoading(false);
+    }
+  };
 
   const canEditStatus =
     profile?.role === 'super_admin' ||
@@ -312,6 +340,59 @@ export default function JobDetailPage() {
                 <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.generic}</p>
               </div>
             </div>
+          </div>
+
+          {/* Matching — vector-similarity candidate search */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Matching Candidates
+              </p>
+              <button
+                onClick={handleFindMatches}
+                disabled={matchesLoading}
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-60"
+              >
+                <Sparkles size={13} />
+                {matchesLoading ? 'Searching…' : 'Find Matching Candidates'}
+              </button>
+            </div>
+
+            {matchesError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5">
+                {matchesError}
+              </p>
+            )}
+
+            {matches && matches.length === 0 && !matchesError && (
+              <p className="text-xs text-gray-500">
+                No matching candidates found — candidates need an embedding before they can be matched.
+              </p>
+            )}
+
+            {matches && matches.length > 0 && (
+              <div className="space-y-1.5">
+                {matches.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {c.first_name} {c.last_name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {c.current_title || 'No title'}
+                        {c.current_location ? ` · ${c.current_location}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex-shrink-0">
+                      {Math.round(c.similarity * 100)}% match
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Description */}

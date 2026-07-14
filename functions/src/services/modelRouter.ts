@@ -6,7 +6,7 @@
  * enforces them yet. They exist so this shape doesn't need redesigning once
  * real multi-provider fallback and cost/audit logging (Phase 3 Step 2) land.
  */
-export type AgentId = "resume_parser" | "jd_parser" | "vendor_parser";
+export type AgentId = "resume_parser" | "jd_parser" | "vendor_parser" | "candidate_scorer" | "screening_chat";
 
 interface AgentModelConfig {
   model: string;
@@ -31,6 +31,16 @@ const MODEL_CONFIG: Record<AgentId, AgentModelConfig> = {
     model: "gemini-2.5-flash-lite",
     fallback: "gpt-5.4-mini",
     capUsdMonth: 20,
+  },
+  candidate_scorer: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gpt-5.4-mini",
+    capUsdMonth: 40,
+  },
+  screening_chat: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gpt-5.4-mini",
+    capUsdMonth: 30,
   },
 };
 

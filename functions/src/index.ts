@@ -22,6 +22,7 @@ import billingRoutes from "./modules/billing/billing.routes";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes";
 import tenantRoutes from "./modules/tenants/tenants.routes";
 import onboardingRoutes from "./modules/onboarding/onboarding.routes";
+import screeningRoutes from "./modules/screening/screening.routes";
 import { requireActiveSubscription } from "./middleware/subscriptionCheck";
 import { softAuth } from "./middleware/auth";
 import { resolveTenant } from "./middleware/tenantResolution";
@@ -87,6 +88,17 @@ const apiLimiter = rateLimit({
   message: { message: "Too many requests. Please slow down." },
 });
 
+// A5 screening chat is the first unauthenticated, LLM-cost-exposed public endpoint —
+// tighter than apiLimiter's blanket 200/min, stacks with it (doesn't replace it).
+const screeningLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { creationStack: false, xForwardedForHeader: false },
+  message: { message: "Too many requests. Please slow down." },
+});
+
 // Apply strict limiter only to credential-submission endpoints.
 // /auth/me and /auth/logout are session endpoints called on every page load —
 // applying the strict limiter there would exhaust the window for normal users
@@ -95,6 +107,7 @@ app.use("/v1/auth/login", authLimiter);
 app.use("/v1/auth/forgot-password", authLimiter);
 app.use("/v1/auth/reset-password", authLimiter);
 app.use("/v1/auth/setup", authLimiter);
+app.use("/v1/screening", screeningLimiter);
 
 // Apply general limiter to all API routes
 app.use("/v1", apiLimiter);
@@ -131,6 +144,7 @@ v1Router.use("/auth", authRoutes);
 v1Router.use("/billing", billingRoutes);       // billing exempt: tenant must be able to subscribe
 v1Router.use("/tenants", tenantRoutes);         // tenant mgmt exempt: ZorTech onboarding flow
 v1Router.use("/onboarding", onboardingRoutes); // onboarding exempt: accessible before subscription
+v1Router.use("/screening", screeningRoutes); // screening exempt: unauthenticated candidate-facing, must never hit the subscription gate
 
 // ─── Subscription gate ────────────────────────────────────────────────────────
 // All routes below require an active or in-trial subscription.

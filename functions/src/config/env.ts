@@ -30,6 +30,10 @@ export const env = {
   // Redis URL for BullMQ provisioning queue (optional — required only if running
   // the async provisioning worker outside Firebase Functions).
   REDIS_URL: process.env.REDIS_URL || process.env.SERVER_REDIS_URL || "",
+
+  // A5 dark-build gate — defaults false in every environment. Must be explicitly set
+  // to "true" for the screening-invite endpoint to create sessions or send emails.
+  SCREENING_CHAT_ENABLED: process.env.SCREENING_CHAT_ENABLED === "true",
 };
 
 export default env;

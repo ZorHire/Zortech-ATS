@@ -37,8 +37,9 @@ export const categorizeError = (err: unknown): string => {
 
 export interface LogAiCallParams {
   tenantId: string;
-  agentId: "resume_parser" | "jd_parser";
-  entityType?: "resume" | "job_description";
+  agentId: string;
+  entityType?: "resume" | "job_description" | "candidate" | "job" | "job_application" | "screening_session";
+  entityId?: string;
   model: string;
   promptVersion: string;
   inputTokens?: number;
@@ -55,12 +56,13 @@ export interface LogAiCallParams {
 export const logAiCall = async (params: LogAiCallParams): Promise<void> => {
   try {
     await query(
-      `INSERT INTO ai_call_log (tenant_id, agent_id, entity_type, model, prompt_version, input_tokens, output_tokens, cached_tokens, cost_usd, latency_ms, success, fallback_used, error_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      `INSERT INTO ai_call_log (tenant_id, agent_id, entity_type, entity_id, model, prompt_version, input_tokens, output_tokens, cached_tokens, cost_usd, latency_ms, success, fallback_used, error_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         params.tenantId,
         params.agentId,
         params.entityType ?? null,
+        params.entityId ?? null,
         params.model,
         params.promptVersion,
         params.inputTokens ?? null,

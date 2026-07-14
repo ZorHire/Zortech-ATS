@@ -11,7 +11,7 @@ import {
   useSensors,
   closestCenter,
 } from "@dnd-kit/core";
-import { ArrowLeft, RefreshCw, Users, AlertCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, Users, AlertCircle, Sparkles } from "lucide-react";
 import Header from "../components/layout/Header";
 import KanbanColumn from "../components/pipeline/KanbanColumn";
 import CandidateCard from "../components/pipeline/CandidateCard";
@@ -155,6 +155,7 @@ export default function PipelinePage() {
   const [activeApplication, setActiveApplication] =
     useState<JobApplication | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [shortlisting, setShortlisting] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -200,6 +201,35 @@ export default function PipelinePage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const handleRunShortlisting = async () => {
+    if (!jobId) return;
+    setShortlisting(true);
+    try {
+      const data = await api.post(`/jobs/${jobId}/shortlist`, {});
+      showToast(
+        `Scored ${data.scored}/${data.total_eligible}, auto-shortlisted ${data.shortlisted}`,
+        "success",
+      );
+      await fetchData();
+    } catch (err: any) {
+      showToast(err.message || "Failed to run AI shortlisting", "error");
+    } finally {
+      setShortlisting(false);
+    }
+  };
+
+  const handleScreeningInvite = async (application: JobApplication) => {
+    try {
+      const data = await api.post(`/pipeline/applications/${application.id}/screening-invite`, {});
+      showToast(
+        data.emailSent ? "Screening invite sent" : "Screening invite created, but the email failed to send",
+        data.emailSent ? "success" : "error",
+      );
+    } catch (err: any) {
+      showToast(err.message || "Failed to send screening invite", "error");
+    }
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     const found = applications.find((a) => a.id === event.active.id);
@@ -304,6 +334,14 @@ export default function PipelinePage() {
               Back to Job
             </Link>
             <button
+              onClick={handleRunShortlisting}
+              disabled={shortlisting}
+              className="flex items-center gap-1.5 text-sm text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+            >
+              <Sparkles size={14} />
+              {shortlisting ? "Scoring…" : "Run AI Shortlisting"}
+            </button>
+            <button
               onClick={fetchData}
               className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               title="Refresh"
@@ -333,6 +371,7 @@ export default function PipelinePage() {
                 label={label}
                 color={color}
                 applications={byStage(key)}
+                onScreeningInvite={handleScreeningInvite}
               />
             ))}
           </div>

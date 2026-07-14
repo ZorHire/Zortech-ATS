@@ -1,16 +1,18 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Briefcase, MapPin, Clock } from "lucide-react";
+import { GripVertical, Briefcase, MapPin, Clock, Send } from "lucide-react";
 import { JobApplication } from "../../types";
 
 interface CandidateCardProps {
   application: JobApplication;
   isOverlay?: boolean;
+  onScreeningInvite?: (application: JobApplication) => void;
 }
 
 export default function CandidateCard({
   application,
   isOverlay = false,
+  onScreeningInvite,
 }: CandidateCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: application.id });
@@ -50,7 +52,7 @@ export default function CandidateCard({
         </button>
 
         <div className="flex-1 min-w-0">
-          {/* Avatar + Name */}
+          {/* Avatar + Name + AI score */}
           <div className="flex items-center gap-2 mb-1">
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center flex-shrink-0">
               <span className="text-white text-[9px] font-bold">
@@ -58,9 +60,23 @@ export default function CandidateCard({
                 {candidate?.last_name?.[0] ?? ""}
               </span>
             </div>
-            <p className="text-sm font-semibold text-gray-900 truncate leading-tight">
+            <p className="text-sm font-semibold text-gray-900 truncate leading-tight flex-1 min-w-0">
               {fullName}
             </p>
+            {application.ai_score != null && (
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                  application.ai_score >= 75
+                    ? "bg-emerald-50 text-emerald-700"
+                    : application.ai_score >= 50
+                      ? "bg-amber-50 text-amber-700"
+                      : "bg-gray-100 text-gray-500"
+                }`}
+                title={application.ai_match_breakdown?.rationale}
+              >
+                {application.ai_score}/100
+              </span>
+            )}
           </div>
 
           {/* Title */}
@@ -104,6 +120,20 @@ export default function CandidateCard({
                 </span>
               )}
             </div>
+          )}
+
+          {/* Screening invite trigger — dark by default (SCREENING_CHAT_ENABLED gate) */}
+          {onScreeningInvite && !isOverlay && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onScreeningInvite(application);
+              }}
+              className="mt-2.5 flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 transition-colors"
+            >
+              <Send size={10} />
+              Send Screening Invite
+            </button>
           )}
         </div>
       </div>
