@@ -1,16 +1,3 @@
-import { ConfidentialClientApplication } from "@azure/msal-node";
-import pool from "../../../db";
-
-const msalConfig = {
-  auth: {
-    clientId: process.env.AZURE_CLIENT_ID || "",
-    clientSecret: process.env.AZURE_CLIENT_SECRET || "",
-    authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID || "common"}`,
-  },
-};
-
-const msalClient = new ConfidentialClientApplication(msalConfig);
-
 export function getOutlookAuthUrl(userId: string, tenantId: string): string {
   const redirectUri = process.env.OUTLOOK_REDIRECT_URI || "http://localhost:5000/v1/integrations/auth/outlook/callback";
   const state = Buffer.from(JSON.stringify({ userId, tenantId })).toString("base64");

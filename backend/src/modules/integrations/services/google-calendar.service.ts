@@ -1,5 +1,4 @@
 import { google } from "googleapis";
-import pool from "../../../db";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
