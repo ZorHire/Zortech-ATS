@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import {
   ArrowLeft,
   Mail,
@@ -161,11 +162,29 @@ function ApplicationCard({ entry }: { entry: ApplicationEntry }) {
 export default function CandidateDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const token = useSelector((s: any) => s.auth?.accessToken) ?? localStorage.getItem("jwt");
 
   const { data: candidate, isLoading: candidateLoading } = useGetCandidateByIdQuery(id!);
   const { data: timeline = [], isLoading: timelineLoading } = useGetCandidateTimelineQuery(id!);
 
   const isLoading = candidateLoading || timelineLoading;
+
+  const openResume = useCallback(async () => {
+    if (!id) return;
+    const base = import.meta.env.VITE_API_URL || "http://localhost:5000/v1";
+    const resp = await fetch(`${base}/candidates/${id}/resume`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) { alert("Resume not available"); return; }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }, [id, token]);
 
   const avatarInitials = candidate
     ? `${candidate.first_name.charAt(0)}${candidate.last_name.charAt(0)}`
@@ -240,16 +259,14 @@ export default function CandidateDetailPage() {
                     </div>
                   </div>
                   {candidate.resume_url && (
-                    <a
-                      href={candidate.resume_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={openResume}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex-shrink-0"
                     >
                       <FileText size={12} />
                       Resume
                       <ExternalLink size={10} />
-                    </a>
+                    </button>
                   )}
                 </div>
               </div>

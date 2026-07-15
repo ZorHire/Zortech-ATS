@@ -47,6 +47,12 @@ router.get(
   candidateController.getCandidateTimeline,
 );
 router.get(
+  "/:id/resume",
+  authMiddleware,
+  tenantIsolation,
+  candidateController.getResume,
+);
+router.get(
   "/:id",
   authMiddleware,
   tenantIsolation,

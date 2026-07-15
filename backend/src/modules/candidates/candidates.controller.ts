@@ -1,6 +1,8 @@
 import path from "path";
+import fs from "fs";
 import { Response } from "express";
 import pool from "../../db";
+import env from "../../config/env";
 import { AuthRequest } from "../../middleware/auth";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
 import { withCache, invalidate, invalidatePrefix } from "../../lib/cache";
@@ -841,6 +843,52 @@ export const logEngagementEvent = async (req: AuthRequest, res: Response) => {
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("logEngagementEvent error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getResume = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user?.tenant_id;
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query(
+      "SELECT resume_url FROM candidates WHERE id = $1 AND tenant_id = $2 AND is_active = true",
+      [id, tenantId],
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+
+    const resumeUrl: string | null = result.rows[0].resume_url;
+    if (!resumeUrl) {
+      return res.status(404).json({ message: "No resume on file for this candidate" });
+    }
+
+    if (resumeUrl.startsWith("http://") || resumeUrl.startsWith("https://")) {
+      return res.redirect(302, resumeUrl);
+    }
+
+    if (resumeUrl.startsWith("/uploads/")) {
+      const uploadRoot = path.resolve(env.UPLOAD_DIR || path.resolve(__dirname, "../../uploads"));
+      const relativePart = resumeUrl.replace(/^\/uploads\//, "");
+      const filePath = path.resolve(uploadRoot, relativePart);
+
+      if (!filePath.startsWith(uploadRoot)) {
+        return res.status(400).json({ message: "Invalid file path" });
+      }
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: "Resume file not found on server" });
+      }
+
+      return res.sendFile(filePath);
+    }
+
+    return res.status(404).json({ message: "Resume not available" });
+  } catch (error) {
+    console.error("getResume error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
