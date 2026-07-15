@@ -4,6 +4,39 @@ import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
 import { withCache, invalidate, invalidatePrefix } from "../../lib/cache";
+import { embedText } from "../../services/embedding";
+
+const buildEmbeddingInput = (candidate: {
+  current_title?: string | null;
+  current_company?: string | null;
+  summary?: string | null;
+  skills?: string[] | null;
+}): string =>
+  [candidate.current_title, candidate.current_company, candidate.summary, (candidate.skills || []).join(", ")]
+    .filter(Boolean)
+    .join(". ");
+
+const toVectorLiteral = (embedding: number[]): string => `[${embedding.join(",")}]`;
+
+/** Fire-and-forget — never blocks the candidate response, never throws into the caller. */
+const embedCandidateAsync = (candidateId: string, tenantId: string, candidate: {
+  current_title?: string | null;
+  current_company?: string | null;
+  summary?: string | null;
+  skills?: string[] | null;
+}): void => {
+  const input = buildEmbeddingInput(candidate);
+  if (!input.trim()) return;
+  embedText(input, "RETRIEVAL_DOCUMENT", tenantId, "candidate")
+    .then((embedding) => {
+      if (!embedding) return;
+      return pool.query(
+        `UPDATE candidates SET embedding = $1::vector, embedding_updated_at = now() WHERE id = $2`,
+        [toVectorLiteral(embedding), candidateId],
+      );
+    })
+    .catch((err) => console.error("[Candidate embedding] Failed:", err instanceof Error ? err.message : err));
+};
 
 function buildCandidateCacheKey(tenantId: string, query: Record<string, any>): string {
   const suffix = Object.entries(query)
@@ -139,7 +172,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
 
   const resumeText =
     (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-  const parsed = await parseResumeText(resumeText);
+  const parsed = await parseResumeText(resumeText, tenantId!);
 
   const first_name =
     body.first_name || parsed.name?.split(" ")[0] || "Candidate";
@@ -154,10 +187,10 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
   );
   const current_location =
     body.current_location || parsed.current_location || "";
-  const preferred_location = body.preferred_location || "";
-  const notice_period_days = Number(body.notice_period_days || 30);
-  const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
-  const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
+  const preferred_location = body.preferred_location || parsed.preferred_location || "";
+  const notice_period_days = Number(body.notice_period_days || parsed.notice_period_days || 30);
+  const current_ctc = body.current_ctc ? Number(body.current_ctc) : parsed.current_ctc ?? null;
+  const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : parsed.expected_ctc ?? null;
   const skills = normalizeSkills(body.skills || parsed.skills);
   const summary = body.summary || parsed.summary || "";
   const source = body.source || "direct";
@@ -211,6 +244,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       ],
     );
     await invalidatePrefix(`tenant:${tenantId}:candidates:`);
+    embedCandidateAsync(result.rows[0].id, tenantId!, result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Create candidate error:", error);
@@ -279,6 +313,7 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: "Candidate not found" });
     }
     await invalidatePrefix(`tenant:${tenantId}:candidates:`);
+    embedCandidateAsync(result.rows[0].id, tenantId!, result.rows[0]);
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update candidate error:", error);

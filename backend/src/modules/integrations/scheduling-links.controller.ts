@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import pool from "../../db";
 import * as calendlySvc from "./services/calendly.service";
+import { sendEmailViaSendGrid } from "./services/sendgrid.service";
 
 export async function getCalendlyStatus(req: Request, res: Response) {
   const key = process.env.CALENDLY_API_KEY;
@@ -82,7 +83,6 @@ export async function sendSchedulingLinkToCandidate(req: Request, res: Response)
     const recipientEmail = sl.candidate_email || sl.c_email;
     if (!recipientEmail) return res.status(400).json({ message: "No candidate email found" });
 
-    const { sendEmailViaSendGrid } = await import("./services/sendgrid.service");
     await sendEmailViaSendGrid({
       to: recipientEmail,
       subject: `Schedule your interview — ${sl.job_title || "Job Opportunity"}`,

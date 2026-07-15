@@ -40,6 +40,7 @@ import PricingPage from "./pages/PricingPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import AssignedJDsPage from "./pages/AssignedJDsPage";
+import ScreeningChatPage from "./pages/ScreeningChatPage";
 import InterviewsPage from "./pages/InterviewsPage";
 import OffersPage from "./pages/OffersPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -205,6 +206,7 @@ function AppRoutes() {
         element={user ? <Navigate to="/" replace /> : <LoginPage />}
       />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/screening/:sessionId" element={<ScreeningChatPage />} />
       {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}
       <Route
         path="/pricing"

@@ -11,13 +11,14 @@ import {
   useSensors,
   closestCenter,
 } from "@dnd-kit/core";
-import { ArrowLeft, RefreshCw, Users, AlertCircle } from "lucide-react";
+import { ArrowLeft, RefreshCw, Users, AlertCircle, Sparkles } from "lucide-react";
 import Header from "../components/layout/Header";
 import KanbanColumn from "../components/pipeline/KanbanColumn";
 import CandidateCard from "../components/pipeline/CandidateCard";
 import { JobApplication, PipelineStage } from "../types";
 import { useGetJobQuery } from "../store/api/jobApi";
 import { useGetPipelineApplicationsQuery, useUpdateApplicationStageMutation } from "../store/api/pipelineApi";
+import api from "../lib/api";
 
 const STAGES: {
   key: PipelineStage;
@@ -53,8 +54,11 @@ export default function PipelinePage() {
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [activeApplication, setActiveApplication] = useState<JobApplication | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  // feat/agents: AI shortlisting state
+  const [shortlisting, setShortlisting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
+  // origin/main: derived loading / error values from RTK Query
   const loading = jobLoading || appsLoading;
   const errorMsg = jobError || appsError
     ? (jobError as any)?.data?.message || (appsError as any)?.data?.message || "Failed to load pipeline data"
@@ -72,6 +76,37 @@ export default function PipelinePage() {
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  // feat/agents: run AI match-scoring and auto-shortlisting for all eligible candidates
+  const handleRunShortlisting = async () => {
+    if (!jobId) return;
+    setShortlisting(true);
+    try {
+      const data = await api.post(`/jobs/${jobId}/shortlist`, {});
+      showToast(
+        `Scored ${data.scored}/${data.total_eligible}, auto-shortlisted ${data.shortlisted}`,
+        "success",
+      );
+      await refetchPipeline();
+    } catch (err: any) {
+      showToast(err.message || "Failed to run AI shortlisting", "error");
+    } finally {
+      setShortlisting(false);
+    }
+  };
+
+  // feat/agents: send a screening invite for a candidate in the pipeline
+  const handleScreeningInvite = async (application: JobApplication) => {
+    try {
+      const data = await api.post(`/pipeline/applications/${application.id}/screening-invite`, {});
+      showToast(
+        data.emailSent ? "Screening invite sent" : "Screening invite created, but the email failed to send",
+        data.emailSent ? "success" : "error",
+      );
+    } catch (err: any) {
+      showToast(err.message || "Failed to send screening invite", "error");
+    }
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -161,6 +196,16 @@ export default function PipelinePage() {
               <ArrowLeft size={15} />
               Back to Job
             </Link>
+            {/* feat/agents: AI shortlisting button */}
+            <button
+              onClick={handleRunShortlisting}
+              disabled={shortlisting}
+              className="flex items-center gap-1.5 text-sm text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
+            >
+              <Sparkles size={14} />
+              {shortlisting ? "Scoring…" : "Run AI Shortlisting"}
+            </button>
+            {/* origin/main: manual refresh via RTK Query refetch */}
             <button
               onClick={() => refetchPipeline()}
               className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -187,6 +232,7 @@ export default function PipelinePage() {
                 label={label}
                 color={color}
                 applications={byStage(key)}
+                onScreeningInvite={handleScreeningInvite}
               />
             ))}
           </div>

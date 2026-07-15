@@ -2,6 +2,44 @@ import { Response } from "express";
 import { AuthRequest } from "../../middleware/auth";
 import { getAtsPool } from "../../db/poolRouter";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
+import { embedText } from "../../services/embedding.service";
+
+const buildEmbeddingInput = (candidate: {
+  current_title?: string | null;
+  current_company?: string | null;
+  summary?: string | null;
+  skills?: string[] | null;
+}): string =>
+  [candidate.current_title, candidate.current_company, candidate.summary, (candidate.skills || []).join(", ")]
+    .filter(Boolean)
+    .join(". ");
+
+const toVectorLiteral = (embedding: number[]): string => `[${embedding.join(",")}]`;
+
+/** Fire-and-forget — never blocks the candidate response, never throws into the caller. */
+const embedCandidateAsync = (
+  db: { query: (sql: string, params: any[]) => Promise<any> },
+  candidateId: string,
+  tenantId: string,
+  candidate: {
+    current_title?: string | null;
+    current_company?: string | null;
+    summary?: string | null;
+    skills?: string[] | null;
+  },
+): void => {
+  const input = buildEmbeddingInput(candidate);
+  if (!input.trim()) return;
+  embedText(input, "RETRIEVAL_DOCUMENT", tenantId, "candidate")
+    .then((embedding) => {
+      if (!embedding) return;
+      return db.query(
+        `UPDATE candidates SET embedding = $1::vector, embedding_updated_at = now() WHERE id = $2`,
+        [toVectorLiteral(embedding), candidateId],
+      );
+    })
+    .catch((err) => console.error("[Candidate embedding] Failed:", err instanceof Error ? err.message : err));
+};
 
 const normalizeSkills = (value: any) => {
   if (!value) return [];
@@ -107,7 +145,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     // so errors return 500 rather than reaching the global 400 handler.
     const resumeText =
       (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-    const parsed = await parseResumeText(resumeText);
+    const parsed = await parseResumeText(resumeText, tenantId!);
 
     const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
     const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";
@@ -118,10 +156,10 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
     const current_company = body.current_company || parsed.current_company || "";
     const experience_years = Number(body.experience_years || parsed.experience_years || 0);
     const current_location = body.current_location || parsed.current_location || "";
-    const preferred_location = body.preferred_location || "";
-    const notice_period_days = Number(body.notice_period_days || 30);
-    const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
-    const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
+    const preferred_location = body.preferred_location || parsed.preferred_location || "";
+    const notice_period_days = Number(body.notice_period_days || parsed.notice_period_days || 30);
+    const current_ctc = body.current_ctc ? Number(body.current_ctc) : parsed.current_ctc ?? null;
+    const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : parsed.expected_ctc ?? null;
     const skills = normalizeSkills(body.skills || parsed.skills);
     const summary = body.summary || parsed.summary || "";
     const source = body.source || "direct";
@@ -165,6 +203,7 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
       candidate = updated.rows[0];
     }
 
+    embedCandidateAsync(db, candidate.id, tenantId!, candidate);
     res.status(201).json(candidate);
   } catch (error: any) {
     console.error("Create candidate error:", error);
@@ -251,6 +290,7 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ message: "Candidate not found" });
     }
+    embedCandidateAsync(db, result.rows[0].id, tenantId!, result.rows[0]);
     res.json(result.rows[0]);
   } catch (error) {
     console.error("Update candidate error:", error);
@@ -525,7 +565,7 @@ export const createCandidateForJob = async (req: AuthRequest, res: Response) => 
 
     const resumeText =
       (file ? await extractFileText(file) : "") + " " + (body.resume_text || "");
-    const parsed = await parseResumeText(resumeText);
+    const parsed = await parseResumeText(resumeText, tenantId!);
 
     const first_name = body.first_name || parsed.name?.split(" ")[0] || "Candidate";
     const last_name = body.last_name || parsed.name?.split(" ").slice(1).join(" ") || "Profile";
@@ -535,10 +575,10 @@ export const createCandidateForJob = async (req: AuthRequest, res: Response) => 
     const current_company = body.current_company || parsed.current_company || "";
     const experience_years = Number(body.experience_years || parsed.experience_years || 0);
     const current_location = body.current_location || parsed.current_location || "";
-    const preferred_location = body.preferred_location || "";
-    const notice_period_days = Number(body.notice_period_days || 30);
-    const current_ctc = body.current_ctc ? Number(body.current_ctc) : null;
-    const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : null;
+    const preferred_location = body.preferred_location || parsed.preferred_location || "";
+    const notice_period_days = Number(body.notice_period_days || parsed.notice_period_days || 30);
+    const current_ctc = body.current_ctc ? Number(body.current_ctc) : parsed.current_ctc ?? null;
+    const expected_ctc = body.expected_ctc ? Number(body.expected_ctc) : parsed.expected_ctc ?? null;
     const skills = normalizeSkills(body.skills || parsed.skills);
     const summary = body.summary || parsed.summary || "";
     const source = body.source || "direct";
@@ -579,6 +619,8 @@ export const createCandidateForJob = async (req: AuthRequest, res: Response) => 
       );
       candidate = updated.rows[0];
     }
+
+    embedCandidateAsync(db, candidate.id, tenantId!, candidate);
 
     const appResult = await db.query(
       `INSERT INTO job_applications (tenant_id, job_id, candidate_id, stage, assigned_to)

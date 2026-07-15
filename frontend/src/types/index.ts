@@ -135,7 +135,13 @@ export interface JobApplication {
   candidate?: Candidate;
   stage: PipelineStage;
   ai_score?: number;
-  ai_match_breakdown?: Record<string, number>;
+  ai_match_breakdown?: {
+    rationale: string;
+    strengths: string[];
+    gaps: string[];
+    model: string;
+    scored_at: string;
+  };
   rejection_reason?: string;
   notes?: string;
   assigned_to?: string;

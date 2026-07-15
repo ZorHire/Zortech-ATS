@@ -1,8 +1,13 @@
 import { Response } from "express";
+import { Pool } from "pg";
 import { AuthRequest } from "../../middleware/auth";
 import { getAtsPool } from "../../db/poolRouter";
 import { platformPool } from "../../db/platform";
 
+// NOTE (known adjacent bug, out of scope for A4 shortlisting): the DB CHECK constraint
+// on job_applications.stage also allows 'offer_rejected', but this array omits it, so
+// normalizeStage() would silently reset that stage to 'new' if ever hit. Irrelevant here
+// since 'shortlisted' (A4's target stage) is present below.
 const allowedStages = [
   "new", "sourced", "screened", "shortlisted", "submitted_to_client",
   "client_interview_scheduled", "interview_completed", "selected",
@@ -14,6 +19,26 @@ type Stage = (typeof allowedStages)[number];
 const normalizeStage = (value: any): Stage => {
   if (allowedStages.includes(value)) return value;
   return "new";
+};
+
+/**
+ * System-initiated stage move (no req.user.id — this isn't an HTTP-request-shaped
+ * action). Distinct from moveApplicationStage: changed_by is NULL, actor_type is 'ai',
+ * so AI-driven moves are auditable and distinguishable from human ones.
+ */
+export const applyAiStageMove = async (
+  db: Pool,
+  params: { tenantId: string; applicationId: string; fromStage: string; toStage: Stage; note: string },
+): Promise<void> => {
+  await db.query(
+    "UPDATE job_applications SET stage = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3",
+    [params.toStage, params.applicationId, params.tenantId],
+  );
+  await db.query(
+    `INSERT INTO pipeline_events (tenant_id, application_id, from_stage, to_stage, changed_by, actor_type, note, created_at)
+     VALUES ($1, $2, $3, $4, NULL, 'ai', $5, now())`,
+    [params.tenantId, params.applicationId, params.fromStage, params.toStage, params.note],
+  );
 };
 
 export const addToPipeline = async (req: AuthRequest, res: Response) => {

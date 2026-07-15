@@ -3,6 +3,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ArrowLeft, Upload, CheckCircle, AlertCircle, Loader } from "lucide-react";
 import Header from "../components/layout/Header";
+import api from "../lib/api";
+import { Client } from "../types";
+import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import { useGetClientsQuery, useParseJdMutation, useCreateJobMutation } from "../store/api/jobApi";
 
 const statusOptions = [
@@ -18,12 +21,14 @@ export default function NewJobPage() {
   const [parseJd, { isLoading: jdParsing }] = useParseJdMutation();
   const [createJob] = useCreateJobMutation();
   const [jdParseMessage, setJdParseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     client_id: "",
     location: "",
     status: "draft",
     priority: "medium",
+    department: "",
     work_mode: "onsite",
     employment_type: "full_time",
     experience_min: 0,
@@ -33,6 +38,7 @@ export default function NewJobPage() {
     headcount: 1,
     description: "",
     mandatory_skills: "",
+    preferred_skills: "",
   });
 
   const handleJDUpload = async (file: File) => {
@@ -45,17 +51,42 @@ export default function NewJobPage() {
         ...current,
         title: (parsed.title as string) || current.title,
         location: (parsed.location as string) || current.location,
-        experience_min: parsed.experience_min !== undefined ? (parsed.experience_min as number) : current.experience_min,
-        experience_max: parsed.experience_max !== undefined ? (parsed.experience_max as number) : current.experience_max,
-        salary_min: parsed.salary_min !== undefined ? (parsed.salary_min as number) : current.salary_min,
-        salary_max: parsed.salary_max !== undefined ? (parsed.salary_max as number) : current.salary_max,
+        department: parsed.department || current.department,
+        work_mode: parsed.work_mode || current.work_mode,
+        experience_min:
+          parsed.experience_min !== undefined
+            ? (parsed.experience_min as number)
+            : current.experience_min,
+        experience_max:
+          parsed.experience_max !== undefined
+            ? (parsed.experience_max as number)
+            : current.experience_max,
+        salary_min:
+          parsed.salary_min !== undefined
+            ? (parsed.salary_min as number)
+            : current.salary_min,
+        salary_max:
+          parsed.salary_max !== undefined
+            ? (parsed.salary_max as number)
+            : current.salary_max,
         mandatory_skills:
-          Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
-            ? (parsed.required_skills as string[]).join(", ")
-            : current.mandatory_skills,
+          parsed.mandatory_skills?.length > 0
+            ? parsed.mandatory_skills.join(", ")
+            : Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
+              ? (parsed.required_skills as string[]).join(", ")
+              : current.mandatory_skills,
+        preferred_skills:
+          parsed.preferred_skills?.length > 0
+            ? parsed.preferred_skills.join(", ")
+            : current.preferred_skills,
         description: (parsed.description as string) || current.description,
       }));
-      setJdParseMessage({ type: "success", text: "JD parsed successfully. Review fields and edit as needed." });
+      setLowConfidenceFields(parsed.low_confidence_fields || []);
+
+      setJdParseMessage({
+        type: "success",
+        text: "JD parsed successfully. Review fields and edit as needed.",
+      });
     } catch (error) {
       console.error("JD parse failed:", error);
       setJdParseMessage({ type: "error", text: "Could not extract data, please fill manually." });
@@ -71,12 +102,22 @@ export default function NewJobPage() {
           .split(",")
           .map((s) => s.trim())
           .filter((s) => s !== ""),
+        preferred_skills: formData.preferred_skills
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s !== ""),
       }).unwrap();
       navigate("/jobs");
     } catch (error: any) {
       alert(error?.data?.message || error?.message || "Unable to create job. Please verify all fields and try again.");
     }
   };
+
+  const titleFlagged = isLowConfidence(lowConfidenceFields, "title");
+  const departmentFlagged = isLowConfidence(lowConfidenceFields, "department");
+  const workModeFlagged = isLowConfidence(lowConfidenceFields, "work_mode");
+  const mandatorySkillsFlagged = isLowConfidence(lowConfidenceFields, "mandatory_skills", "required_skills");
+  const preferredSkillsFlagged = isLowConfidence(lowConfidenceFields, "preferred_skills");
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -158,12 +199,15 @@ export default function NewJobPage() {
               <div>
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                   Job Title
+                  {titleFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
                 <input
                   required
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(titleFlagged)}`}
                   placeholder="Senior Product Designer"
                 />
               </div>
@@ -195,8 +239,10 @@ export default function NewJobPage() {
                 <input
                   required
                   value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  onChange={(e) =>
+                    setFormData({ ...formData, location: e.target.value })
+                  }
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "location"))}`}
                   placeholder="Bangalore"
                 />
               </div>
@@ -214,6 +260,40 @@ export default function NewJobPage() {
                       {option.label}
                     </option>
                   ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                  Department
+                  {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                </label>
+                <input
+                  value={formData.department}
+                  onChange={(e) =>
+                    setFormData({ ...formData, department: e.target.value })
+                  }
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(departmentFlagged)}`}
+                  placeholder="Engineering"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                  Work Mode
+                  {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                </label>
+                <select
+                  value={formData.work_mode}
+                  onChange={(e) =>
+                    setFormData({ ...formData, work_mode: e.target.value })
+                  }
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(workModeFlagged)}`}
+                >
+                  <option value="onsite">Onsite</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="remote">Remote</option>
                 </select>
               </div>
             </div>
@@ -304,12 +384,30 @@ export default function NewJobPage() {
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
                 Primary Skills
+                {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
               <input
                 value={formData.mandatory_skills}
-                onChange={(e) => setFormData({ ...formData, mandatory_skills: e.target.value })}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                onChange={(e) =>
+                  setFormData({ ...formData, mandatory_skills: e.target.value })
+                }
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(mandatorySkillsFlagged)}`}
                 placeholder="React, Node.js, Product Management"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                Preferred Skills
+                {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
+              </label>
+              <input
+                value={formData.preferred_skills}
+                onChange={(e) =>
+                  setFormData({ ...formData, preferred_skills: e.target.value })
+                }
+                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(preferredSkillsFlagged)}`}
+                placeholder="GraphQL, Kubernetes (good to have)"
               />
             </div>
 

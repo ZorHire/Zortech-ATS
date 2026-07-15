@@ -12,6 +12,7 @@ interface KanbanColumnProps {
     dot: string;
   };
   applications: JobApplication[];
+  onScreeningInvite?: (application: JobApplication) => void;
 }
 
 export default function KanbanColumn({
@@ -19,6 +20,7 @@ export default function KanbanColumn({
   label,
   color,
   applications,
+  onScreeningInvite,
 }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
 
@@ -47,7 +49,7 @@ export default function KanbanColumn({
         `}
       >
         {applications.map((app) => (
-          <CandidateCard key={app.id} application={app} />
+          <CandidateCard key={app.id} application={app} onScreeningInvite={onScreeningInvite} />
         ))}
 
         {applications.length === 0 && (

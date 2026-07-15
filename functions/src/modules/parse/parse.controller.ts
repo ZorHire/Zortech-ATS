@@ -17,18 +17,30 @@ const defaultResumeResponse = {
   current_company: "",
   current_location: "",
   summary: "",
+  preferred_location: "",
+  notice_period_days: undefined as number | undefined,
+  current_ctc: undefined as number | undefined,
+  expected_ctc: undefined as number | undefined,
+  low_confidence_fields: [] as string[],
 };
 
 const defaultJobResponse = {
   title: "",
   location: "",
   required_skills: [] as string[],
+  mandatory_skills: [] as string[],
+  preferred_skills: [] as string[],
   experience_min: undefined as number | undefined,
   experience_max: undefined as number | undefined,
   budget_text: "",
   salary_min: undefined as number | undefined,
   salary_max: undefined as number | undefined,
   description: "",
+  department: "",
+  work_mode: "",
+  priority: "",
+  headcount: undefined as number | undefined,
+  low_confidence_fields: [] as string[],
 };
 
 export const parseResume = async (req: AuthRequest, res: Response) => {
@@ -61,7 +73,7 @@ export const parseResume = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text (not a scanned image) and try again." });
     }
 
-    const parsed = await parseResumeText(content);
+    const parsed = await parseResumeText(content, req.user!.tenant_id);
 
     const fallbackName =
       parsed.name ||
@@ -102,6 +114,11 @@ export const parseResume = async (req: AuthRequest, res: Response) => {
       current_company: parsed.current_company || "",
       current_location: parsed.current_location || "",
       summary: parsed.summary || "",
+      preferred_location: parsed.preferred_location || "",
+      notice_period_days: parsed.notice_period_days,
+      current_ctc: parsed.current_ctc,
+      expected_ctc: parsed.expected_ctc,
+      low_confidence_fields: parsed.low_confidence_fields || [],
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Parse error";
@@ -138,18 +155,25 @@ export const parseJobDescription = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text and try again." });
     }
 
-    const parsed = await parseJobDescriptionText(content);
+    const parsed = await parseJobDescriptionText(content, req.user!.tenant_id);
 
     return res.json({
       title: parsed.title || "",
       location: parsed.location || "",
       required_skills: parsed.required_skills || [],
+      mandatory_skills: parsed.mandatory_skills || [],
+      preferred_skills: parsed.preferred_skills || [],
       experience_min: parsed.experience_min,
       experience_max: parsed.experience_max,
       budget_text: parsed.budget_text || "",
       salary_min: parsed.salary_min,
       salary_max: parsed.salary_max,
       description: parsed.description || "",
+      department: parsed.department || "",
+      work_mode: parsed.work_mode || "",
+      priority: parsed.priority || "",
+      headcount: parsed.headcount,
+      low_confidence_fields: parsed.low_confidence_fields || [],
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Parse error";
@@ -163,11 +187,12 @@ export const parseJobDescription = async (req: AuthRequest, res: Response) => {
 
 const defaultVendorResponse = {
   company_name: "",
-  email: "",
-  phone: "",
-  skills: [] as string[],
-  location: "",
-  summary: "",
+  primary_contact_name: "",
+  primary_contact_email: "",
+  primary_contact_phone: "",
+  industry_specializations: [] as string[],
+  geographies: [] as string[],
+  low_confidence_fields: [] as string[],
 };
 
 export const parseVendor = async (req: AuthRequest, res: Response) => {
@@ -194,15 +219,16 @@ export const parseVendor = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "Could not extract readable text from the uploaded file. Please ensure the file contains selectable text and try again." });
     }
 
-    const parsed = await parseVendorText(content);
+    const parsed = await parseVendorText(content, req.user!.tenant_id);
 
     return res.json({
       company_name: parsed.company_name || "",
-      email: parsed.email || "",
-      phone: parsed.phone || "",
-      skills: parsed.skills || [],
-      location: parsed.location || "",
-      summary: parsed.summary || "",
+      primary_contact_name: parsed.primary_contact_name || "",
+      primary_contact_email: parsed.primary_contact_email || "",
+      primary_contact_phone: parsed.primary_contact_phone || "",
+      industry_specializations: parsed.industry_specializations || [],
+      geographies: parsed.geographies || [],
+      low_confidence_fields: parsed.low_confidence_fields || [],
     });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Parse error";

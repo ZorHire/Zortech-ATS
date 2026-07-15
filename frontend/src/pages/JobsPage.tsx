@@ -22,6 +22,7 @@ import {
 import PipelineJobSelector from "../components/pipeline/PipelineJobSelector";
 import ClientInfoModal from "../components/clients/ClientInfoModal";
 import ClientDetailModal from "../components/clients/ClientDetailModal";
+import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import BulkJdUploadModal from "../components/bulk/BulkJdUploadModal";
 import { useGetPendingApprovalsQuery } from "../store/api/jdLifecycleApi";
 
@@ -201,7 +202,9 @@ export default function JobsPage() {
     work_mode: "onsite" as const, employment_type: "full_time",
     experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0,
     headcount: 1, priority: "medium" as const, description: "", mandatory_skills: "",
+    preferred_skills: "",
   });
+  const [jobLowConfidenceFields, setJobLowConfidenceFields] = useState<string[]>([]);
   const [jobFile, setJobFile] = useState<File | null>(null);
   const [jobParsing, setJobParsing] = useState(false);
   const [jobParseMessage, setJobParseMessage] = useState("");
@@ -217,13 +220,20 @@ export default function JobsPage() {
         title: (parsed.title as string) || cur.title,
         location: (parsed.location as string) || cur.location,
         description: (parsed.description as string) || cur.description,
+        department: parsed.department || cur.department,
+        work_mode: parsed.work_mode || cur.work_mode,
         experience_min: parsed.experience_min !== undefined ? (parsed.experience_min as number) : cur.experience_min,
         experience_max: parsed.experience_max !== undefined ? (parsed.experience_max as number) : cur.experience_max,
         salary_min: parsed.salary_min !== undefined ? (parsed.salary_min as number) : cur.salary_min,
         salary_max: parsed.salary_max !== undefined ? (parsed.salary_max as number) : cur.salary_max,
-        mandatory_skills: Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
+        mandatory_skills: Array.isArray(parsed.mandatory_skills) && (parsed.mandatory_skills as string[]).length > 0
+          ? (parsed.mandatory_skills as string[]).join(", ")
+          : Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
           ? (parsed.required_skills as string[]).join(", ") : cur.mandatory_skills,
+        preferred_skills: Array.isArray(parsed.preferred_skills) && (parsed.preferred_skills as string[]).length > 0
+          ? (parsed.preferred_skills as string[]).join(", ") : cur.preferred_skills,
       }));
+      setJobLowConfidenceFields(parsed.low_confidence_fields || []);
       setJobParseMessage("JD parsed successfully. Review and edit the auto-filled details.");
     } catch { setJobParseError("Could not extract data, please fill manually."); }
     finally { setJobParsing(false); }
@@ -232,10 +242,15 @@ export default function JobsPage() {
   const handleAddJD = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = { ...formData, mandatory_skills: formData.mandatory_skills.split(",").map((s) => s.trim()).filter(Boolean) };
+      const payload = {
+        ...formData,
+        mandatory_skills: formData.mandatory_skills.split(",").map((s) => s.trim()).filter(Boolean),
+        preferred_skills: formData.preferred_skills.split(",").map((s) => s.trim()).filter(Boolean),
+      };
       await createJob(payload).unwrap();
       setIsAddModalOpen(false);
-      setFormData({ title: "", client_id: "", department: "", location: "", work_mode: "onsite", employment_type: "full_time", experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0, headcount: 1, priority: "medium", description: "", mandatory_skills: "" });
+      setFormData({ title: "", client_id: "", department: "", location: "", work_mode: "onsite", employment_type: "full_time", experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0, headcount: 1, priority: "medium", description: "", mandatory_skills: "", preferred_skills: "" });
+      setJobLowConfidenceFields([]);
       setJobFile(null);
     } catch { alert("Failed to add job description"); }
   };
@@ -275,6 +290,12 @@ export default function JobsPage() {
     on_hold: jobs.filter((j) => j.status === "on_hold").length,
     total_candidates: jobs.reduce((s, j) => s + (j.application_count || 0), 0),
   };
+
+  const departmentFlagged = isLowConfidence(jobLowConfidenceFields, "department");
+  const jdLocationFlagged = isLowConfidence(jobLowConfidenceFields, "location");
+  const workModeFlagged = isLowConfidence(jobLowConfidenceFields, "work_mode");
+  const mandatorySkillsFlagged = isLowConfidence(jobLowConfidenceFields, "mandatory_skills", "required_skills");
+  const preferredSkillsFlagged = isLowConfidence(jobLowConfidenceFields, "preferred_skills");
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -556,19 +577,28 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Department</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Department
+                    {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Engineering" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(departmentFlagged)}`} placeholder="e.g. Engineering" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Location</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Location
+                    {jdLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Bangalore, India" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(jdLocationFlagged)}`} placeholder="e.g. Bangalore, India" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Work Mode</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Work Mode
+                    {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <select value={formData.work_mode} onChange={(e) => setFormData({ ...formData, work_mode: e.target.value as any })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none ${confidenceInputClass(workModeFlagged)}`}>
                     <option value="onsite">Onsite</option><option value="remote">Remote</option><option value="hybrid">Hybrid</option>
                   </select>
                 </div>
@@ -590,9 +620,20 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Mandatory Skills (comma-separated)</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Mandatory Skills (comma-separated)
+                    {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
                   <input type="text" value={formData.mandatory_skills} onChange={(e) => setFormData({ ...formData, mandatory_skills: e.target.value })}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="React, TypeScript, Node.js" />
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(mandatorySkillsFlagged)}`} placeholder="React, TypeScript, Node.js" />
+                </div>
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                    Preferred Skills (comma-separated)
+                    {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
+                  </label>
+                  <input type="text" value={formData.preferred_skills} onChange={(e) => setFormData({ ...formData, preferred_skills: e.target.value })}
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(preferredSkillsFlagged)}`} placeholder="GraphQL, Kubernetes (good to have)" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Job Description</label>

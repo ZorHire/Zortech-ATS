@@ -14,6 +14,14 @@ router.get("/", authMiddleware, tenantIsolation, jobController.getJobs);
 // Static routes MUST come before /:id to avoid being swallowed by the wildcard
 router.get("/pending-approval", authMiddleware, tenantIsolation, authorize(["super_admin","accounts_manager"]), jdApproval.listPendingApprovals);
 router.get("/:id", authMiddleware, tenantIsolation, jobController.getJobById);
+router.post("/:id/matches", authMiddleware, tenantIsolation, jobController.getJobMatches);
+router.post(
+  "/:id/shortlist",
+  authMiddleware,
+  tenantIsolation,
+  authorize(["super_admin", "accounts_manager", "recruiter"]),
+  jobController.runJobShortlisting,
+);
 router.post(
   "/",
   authMiddleware,

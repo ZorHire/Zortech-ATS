@@ -12,6 +12,7 @@ import {
   Building2,
   TrendingUp,
   UserPlus,
+  Sparkles,
   Globe,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
@@ -20,6 +21,8 @@ import { useGetJobQuery, useUpdateJobMutation } from '../store/api/jobApi';
 import { useAppSelector } from '../hooks/useAppSelector';
 import { selectCurrentUser } from '../store/slices/authSlice';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
+import { generateBooleanQueries } from '../lib/booleanQueryGenerator';
+import CopyButton from '../components/common/CopyButton';
 import JdApprovalPanel from '../components/jobs/JdApprovalPanel';
 import JdVersionHistory from '../components/jobs/JdVersionHistory';
 import JobBoardStatusSection from '../components/jobs/JobBoardStatusSection';
@@ -48,6 +51,16 @@ const workModeLabel: Record<string, string> = {
   onsite: 'Onsite',
 };
 
+interface CandidateMatch {
+  id: string;
+  first_name: string;
+  last_name: string;
+  current_title: string | null;
+  current_location: string | null;
+  skills: string[] | null;
+  similarity: number;
+}
+
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'pending_review', label: 'Pending Review' },
@@ -64,7 +77,24 @@ export default function JobDetailPage() {
   const { data: job, isLoading, error, refetch } = useGetJobQuery(id!, { skip: !id });
   const [updateJob, { isLoading: statusChanging }] = useUpdateJobMutation();
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
+  const [matches, setMatches] = useState<CandidateMatch[] | null>(null);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesError, setMatchesError] = useState<string | null>(null);
   const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
+
+  const handleFindMatches = async () => {
+    if (!id) return;
+    setMatchesLoading(true);
+    setMatchesError(null);
+    try {
+      const data = await api.post(`/jobs/${id}/matches`, {});
+      setMatches(data.matches ?? []);
+    } catch (err: any) {
+      setMatchesError(err.message || 'Failed to find matching candidates');
+    } finally {
+      setMatchesLoading(false);
+    }
+  };
 
   const canEditStatus =
     profile?.role === 'super_admin' ||
@@ -114,6 +144,15 @@ export default function JobDetailPage() {
     job.salary_min && job.salary_max
       ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L – INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
       : 'Not specified';
+
+  const booleanQueries = generateBooleanQueries({
+    title: job.title,
+    mandatory_skills: job.mandatory_skills ?? [],
+    preferred_skills: job.preferred_skills ?? [],
+    location: job.location ?? '',
+    experience_min: job.experience_min,
+    experience_max: job.experience_max,
+  });
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -271,6 +310,82 @@ export default function JobDetailPage() {
               </div>
             </div>
           )}
+
+          {/* Sourcing — boolean search strings for external job boards */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Sourcing — Boolean Search
+            </p>
+            <div className="space-y-2">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <p className="text-xs font-medium text-gray-500">LinkedIn (X-ray search via Google)</p>
+                  <CopyButton text={booleanQueries.linkedin} />
+                </div>
+                <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.linkedin}</p>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <p className="text-xs font-medium text-gray-500">Naukri, Indeed, Monster, Glassdoor</p>
+                  <CopyButton text={booleanQueries.generic} />
+                </div>
+                <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.generic}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Matching — vector-similarity candidate search */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Matching Candidates
+              </p>
+              <button
+                onClick={handleFindMatches}
+                disabled={matchesLoading}
+                className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-60"
+              >
+                <Sparkles size={13} />
+                {matchesLoading ? 'Searching…' : 'Find Matching Candidates'}
+              </button>
+            </div>
+
+            {matchesError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5">
+                {matchesError}
+              </p>
+            )}
+
+            {matches && matches.length === 0 && !matchesError && (
+              <p className="text-xs text-gray-500">
+                No matching candidates found — candidates need an embedding before they can be matched.
+              </p>
+            )}
+
+            {matches && matches.length > 0 && (
+              <div className="space-y-1.5">
+                {matches.map((c) => (
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {c.first_name} {c.last_name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {c.current_title || 'No title'}
+                        {c.current_location ? ` · ${c.current_location}` : ''}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex-shrink-0">
+                      {Math.round(c.similarity * 100)}% match
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Description */}
           {job.description && (
