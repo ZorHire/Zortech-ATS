@@ -1,23 +1,31 @@
-import { useState, useEffect } from 'react';
-import { Users, Clock, Target, Award, ArrowUp, ArrowDown, Download } from 'lucide-react';
+import React from 'react';
+import { Users, Clock, Target, Award, Download } from 'lucide-react';
 import Header from '../components/layout/Header';
-import api from '../lib/api';
+import { useGetAnalyticsQuery } from '../store/api/analyticsApi';
 
-interface FunnelRow { stage: string; count: number; conv: number }
-interface SourceRow { source: string; count: number }
-interface MonthlyRow { label: string; count: number }
-interface RecruiterRow { recruiter_name: string; assigned_jobs: number; candidates_sourced: number; shortlisted: number; submitted: number; placements: number }
-interface VendorRow { name: string; rate: number; submits: number }
-interface Summary { total_candidates: number; active_jobs: number; total_placements: number; pending_offers: number; offer_accept_rate: number | null }
+type Preset = 'all' | '30d' | '90d' | '6m' | '1y';
 
-interface AnalyticsData {
-  funnel: FunnelRow[];
-  sources: SourceRow[];
-  monthly: MonthlyRow[];
-  recruiters: RecruiterRow[];
-  vendors: VendorRow[];
-  summary: Summary;
+function getDateRange(preset: Preset): { from?: string; to?: string } {
+  if (preset === 'all') return {};
+  const to = new Date();
+  const from = new Date();
+  if (preset === '30d') from.setDate(from.getDate() - 30);
+  else if (preset === '90d') from.setDate(from.getDate() - 90);
+  else if (preset === '6m') from.setMonth(from.getMonth() - 6);
+  else if (preset === '1y') from.setFullYear(from.getFullYear() - 1);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
 }
+
+const PRESETS: { key: Preset; label: string }[] = [
+  { key: 'all', label: 'All Time' },
+  { key: '30d', label: '30 Days' },
+  { key: '90d', label: '90 Days' },
+  { key: '6m', label: '6 Months' },
+  { key: '1y', label: '1 Year' },
+];
 
 const SOURCE_COLORS: Record<string, string> = {
   linkedin: '#2563eb', indeed: '#f97316', naukri: '#16a34a',
@@ -87,18 +95,19 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
 }
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.get('/admin/analytics')
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+  const [preset, setPreset] = React.useState<Preset>('all');
+  const dateRange = getDateRange(preset);
+  const { data, isLoading } = useGetAnalyticsQuery(
+    preset === 'all' ? undefined : dateRange,
+  );
 
   const handleExportReport = () => {
-    window.open(`${import.meta.env.VITE_API_URL || '/v1'}/admin/analytics/export`, '_blank');
+    const base = import.meta.env.VITE_API_URL || '/v1';
+    const params = new URLSearchParams();
+    if (dateRange.from) params.set('from', dateRange.from);
+    if (dateRange.to) params.set('to', dateRange.to);
+    const qs = params.toString();
+    window.open(`${base}/admin/analytics/export${qs ? `?${qs}` : ''}`, '_blank');
   };
 
   const summary = data?.summary;
@@ -120,7 +129,7 @@ export default function AnalyticsPage() {
     color: SOURCE_COLORS[s.source] ?? '#94a3b8',
   }));
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header title="Analytics & Reports" subtitle="Real-time recruitment performance insights" />
@@ -137,7 +146,23 @@ export default function AnalyticsPage() {
         title="Analytics & Reports"
         subtitle="Real-time recruitment performance insights"
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* Date range preset chips */}
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPreset(p.key)}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-all ${
+                    preset === p.key
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
             <button
               onClick={handleExportReport}
               className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 bg-white transition-colors"

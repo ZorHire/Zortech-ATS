@@ -3,6 +3,7 @@ import {
   Briefcase,
   Users,
   Building2,
+  Building,
   Mail,
   BarChart3,
   Settings,
@@ -16,8 +17,14 @@ import {
   Rocket,
   Network,
   ClipboardList,
+  CalendarDays,
+  TrendingUp,
+  FileBarChart2,
 } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAppDispatch } from "../../hooks/useAppDispatch";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectCurrentUser, clearCredentials } from "../../store/slices/authSlice";
+import { selectSubscription } from "../../store/slices/subscriptionSlice";
 
 interface SidebarProps {
   collapsed: boolean;
@@ -77,16 +84,40 @@ const navItems = [
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
   },
   {
+    icon: Building,
+    label: "Clients",
+    path: "/clients",
+    roles: ["super_admin", "accounts_manager", "vendor_manager", "recruiter"],
+  },
+  {
     icon: ClipboardList,
     label: "JD Assignments",
     path: "/assigned-jds",
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
   },
   {
+    icon: CalendarDays,
+    label: "Interviews",
+    path: "/interviews",
+    roles: ["super_admin", "accounts_manager", "recruiter"],
+  },
+  {
+    icon: TrendingUp,
+    label: "Offers",
+    path: "/offers",
+    roles: ["super_admin", "accounts_manager", "recruiter"],
+  },
+  {
     icon: BarChart3,
     label: "Analytics",
     path: "/analytics",
     roles: ["super_admin", "accounts_manager", "vendor_manager"],
+  },
+  {
+    icon: FileBarChart2,
+    label: "Reports",
+    path: "/reports",
+    roles: ["super_admin", "accounts_manager"],
   },
   {
     icon: Settings,
@@ -134,7 +165,9 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
-  const { profile, signOut, subscription } = useAuth();
+  const dispatch = useAppDispatch();
+  const profile = useAppSelector(selectCurrentUser);
+  const subscription = useAppSelector(selectSubscription);
 
   const isPlatformOwner = !!subscription?.isPlatformOwner;
   const visibleItems = navItems.filter((item) => {
@@ -210,7 +243,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Footer Actions */}
       <div className="mt-auto px-3 space-y-1">
         <button
-          onClick={signOut}
+          onClick={() => dispatch(clearCredentials())}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#d7c1a5] hover:text-[#ffcda2] hover:bg-[#7f5a30]/15 transition-all ${collapsed ? "justify-center" : ""}`}
           title={collapsed ? "Sign Out" : undefined}
         >

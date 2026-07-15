@@ -6,6 +6,8 @@ import {
   subscribe,
   verifyPayment,
   cancelSubscription,
+  refundPayment,
+  razorpayWebhook,
 } from "./billing.controller";
 import { authMiddleware, authorize, tenantIsolation } from "../../middleware/auth";
 
@@ -23,5 +25,11 @@ router.get("/transactions",  authMiddleware, tenantIsolation, authorize(billingR
 router.post("/subscribe",       authMiddleware, tenantIsolation, authorize(billingAdminRoles), subscribe);
 router.post("/verify-payment",  authMiddleware, tenantIsolation, authorize(billingAdminRoles), verifyPayment);
 router.post("/cancel",          authMiddleware, tenantIsolation, authorize(billingAdminRoles), cancelSubscription);
+
+// Refund — admin only
+router.post("/refund", authMiddleware, tenantIsolation, authorize(["super_admin", "accounts_manager"]), refundPayment);
+
+// Razorpay webhook — no auth (called by Razorpay's servers)
+router.post("/razorpay-webhook", razorpayWebhook);
 
 export default router;

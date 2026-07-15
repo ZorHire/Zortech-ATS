@@ -23,8 +23,10 @@ import {
   Tag,
 } from "lucide-react";
 import Header from "../components/layout/Header";
-import { useResumeSearchStore } from "../store/resumeSearchStore";
-import { resumeSearchService } from "../services/resumeSearch.service";
+import { useLazySearchCandidatesQuery } from "../store/api/candidateApi";
+import { useGetJobsQuery } from "../store/api/jobApi";
+import { useAddApplicationToJobMutation } from "../store/api/pipelineApi";
+import type { SearchFilters } from "../store/api/candidateApi";
 import { Candidate, Job, PipelineStage } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
@@ -93,20 +95,14 @@ function avatarColor(name: string) {
 
 function AddToPipelineWizard({ candidates, onClose }: { candidates: Candidate[]; onClose: () => void }) {
   const [step, setStep] = useState<"job" | "stage">("job");
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [jobSearch, setJobSearch] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [selectedStage, setSelectedStage] = useState<PipelineStage>("new");
-  const [fetching, setFetching] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    resumeSearchService.fetchJobs()
-      .then((d) => setJobs(d as Job[]))
-      .finally(() => setFetching(false));
-  }, []);
+  const { data: jobs = [], isLoading: fetching } = useGetJobsQuery();
+  const [addApplicationToJob, { isLoading: loading }] = useAddApplicationToJobMutation();
 
   const filteredJobs = jobs.filter((j) => {
     const q = jobSearch.toLowerCase();
@@ -115,17 +111,16 @@ function AddToPipelineWizard({ candidates, onClose }: { candidates: Candidate[];
 
   const handleAdd = async () => {
     if (!selectedJob) return;
-    setLoading(true);
     setError("");
     try {
       await Promise.all(
-        candidates.map((c) => resumeSearchService.addToPipelineWithStage(c.id, selectedJob.id, selectedStage))
+        candidates.map((c) =>
+          addApplicationToJob({ jobId: selectedJob.id, candidateId: c.id, stage: selectedStage }).unwrap()
+        )
       );
       setDone(true);
     } catch (err: any) {
       setError(err.message || "Failed to add to pipeline");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -376,7 +371,6 @@ function CandidateRow({
         />
       </td>
 
-      {/* Candidate */}
       <td className="px-4 py-3.5 min-w-[200px]">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
@@ -391,12 +385,10 @@ function CandidateRow({
         </div>
       </td>
 
-      {/* Experience */}
       <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">
         {candidate.experience_years ? `${candidate.experience_years} Years` : "—"}
       </td>
 
-      {/* Current Role */}
       <td className="px-4 py-3.5 min-w-[160px]">
         <p className="text-sm text-gray-700 font-medium truncate">{candidate.current_title || "—"}</p>
         {candidate.current_company && (
@@ -404,7 +396,6 @@ function CandidateRow({
         )}
       </td>
 
-      {/* Skills */}
       <td className="px-4 py-3.5 min-w-[180px]">
         <div className="flex flex-wrap gap-1">
           {candidate.skills.slice(0, 3).map((s) => (
@@ -416,19 +407,16 @@ function CandidateRow({
         </div>
       </td>
 
-      {/* Location */}
       <td className="px-4 py-3.5 text-sm text-gray-500 whitespace-nowrap">
         {candidate.current_location || "—"}
       </td>
 
-      {/* Source */}
       <td className="px-4 py-3.5">
         <span className={`text-xs px-2 py-1 rounded-full font-medium ${SOURCE_BADGE[candidate.source] || "bg-gray-100 text-gray-600"}`}>
           {candidate.source ? candidate.source.charAt(0).toUpperCase() + candidate.source.slice(1) : "—"}
         </span>
       </td>
 
-      {/* Match */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5">
           <div className="relative w-8 h-8">
@@ -449,10 +437,8 @@ function CandidateRow({
         </div>
       </td>
 
-      {/* Updated On */}
       <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">{dateStr}</td>
 
-      {/* Actions */}
       <td className="px-4 py-3.5">
         <div className="flex items-center gap-1.5 justify-end">
           <button
@@ -557,25 +543,36 @@ function SkillsTagInput({
   );
 }
 
+// ─── Extended filter type ─────────────────────────────────────────────────────
+
+interface ExtendedFilters extends SearchFilters {
+  skills: string[];
+  currentRole: string;
+  source: string;
+  availability: string;
+}
+
+const DEFAULT_FILTERS: ExtendedFilters = {
+  location: "All",
+  experience: "All",
+  noticePeriod: "Any",
+  skills: [],
+  currentRole: "",
+  source: "All",
+  availability: "All",
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ResumeSearchPage() {
-  const {
-    query,
-    filters,
-    results,
-    total,
-    page,
-    totalPages,
-    loading,
-    loadingMore,
-    error,
-    searched,
-    setQuery,
-    setFilter,
-    search,
-    loadMore,
-  } = useResumeSearchStore();
+  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState<ExtendedFilters>({ ...DEFAULT_FILTERS });
+  const [results, setResults] = useState<{ candidate: Candidate; score: number }[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [searched, setSearched] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [wizardCandidates, setWizardCandidates] = useState<Candidate[] | null>(null);
@@ -583,7 +580,79 @@ export default function ResumeSearchPage() {
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // client-side filtered results (skills + source + availability client-side)
+  const [triggerSearch, { isFetching: loading, error: searchError }] = useLazySearchCandidatesQuery();
+
+  const setFilter = <K extends keyof ExtendedFilters>(key: K, value: ExtendedFilters[K]) =>
+    setFilters((prev) => ({ ...prev, [key]: value }));
+
+  const search = useCallback(async (resetPage = true) => {
+    const targetPage = resetPage ? 1 : page + 1;
+    try {
+      const data = await triggerSearch({
+        query,
+        location: filters.location,
+        experience: filters.experience,
+        noticePeriod: filters.noticePeriod,
+        page: targetPage,
+        limit: 10,
+      }).unwrap();
+
+      if (resetPage) {
+        setResults(data.results);
+        setPage(1);
+      } else {
+        setResults((prev) => [...prev, ...data.results]);
+        setPage(data.page);
+      }
+      setTotal(data.total);
+      setTotalPages(data.totalPages);
+      setSearched(true);
+    } catch {
+      setSearched(true);
+    }
+  }, [query, filters.location, filters.experience, filters.noticePeriod, page, triggerSearch]);
+
+  const loadMore = useCallback(async () => {
+    if (page >= totalPages || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const data = await triggerSearch({
+        query,
+        location: filters.location,
+        experience: filters.experience,
+        noticePeriod: filters.noticePeriod,
+        page: page + 1,
+        limit: 10,
+      }).unwrap();
+      setResults((prev) => [...prev, ...data.results]);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
+    } catch {
+      // silently fail on load more
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [query, filters, page, totalPages, loadingMore, triggerSearch]);
+
+  const handleExport = useCallback(() => {
+    const qs = new URLSearchParams();
+    if (filters.location !== "All") qs.set("location", filters.location);
+    if (filters.experience !== "All") qs.set("experience", filters.experience);
+    if (filters.noticePeriod !== "Any") qs.set("noticePeriod", filters.noticePeriod);
+    window.open(`${import.meta.env.VITE_API_URL || '/v1'}/candidates/export?${qs.toString()}`, '_blank');
+  }, [filters]);
+
+  const handleClearAll = () => {
+    setFilters({ ...DEFAULT_FILTERS });
+    setQuery("");
+    setResults([]);
+    setSearched(false);
+    setPage(1);
+    setTotalPages(1);
+    setTotal(0);
+  };
+
+  // client-side filtered results (skills + source + availability)
   const displayResults = results.filter((r) => {
     const c = r.candidate;
     if (filters.skills.length > 0) {
@@ -631,23 +700,6 @@ export default function ResumeSearchPage() {
     return () => observer.disconnect();
   }, [loadingMore, page, totalPages, loadMore]);
 
-  const handleExport = useCallback(async () => {
-    try {
-      await resumeSearchService.exportCsv(filters);
-    } catch { alert("Export failed."); }
-  }, [filters]);
-
-  const handleClearAll = () => {
-    setFilter("location", "All");
-    setFilter("experience", "All");
-    setFilter("noticePeriod", "Any");
-    setFilter("skills", []);
-    setFilter("currentRole", "");
-    setFilter("source", "All");
-    setFilter("availability", "All");
-    setQuery("");
-  };
-
   const hasActiveFilters =
     filters.location !== "All" ||
     filters.experience !== "All" ||
@@ -655,6 +707,8 @@ export default function ResumeSearchPage() {
     filters.skills.length > 0 ||
     filters.currentRole !== "" ||
     filters.source !== "All";
+
+  const error = searchError ? ("message" in searchError ? (searchError as any).message : "Search failed") : null;
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -694,9 +748,7 @@ export default function ResumeSearchPage() {
             Search Candidates
           </p>
 
-          {/* Row 1: Keywords, Skills, Current Role, Experience */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            {/* Keywords */}
             <div className="lg:col-span-1">
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Keywords</label>
               <div className="relative">
@@ -712,7 +764,6 @@ export default function ResumeSearchPage() {
               </div>
             </div>
 
-            {/* Skills */}
             <div className="lg:col-span-1">
               <label className="block text-xs font-medium text-gray-500 mb-1.5">
                 <span className="flex items-center gap-1"><Tag size={11} />Skills</span>
@@ -723,7 +774,6 @@ export default function ResumeSearchPage() {
               />
             </div>
 
-            {/* Current Role */}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Current Role</label>
               <div className="relative">
@@ -741,7 +791,6 @@ export default function ResumeSearchPage() {
               </div>
             </div>
 
-            {/* Experience */}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Experience</label>
               <SelectDropdown
@@ -752,7 +801,6 @@ export default function ResumeSearchPage() {
             </div>
           </div>
 
-          {/* Row 2: Location, Notice Period, Source, Availability */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Location</label>
@@ -789,7 +837,6 @@ export default function ResumeSearchPage() {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <button
               onClick={() => setShowAdvanced((v) => !v)}
@@ -818,7 +865,6 @@ export default function ResumeSearchPage() {
             </div>
           </div>
 
-          {/* Advanced filters panel */}
           {showAdvanced && (
             <div className="mt-4 pt-4 border-t border-gray-100">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -901,7 +947,6 @@ export default function ResumeSearchPage() {
         {/* ── Results ── */}
         {!loading && searched && !error && (
           <>
-            {/* Result header */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
                 <div className="flex items-center gap-2">
@@ -935,7 +980,6 @@ export default function ResumeSearchPage() {
               </div>
             </div>
 
-            {/* Top Matches horizontal scroll */}
             {topMatches.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -961,7 +1005,6 @@ export default function ResumeSearchPage() {
               </div>
             )}
 
-            {/* All Candidates table */}
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-900">All Candidates</p>
@@ -1020,7 +1063,6 @@ export default function ResumeSearchPage() {
                 </div>
               )}
 
-              {/* Infinite scroll sentinel + pagination footer */}
               <div ref={sentinelRef} className="h-1" />
               {loadingMore && (
                 <div className="flex justify-center py-4">

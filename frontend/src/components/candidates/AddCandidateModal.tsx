@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import api from "../../lib/api";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../../lib/confidenceIndicator";
+import { useParseResumeMutation, useAddCandidateToJobMutation } from "../../store/api/candidateApi";
 
 interface Props {
   jobId: string;
@@ -40,50 +41,50 @@ const emptyForm = {
 export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) {
   const [formData, setFormData] = useState({ ...emptyForm });
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeParsing, setResumeParsing] = useState(false);
   const [resumeParseMessage, setResumeParseMessage] = useState("");
   const [resumeParseError, setResumeParseError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
 
+  const [parseResume, { isLoading: resumeParsing }] = useParseResumeMutation();
+  const [addCandidateToJob, { isLoading: submitting }] = useAddCandidateToJobMutation();
+
   const parseResumeFile = async (file: File) => {
-    setResumeParsing(true);
     setResumeParseMessage("");
     setResumeParseError("");
     try {
       const body = new FormData();
       body.append("file", file);
-      const parsed = await api.post("/parse/resume", body);
+      const parsed = await parseResume(body).unwrap();
       if (
         !parsed ||
         Object.keys(parsed).length === 0 ||
-        (!parsed.name && !parsed.email && !parsed.phone && (!parsed.skills || parsed.skills.length === 0))
+        (!(parsed as any).name && !(parsed as any).email && !(parsed as any).phone &&
+          (!(parsed as any).skills || (parsed as any).skills.length === 0))
       ) {
         setResumeParseError("Could not auto-fill from this resume. Please fill in the fields manually.");
         return;
       }
+      const p = parsed as any;
       setFormData((cur) => ({
         ...cur,
-        first_name: parsed.name?.split(" ")[0] || cur.first_name,
-        last_name: parsed.name?.split(" ").slice(1).join(" ") || cur.last_name,
-        email: parsed.email || cur.email,
-        phone: parsed.phone || cur.phone,
-        current_title: parsed.current_title || cur.current_title,
-        current_company: parsed.current_company || cur.current_company,
-        current_location: parsed.current_location || cur.current_location,
-        experience_years: parsed.experience_years !== undefined ? parsed.experience_years : cur.experience_years,
-        skills: parsed.skills?.length > 0 ? parsed.skills.join(", ") : cur.skills,
-        preferred_location: parsed.preferred_location || cur.preferred_location,
-        notice_period_days: parsed.notice_period_days !== undefined ? parsed.notice_period_days : cur.notice_period_days,
-        current_ctc: parsed.current_ctc !== undefined ? String(parsed.current_ctc) : cur.current_ctc,
-        expected_ctc: parsed.expected_ctc !== undefined ? String(parsed.expected_ctc) : cur.expected_ctc,
+        first_name: p.name?.split(" ")[0] || cur.first_name,
+        last_name: p.name?.split(" ").slice(1).join(" ") || cur.last_name,
+        email: p.email || cur.email,
+        phone: p.phone || cur.phone,
+        current_title: p.current_title || cur.current_title,
+        current_company: p.current_company || cur.current_company,
+        current_location: p.current_location || cur.current_location,
+        experience_years: p.experience_years !== undefined ? p.experience_years : cur.experience_years,
+        skills: p.skills?.length > 0 ? p.skills.join(", ") : cur.skills,
+        preferred_location: p.preferred_location || cur.preferred_location,
+        notice_period_days: p.notice_period_days !== undefined ? p.notice_period_days : cur.notice_period_days,
+        current_ctc: p.current_ctc !== undefined ? String(p.current_ctc) : cur.current_ctc,
+        expected_ctc: p.expected_ctc !== undefined ? String(p.expected_ctc) : cur.expected_ctc,
       }));
       setLowConfidenceFields(parsed.low_confidence_fields || []);
       setResumeParseMessage("Resume parsed successfully. Review fields and edit as needed.");
     } catch {
       setResumeParseError("Could not extract data, please fill manually.");
-    } finally {
-      setResumeParsing(false);
     }
   };
 
@@ -93,7 +94,6 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
       alert("Please provide at least an email or phone number.");
       return;
     }
-    setSubmitting(true);
     try {
       const fd = new FormData();
       fd.append("first_name", formData.first_name);
@@ -115,13 +115,11 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
       );
       if (resumeFile) fd.append("resume", resumeFile);
 
-      await api.post(`/jobs/${jobId}/candidates`, fd);
+      await addCandidateToJob({ jobId, body: fd }).unwrap();
       onSuccess();
       onClose();
     } catch (err: any) {
       alert(err?.data?.message || err?.message || "Failed to add candidate");
-    } finally {
-      setSubmitting(false);
     }
   };
 

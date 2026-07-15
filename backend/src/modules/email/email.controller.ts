@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import pool from "../../db";
 import env from "../../config/env";
 import { AuthRequest } from "../../middleware/auth";
+import { createNotification } from "../notifications/notifications.controller";
 
 // ─── Encryption helpers ──────────────────────────────────────────────────────
 // Passwords are stored as AES-256-GCM ciphertext: "<iv_hex>:<tag_hex>:<ct_hex>"
@@ -159,6 +160,27 @@ export async function getUserTransporter(userId: string): Promise<{
     transporter: buildTransporter(email, password, provider),
     fromEmail: email,
   };
+}
+
+export async function getTenantTransporter(tenantId: string): Promise<{
+  transporter: nodemailer.Transporter;
+  fromEmail: string;
+} | null> {
+  const result = await pool.query(
+    `SELECT email, encrypted_password, provider
+     FROM tenant_email_config
+     WHERE tenant_id = $1 AND is_active = true LIMIT 1`,
+    [tenantId],
+  );
+  if (result.rows.length === 0) return null;
+  const { email, encrypted_password, provider } = result.rows[0];
+  try {
+    const password = decrypt(encrypted_password);
+    return { transporter: buildTransporter(email, password, provider), fromEmail: email };
+  } catch (err: any) {
+    console.error("getTenantTransporter decrypt error:", err.message);
+    return null;
+  }
 }
 
 // ─── GET /email/config ────────────────────────────────────────────────────────
@@ -412,6 +434,33 @@ export const assignJd = async (req: AuthRequest, res: Response) => {
         html: `<div style="font-family:sans-serif;line-height:1.6">${body}</div>`,
       });
       res.json({ message: "Assignment email sent successfully" });
+
+      // Notify vendor_user accounts linked to this vendor — fire-and-forget
+      ;(async () => {
+        try {
+          const usersRes = await pool.query(
+            `SELECT u.id FROM users u
+             JOIN profiles p ON p.id = u.id
+             WHERE u.tenant_id = $1 AND u.role = 'vendor_user'
+               AND p.vendor_id = $2 AND u.deleted_at IS NULL`,
+            [tenantId, vendor_id],
+          );
+          await Promise.allSettled(
+            usersRes.rows.map((u) =>
+              createNotification(
+                u.id,
+                "info",
+                "New JD Assignment",
+                `You have been assigned "${job.title}". Submit candidates within ${dayLabel}.`,
+                "job",
+                job_id,
+              ),
+            ),
+          );
+        } catch (err) {
+          console.error("JD assignment notification error:", err);
+        }
+      })();
     } catch (sendError: any) {
       console.error("Assign JD send email error:", sendError);
       const { code, message } = classifySmtpError(sendError);
@@ -615,15 +664,66 @@ export const createCampaign = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ─── Tracking HTML builder ────────────────────────────────────────────────────
+
+function buildTrackedHtml(
+  body: string,
+  trackingId: string,
+  baseUrl: string,
+  trackOpens: boolean,
+  trackClicks: boolean,
+): string {
+  const escaped = body
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  const withLinks = trackClicks
+    ? escaped.replace(
+        /(https?:\/\/[^\s<>"&]+)/g,
+        (url) =>
+          `<a href="${baseUrl}/v1/email/track/click/${trackingId}?url=${encodeURIComponent(url)}" style="color:#2563eb">${url}</a>`,
+      )
+    : escaped;
+
+  const pixel = trackOpens
+    ? `<img src="${baseUrl}/v1/email/track/open/${trackingId}" width="1" height="1" border="0" alt="" style="display:block;width:1px;height:1px" />`
+    : '';
+
+  return `${pixel}<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6;color:#374151">${withLinks}</div>
+<div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af">
+  <a href="${baseUrl}/v1/email/unsubscribe/${trackingId}" style="color:#9ca3af;text-decoration:underline">Unsubscribe</a>
+</div>`;
+}
+
 // ─── POST /email-campaigns/:id/send ──────────────────────────────────────────
 
 export const sendCampaignById = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user!.tenant_id;
   const userId = req.user!.id;
   const { id } = req.params;
-  const { recipients } = req.body;
+  const {
+    recipients: recipientsRaw,
+    recipient_ids,
+    track_opens = true,
+    track_clicks = true,
+  } = req.body;
 
-  if (!Array.isArray(recipients) || recipients.length === 0) {
+  // Accept either recipients:[{email,name}] or recipient_ids:[uuid] with DB lookup
+  let recipients: Array<{ email: string; name?: string }> = [];
+
+  if (Array.isArray(recipientsRaw) && recipientsRaw.length > 0) {
+    recipients = recipientsRaw;
+  } else if (Array.isArray(recipient_ids) && recipient_ids.length > 0) {
+    const res2 = await pool.query(
+      `SELECT email, first_name || ' ' || last_name AS name
+       FROM candidates WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
+      [recipient_ids, tenantId],
+    );
+    recipients = res2.rows;
+  }
+
+  if (recipients.length === 0) {
     return res.status(400).json({ message: 'recipients array is required.' });
   }
 
@@ -645,30 +745,73 @@ export const sendCampaignById = async (req: AuthRequest, res: Response) => {
       });
     }
 
-    await pool.query(
-      `UPDATE email_campaigns SET status = 'sending', recipient_count = $1, updated_at = now() WHERE id = $2`,
-      [recipients.length, id],
+    // Filter out unsubscribed recipients
+    const unsubRes = await pool.query(
+      `SELECT email FROM email_unsubscribes WHERE tenant_id = $1`,
+      [tenantId],
     );
-
-    const sendResults = await Promise.allSettled(
-      recipients.map((r: { email: string }) =>
-        userMail.transporter.sendMail({
-          from: userMail.fromEmail,
-          to: r.email,
-          subject: campaign.subject,
-          text: campaign.body,
-          html: `<div style="font-family:sans-serif;white-space:pre-wrap;line-height:1.6">${campaign.body}</div>`,
-        }),
-      ),
-    );
-
-    const deliveredCount = sendResults.filter((r) => r.status === 'fulfilled').length;
+    const unsubSet = new Set(unsubRes.rows.map((r: { email: string }) => r.email.toLowerCase()));
+    const eligible = recipients.filter((r) => !unsubSet.has(r.email.toLowerCase()));
+    const unsubCount = recipients.length - eligible.length;
 
     await pool.query(
       `UPDATE email_campaigns
-       SET status = 'sent', delivered_count = $1, sent_at = now(), updated_at = now()
-       WHERE id = $2`,
-      [deliveredCount, id],
+       SET status = 'sending', recipient_count = $1, track_opens = $2, track_clicks = $3, updated_at = now()
+       WHERE id = $4`,
+      [recipients.length, track_opens, track_clicks, id],
+    );
+
+    const baseUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+
+    // Insert recipient rows and collect tracking IDs
+    const recipientRows = await Promise.all(
+      eligible.map(async (r) => {
+        const ins = await pool.query(
+          `INSERT INTO email_campaign_recipients (tenant_id, campaign_id, email, name)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (campaign_id, email) DO UPDATE SET status = 'pending', bounce_reason = NULL
+           RETURNING id, tracking_id`,
+          [tenantId, id, r.email, r.name ?? null],
+        );
+        return { ...r, recipientId: ins.rows[0].id, trackingId: ins.rows[0].tracking_id };
+      }),
+    );
+
+    const sendResults = await Promise.allSettled(
+      recipientRows.map(async (r) => {
+        const html = buildTrackedHtml(campaign.body, r.trackingId, baseUrl, track_opens, track_clicks);
+        try {
+          await userMail.transporter.sendMail({
+            from: userMail.fromEmail,
+            to: r.email,
+            subject: campaign.subject,
+            text: campaign.body,
+            html,
+          });
+          await pool.query(
+            `UPDATE email_campaign_recipients SET status = 'delivered', delivered_at = now() WHERE id = $1`,
+            [r.recipientId],
+          );
+          return true;
+        } catch (err: any) {
+          await pool.query(
+            `UPDATE email_campaign_recipients SET status = 'failed', bounce_reason = $1 WHERE id = $2`,
+            [String(err?.message ?? '').substring(0, 255), r.recipientId],
+          );
+          return false;
+        }
+      }),
+    );
+
+    const deliveredCount = sendResults.filter(
+      (r) => r.status === 'fulfilled' && r.value === true,
+    ).length;
+
+    await pool.query(
+      `UPDATE email_campaigns
+       SET status = 'sent', delivered_count = $1, unsubscribed_count = $2, sent_at = now(), updated_at = now()
+       WHERE id = $3`,
+      [deliveredCount, unsubCount, id],
     );
 
     const updated = await pool.query(`SELECT * FROM email_campaigns WHERE id = $1`, [id]);
@@ -677,6 +820,7 @@ export const sendCampaignById = async (req: AuthRequest, res: Response) => {
       message: 'Campaign sent',
       delivered_count: deliveredCount,
       recipients: recipients.length,
+      unsubscribed_skipped: unsubCount,
       campaign: updated.rows[0],
     });
   } catch (error: any) {

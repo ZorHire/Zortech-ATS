@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Building2,
   Plus,
@@ -16,28 +16,13 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import api from "../lib/api";
-
-interface Tenant {
-  id: string;
-  name: string;
-  slug: string;
-  industry?: string;
-  is_platform_owner: boolean;
-  company_email: string | null;
-  company_phone: string | null;
-  country: string | null;
-  is_active: boolean;
-  onboarded_at: string | null;
-  onboarded_by?: string | null;
-  created_at: string;
-  subscription_status: string | null;
-  plan_type: string | null;
-  subscription_end_date: string | null;
-  user_count?: number;
-  user_limit?: number;
-  active_jobs?: number;
-}
+import {
+  useGetTenantsQuery,
+  useBulkDeleteTenantsMutation,
+  useToggleTenantStatusMutation,
+  useOnboardTenantMutation,
+  type Tenant,
+} from "../store/api/adminApi";
 
 // ─── Badge helpers ────────────────────────────────────────────────────────────
 
@@ -158,8 +143,13 @@ function Toast({ msg, ok }: { msg: string; ok: boolean }) {
 const PAGE_SIZE = 10;
 
 export default function CompaniesPage() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: allTenants = [], isLoading: loading } = useGetTenantsQuery();
+  const [bulkDeleteTenants] = useBulkDeleteTenantsMutation();
+  const [toggleTenantStatus] = useToggleTenantStatusMutation();
+  const [onboardTenant] = useOnboardTenantMutation();
+
+  const tenants = allTenants.filter((t) => !t.is_platform_owner);
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [subFilter, setSubFilter] = useState("All Subscription");
@@ -182,17 +172,6 @@ export default function CompaniesPage() {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 4000);
   };
-
-  const fetchTenants = async () => {
-    try {
-      const data = await api.get("/tenants");
-      setTenants(data.filter((t: Tenant) => !t.is_platform_owner));
-    } catch { /* ignore */ } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchTenants(); }, []);
 
   // ── Filtering + sorting ──
   const filtered = tenants
@@ -241,12 +220,11 @@ export default function CompaniesPage() {
     if (!window.confirm(`Permanently delete ${ids.length} compan${ids.length === 1 ? "y" : "ies"}?\n\nThis cannot be undone.`)) return;
     setDeleteLoading(true);
     try {
-      await api.post("/tenants/bulk-delete", { ids });
+      await bulkDeleteTenants(ids).unwrap();
       setSelected(new Set());
-      await fetchTenants();
       showToast(`${ids.length} compan${ids.length === 1 ? "y" : "ies"} deleted`, true);
     } catch (err: any) {
-      showToast(err.message || "Failed to delete", false);
+      showToast(err?.data?.message || "Failed to delete", false);
     } finally {
       setDeleteLoading(false);
     }
@@ -256,11 +234,10 @@ export default function CompaniesPage() {
     if (!window.confirm(`Permanently delete "${t.name}"?\n\nThis removes ALL their data and cannot be undone.`)) return;
     setActionLoading(t.id);
     try {
-      await api.post("/tenants/bulk-delete", { ids: [t.id] });
-      setTenants((p) => p.filter((x) => x.id !== t.id));
+      await bulkDeleteTenants([t.id]).unwrap();
       showToast(`"${t.name}" deleted`, true);
     } catch (err: any) {
-      showToast(err.message || "Failed to delete", false);
+      showToast(err?.data?.message || "Failed to delete", false);
     } finally {
       setActionLoading(null);
     }
@@ -270,11 +247,10 @@ export default function CompaniesPage() {
     if (!window.confirm(`${t.is_active ? "Deactivate" : "Activate"} "${t.name}"?`)) return;
     setActionLoading(t.id);
     try {
-      await api.patch(`/tenants/${t.id}/status`, { is_active: !t.is_active });
-      setTenants((p) => p.map((x) => x.id === t.id ? { ...x, is_active: !x.is_active } : x));
+      await toggleTenantStatus({ id: t.id, is_active: !t.is_active }).unwrap();
       showToast(`${t.name} ${!t.is_active ? "activated" : "deactivated"}`, true);
     } catch (err: any) {
-      showToast(err.message || "Failed to update status", false);
+      showToast(err?.data?.message || "Failed to update status", false);
     } finally {
       setActionLoading(null);
     }
@@ -285,13 +261,12 @@ export default function CompaniesPage() {
     setFormLoading(true);
     setFormError("");
     try {
-      await api.post("/tenants/onboard", form);
+      await onboardTenant(form).unwrap();
       setShowModal(false);
       setForm({ company_name: "", admin_full_name: "", admin_email: "", admin_password: "", company_email: "", company_phone: "", company_address: "", gst_number: "", country: "India" });
-      fetchTenants();
       showToast(`${form.company_name} onboarded — welcome email sent`, true);
     } catch (err: any) {
-      setFormError(err.message || "Failed to onboard company");
+      setFormError(err?.data?.message || "Failed to onboard company");
     } finally {
       setFormLoading(false);
     }

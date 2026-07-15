@@ -1,21 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   UserPlus, Shield, CheckCircle2, XCircle, RotateCcw, Search,
   ShieldCheck, UserCheck, ShieldAlert, SendHorizonal, Trash2,
   MoreHorizontal, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
 import EmailToast from "../components/ui/EmailToast";
-
-interface ManagedUser {
-  id: string;
-  email: string;
-  full_name: string;
-  role: string;
-  is_active: boolean;
-  must_change_password: boolean;
-}
+import {
+  useGetUsersQuery, useInviteUserMutation, useDeleteUserMutation,
+  useToggleUserStatusMutation, useResetUserPasswordMutation,
+  type ManagedUser,
+} from "../store/api/adminApi";
+import { useGetVendorsQuery } from "../store/api/vendorApi";
 
 const roleConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   super_admin: { label: "Super Admin", color: "bg-red-50 text-red-700", icon: ShieldAlert },
@@ -80,8 +76,13 @@ function RowMenu({ user, onReset, onToggle, onDelete }: {
 }
 
 export default function AdminPage() {
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: users = [], isLoading: loading } = useGetUsersQuery();
+  const { data: vendors = [] } = useGetVendorsQuery();
+  const [inviteUser, { isLoading: formLoading }] = useInviteUserMutation();
+  const [deleteUser] = useDeleteUserMutation();
+  const [toggleUserStatusMutation] = useToggleUserStatusMutation();
+  const [resetUserPassword] = useResetUserPasswordMutation();
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -92,9 +93,7 @@ export default function AdminPage() {
   const [newRole, setNewRole] = useState("recruiter");
   const [newPassword, setNewPassword] = useState("");
   const [newVendorId, setNewVendorId] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
-  const [vendors, setVendors] = useState<{ id: string; company_name: string }[]>([]);
   const [emailToast, setEmailToast] = useState<{ message: string; type: "success" | "error"; showConfigLink?: boolean } | null>(null);
 
   const showEmailToast = (toast: typeof emailToast) => {
@@ -102,28 +101,17 @@ export default function AdminPage() {
     setTimeout(() => setEmailToast(null), 4500);
   };
 
-  useEffect(() => {
-    fetchUsers();
-    api.get("/vendors").then(setVendors).catch(() => {});
-  }, []);
-
-  const fetchUsers = async () => {
-    try { const data = await api.get("/admin/users"); setUsers(data); }
-    catch (error) { console.error("Fetch users error:", error); }
-    finally { setLoading(false); }
-  };
-
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setFormLoading(true); setFormError("");
+    setFormError("");
     try {
-      const result = await api.post("/admin/users", {
+      const result = (await inviteUser({
         email: newEmail, full_name: newFullName, role: newRole, password: newPassword,
         ...(newRole === "vendor_user" && newVendorId ? { vendor_id: newVendorId } : {}),
-      });
+      }).unwrap()) as ManagedUser & { emailSent?: boolean; emailError?: string };
       setShowCreateModal(false);
       const capturedEmail = newEmail;
-      resetForm(); fetchUsers();
+      resetForm();
       if (result.emailSent) {
         showEmailToast({ message: `User created — invite sent to ${capturedEmail}`, type: "success" });
       } else if (result.emailError) {
@@ -132,17 +120,16 @@ export default function AdminPage() {
         showEmailToast({ message: `User created successfully`, type: "success" });
       }
     } catch (err: any) { setFormError(err.message || "Failed to create user"); }
-    finally { setFormLoading(false); }
   };
 
   const handleDeleteUser = async (user: ManagedUser) => {
     if (!window.confirm(`Permanently delete "${user.full_name || user.email}"?\n\nThis cannot be undone.`)) return;
-    try { await api.delete(`/admin/users/${user.id}`); setUsers((prev) => prev.filter((u) => u.id !== user.id)); }
+    try { await deleteUser(user.id).unwrap(); }
     catch (err: any) { alert(err?.message || "Failed to delete user."); }
   };
 
-  const toggleUserStatus = async (user: ManagedUser) => {
-    try { await api.patch(`/admin/users/${user.id}`, { is_active: !user.is_active }); fetchUsers(); }
+  const handleToggleStatus = async (user: ManagedUser) => {
+    try { await toggleUserStatusMutation({ id: user.id, is_active: !user.is_active }).unwrap(); }
     catch { alert("Failed to update user status"); }
   };
 
@@ -150,9 +137,8 @@ export default function AdminPage() {
     const password = prompt("Enter new temporary password:");
     if (!password) return;
     try {
-      await api.post(`/admin/users/${userId}/reset-password`, { newPassword: password });
+      await resetUserPassword({ userId, newPassword: password }).unwrap();
       alert("Password reset successfully. User will be forced to change it on next login.");
-      fetchUsers();
     } catch { alert("Failed to reset password"); }
   };
 
@@ -293,7 +279,7 @@ export default function AdminPage() {
                         <td className="px-5 py-4">
                           <RowMenu user={user}
                             onReset={() => handleResetPassword(user.id)}
-                            onToggle={() => toggleUserStatus(user)}
+                            onToggle={() => handleToggleStatus(user)}
                             onDelete={() => handleDeleteUser(user)} />
                         </td>
                       </tr>

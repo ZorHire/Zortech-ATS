@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   DndContext,
@@ -15,157 +15,62 @@ import { ArrowLeft, RefreshCw, Users, AlertCircle, Sparkles } from "lucide-react
 import Header from "../components/layout/Header";
 import KanbanColumn from "../components/pipeline/KanbanColumn";
 import CandidateCard from "../components/pipeline/CandidateCard";
-import { JobApplication, PipelineStage, Job } from "../types";
+import { JobApplication, PipelineStage } from "../types";
+import { useGetJobQuery } from "../store/api/jobApi";
+import { useGetPipelineApplicationsQuery, useUpdateApplicationStageMutation } from "../store/api/pipelineApi";
 import api from "../lib/api";
 
-// All pipeline stages in order
 const STAGES: {
   key: PipelineStage;
   label: string;
   color: { header: string; border: string; bg: string; dot: string };
 }[] = [
-  {
-    key: "new",
-    label: "New",
-    color: {
-      header: "bg-gray-100 text-gray-700 border-gray-200",
-      border: "border-gray-200",
-      bg: "bg-gray-50",
-      dot: "bg-gray-400",
-    },
-  },
-  {
-    key: "sourced",
-    label: "Sourced",
-    color: {
-      header: "bg-blue-50 text-blue-700 border-blue-200",
-      border: "border-blue-200",
-      bg: "bg-blue-50/40",
-      dot: "bg-blue-400",
-    },
-  },
-  {
-    key: "screened",
-    label: "Screened",
-    color: {
-      header: "bg-cyan-50 text-cyan-700 border-cyan-200",
-      border: "border-cyan-200",
-      bg: "bg-cyan-50/40",
-      dot: "bg-cyan-400",
-    },
-  },
-  {
-    key: "shortlisted",
-    label: "Shortlisted",
-    color: {
-      header: "bg-violet-50 text-violet-700 border-violet-200",
-      border: "border-violet-200",
-      bg: "bg-violet-50/40",
-      dot: "bg-violet-400",
-    },
-  },
-  {
-    key: "submitted_to_client",
-    label: "Submitted",
-    color: {
-      header: "bg-amber-50 text-amber-700 border-amber-200",
-      border: "border-amber-200",
-      bg: "bg-amber-50/40",
-      dot: "bg-amber-400",
-    },
-  },
-  {
-    key: "client_interview_scheduled",
-    label: "Interview",
-    color: {
-      header: "bg-orange-50 text-orange-700 border-orange-200",
-      border: "border-orange-200",
-      bg: "bg-orange-50/40",
-      dot: "bg-orange-400",
-    },
-  },
-  {
-    key: "interview_completed",
-    label: "Interviewed",
-    color: {
-      header: "bg-purple-50 text-purple-700 border-purple-200",
-      border: "border-purple-200",
-      bg: "bg-purple-50/40",
-      dot: "bg-purple-400",
-    },
-  },
-  {
-    key: "selected",
-    label: "Selected",
-    color: {
-      header: "bg-green-50 text-green-700 border-green-200",
-      border: "border-green-200",
-      bg: "bg-green-50/40",
-      dot: "bg-green-500",
-    },
-  },
-  {
-    key: "offer_extended",
-    label: "Offer Extended",
-    color: {
-      header: "bg-emerald-50 text-emerald-700 border-emerald-200",
-      border: "border-emerald-200",
-      bg: "bg-emerald-50/40",
-      dot: "bg-emerald-500",
-    },
-  },
-  {
-    key: "offer_accepted",
-    label: "Offer Accepted",
-    color: {
-      header: "bg-teal-50 text-teal-700 border-teal-200",
-      border: "border-teal-200",
-      bg: "bg-teal-50/40",
-      dot: "bg-teal-500",
-    },
-  },
-  {
-    key: "joined",
-    label: "Joined",
-    color: {
-      header: "bg-lime-50 text-lime-700 border-lime-200",
-      border: "border-lime-200",
-      bg: "bg-lime-50/40",
-      dot: "bg-lime-500",
-    },
-  },
-  {
-    key: "disqualified",
-    label: "Disqualified",
-    color: {
-      header: "bg-red-50 text-red-700 border-red-200",
-      border: "border-red-200",
-      bg: "bg-red-50/40",
-      dot: "bg-red-400",
-    },
-  },
+  { key: "new", label: "New", color: { header: "bg-gray-100 text-gray-700 border-gray-200", border: "border-gray-200", bg: "bg-gray-50", dot: "bg-gray-400" } },
+  { key: "sourced", label: "Sourced", color: { header: "bg-blue-50 text-blue-700 border-blue-200", border: "border-blue-200", bg: "bg-blue-50/40", dot: "bg-blue-400" } },
+  { key: "screened", label: "Screened", color: { header: "bg-cyan-50 text-cyan-700 border-cyan-200", border: "border-cyan-200", bg: "bg-cyan-50/40", dot: "bg-cyan-400" } },
+  { key: "shortlisted", label: "Shortlisted", color: { header: "bg-violet-50 text-violet-700 border-violet-200", border: "border-violet-200", bg: "bg-violet-50/40", dot: "bg-violet-400" } },
+  { key: "submitted_to_client", label: "Submitted", color: { header: "bg-amber-50 text-amber-700 border-amber-200", border: "border-amber-200", bg: "bg-amber-50/40", dot: "bg-amber-400" } },
+  { key: "client_interview_scheduled", label: "Interview", color: { header: "bg-orange-50 text-orange-700 border-orange-200", border: "border-orange-200", bg: "bg-orange-50/40", dot: "bg-orange-400" } },
+  { key: "interview_completed", label: "Interviewed", color: { header: "bg-purple-50 text-purple-700 border-purple-200", border: "border-purple-200", bg: "bg-purple-50/40", dot: "bg-purple-400" } },
+  { key: "selected", label: "Selected", color: { header: "bg-green-50 text-green-700 border-green-200", border: "border-green-200", bg: "bg-green-50/40", dot: "bg-green-500" } },
+  { key: "offer_extended", label: "Offer Extended", color: { header: "bg-emerald-50 text-emerald-700 border-emerald-200", border: "border-emerald-200", bg: "bg-emerald-50/40", dot: "bg-emerald-500" } },
+  { key: "offer_accepted", label: "Offer Accepted", color: { header: "bg-teal-50 text-teal-700 border-teal-200", border: "border-teal-200", bg: "bg-teal-50/40", dot: "bg-teal-500" } },
+  { key: "joined", label: "Joined", color: { header: "bg-lime-50 text-lime-700 border-lime-200", border: "border-lime-200", bg: "bg-lime-50/40", dot: "bg-lime-500" } },
+  { key: "disqualified", label: "Disqualified", color: { header: "bg-red-50 text-red-700 border-red-200", border: "border-red-200", bg: "bg-red-50/40", dot: "bg-red-400" } },
 ];
 
 export default function PipelinePage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const [job, setJob] = useState<Job | null>(null);
+
+  const { data: job, isLoading: jobLoading, error: jobError } = useGetJobQuery(jobId!, { skip: !jobId });
+  const {
+    data: appsData = [],
+    isLoading: appsLoading,
+    error: appsError,
+    refetch: refetchPipeline,
+  } = useGetPipelineApplicationsQuery(jobId!, { skip: !jobId });
+  const [updateStage] = useUpdateApplicationStageMutation();
+
   const [applications, setApplications] = useState<JobApplication[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeApplication, setActiveApplication] =
-    useState<JobApplication | null>(null);
+  const [activeApplication, setActiveApplication] = useState<JobApplication | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  // feat/agents: AI shortlisting state
   const [shortlisting, setShortlisting] = useState(false);
-  const [toast, setToast] = useState<{
-    message: string;
-    type: "success" | "error";
-  } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // origin/main: derived loading / error values from RTK Query
+  const loading = jobLoading || appsLoading;
+  const errorMsg = jobError || appsError
+    ? (jobError as any)?.data?.message || (appsError as any)?.data?.message || "Failed to load pipeline data"
+    : null;
+
+  useEffect(() => {
+    setApplications(Array.isArray(appsData) ? appsData : []);
+  }, [appsData]);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
-    }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   const showToast = (message: string, type: "success" | "error") => {
@@ -173,35 +78,7 @@ export default function PipelinePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchData = useCallback(async () => {
-    if (!jobId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [jobData, appsData] = await Promise.all([
-        api.get(`/jobs/${jobId}`),
-        api.get(`/pipeline/jobs/${jobId}/applications`),
-      ]);
-      setJob(jobData);
-      // Ensure applications is always an array
-      setApplications(
-        Array.isArray(appsData)
-          ? appsData
-          : appsData.data || appsData.applications || [],
-      );
-    } catch (err: any) {
-      console.error("Pipeline fetch error:", err);
-      setError(err.message || "Failed to load pipeline data");
-      setApplications([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [jobId]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
+  // feat/agents: run AI match-scoring and auto-shortlisting for all eligible candidates
   const handleRunShortlisting = async () => {
     if (!jobId) return;
     setShortlisting(true);
@@ -211,7 +88,7 @@ export default function PipelinePage() {
         `Scored ${data.scored}/${data.total_eligible}, auto-shortlisted ${data.shortlisted}`,
         "success",
       );
-      await fetchData();
+      await refetchPipeline();
     } catch (err: any) {
       showToast(err.message || "Failed to run AI shortlisting", "error");
     } finally {
@@ -219,6 +96,7 @@ export default function PipelinePage() {
     }
   };
 
+  // feat/agents: send a screening invite for a candidate in the pipeline
   const handleScreeningInvite = async (application: JobApplication) => {
     try {
       const data = await api.post(`/pipeline/applications/${application.id}/screening-invite`, {});
@@ -251,35 +129,22 @@ export default function PipelinePage() {
     const prevStage = application.stage;
 
     // Optimistic update
-    setApplications((prev) =>
-      prev.map((a) => (a.id === applicationId ? { ...a, stage: newStage } : a)),
-    );
+    setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: newStage } : a)));
     setMovingId(applicationId);
 
     try {
-      await api.patch(`/pipeline/applications/${applicationId}/stage`, {
-        to_stage: newStage,
-      });
-      showToast(
-        `Moved to ${STAGES.find((s) => s.key === newStage)?.label ?? newStage}`,
-        "success",
-      );
+      await updateStage({ applicationId, stage: newStage }).unwrap();
+      showToast(`Moved to ${STAGES.find((s) => s.key === newStage)?.label ?? newStage}`, "success");
     } catch (err: any) {
       // Revert on failure
-      setApplications((prev) =>
-        prev.map((a) =>
-          a.id === applicationId ? { ...a, stage: prevStage } : a,
-        ),
-      );
+      setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: prevStage } : a)));
       showToast(err.message || "Failed to move candidate", "error");
     } finally {
       setMovingId(null);
     }
   };
 
-  // Group applications by stage
-  const byStage = (stage: PipelineStage) =>
-    applications.filter((a) => a.stage === stage);
+  const byStage = (stage: PipelineStage) => applications.filter((a) => a.stage === stage);
 
   if (loading) {
     return (
@@ -295,19 +160,17 @@ export default function PipelinePage() {
     );
   }
 
-  if (error) {
+  if (errorMsg) {
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header title="Pipeline" subtitle="Error" />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center">
             <AlertCircle size={40} className="mx-auto text-red-400 mb-3" />
-            <p className="text-gray-700 font-medium mb-1">
-              Failed to load pipeline
-            </p>
-            <p className="text-sm text-gray-500 mb-4">{error}</p>
+            <p className="text-gray-700 font-medium mb-1">Failed to load pipeline</p>
+            <p className="text-sm text-gray-500 mb-4">{errorMsg}</p>
             <button
-              onClick={fetchData}
+              onClick={() => refetchPipeline()}
               className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
             >
               <RefreshCw size={14} />
@@ -333,6 +196,7 @@ export default function PipelinePage() {
               <ArrowLeft size={15} />
               Back to Job
             </Link>
+            {/* feat/agents: AI shortlisting button */}
             <button
               onClick={handleRunShortlisting}
               disabled={shortlisting}
@@ -341,8 +205,9 @@ export default function PipelinePage() {
               <Sparkles size={14} />
               {shortlisting ? "Scoring…" : "Run AI Shortlisting"}
             </button>
+            {/* origin/main: manual refresh via RTK Query refetch */}
             <button
-              onClick={fetchData}
+              onClick={() => refetchPipeline()}
               className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
               title="Refresh"
             >
@@ -352,7 +217,6 @@ export default function PipelinePage() {
         }
       />
 
-      {/* Board — horizontal scroll */}
       <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
         <DndContext
           sensors={sensors}
@@ -360,10 +224,7 @@ export default function PipelinePage() {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div
-            className="flex gap-3 h-full pb-4"
-            style={{ minWidth: "max-content" }}
-          >
+          <div className="flex gap-3 h-full pb-4" style={{ minWidth: "max-content" }}>
             {STAGES.map(({ key, label, color }) => (
               <KanbanColumn
                 key={key}
@@ -376,7 +237,6 @@ export default function PipelinePage() {
             ))}
           </div>
 
-          {/* Drag overlay — card preview while dragging */}
           <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
             {activeApplication && (
               <CandidateCard application={activeApplication} isOverlay />
@@ -385,7 +245,6 @@ export default function PipelinePage() {
         </DndContext>
       </div>
 
-      {/* Stage moving indicator */}
       {movingId && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg z-50">
           <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
@@ -393,18 +252,13 @@ export default function PipelinePage() {
         </div>
       )}
 
-      {/* Toast notification */}
       {toast && (
         <div
           className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium transition-all
             ${toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}
           `}
         >
-          {toast.type === "success" ? (
-            <Users size={14} />
-          ) : (
-            <AlertCircle size={14} />
-          )}
+          {toast.type === "success" ? <Users size={14} /> : <AlertCircle size={14} />}
           {toast.message}
         </div>
       )}

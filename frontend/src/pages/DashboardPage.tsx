@@ -12,24 +12,23 @@ import {
   Circle,
   AlertCircle,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "../components/layout/Header";
-import { useAuth } from "../contexts/AuthContext";
-import { Job } from "../types";
-import api from "../lib/api";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import {
+  useGetDashboardStatsQuery,
+  useGetDashboardActivityQuery,
+  useGetDashboardTasksQuery,
+  type DashboardStats,
+  type ActivityItem,
+  type TaskItem,
+} from "../store/api/dashboardApi";
+import { useGetJobsQuery } from "../store/api/jobApi";
 import DashboardModal from "../components/DashboardModal";
 
 type CardType = "pipeline" | "jobs" | "interviews" | "alerts";
-
-interface DashboardStats {
-  active_jobs: number;
-  total_candidates: number;
-  upcoming_interviews: number;
-  sla_alerts: number;
-  emails_sent?: number;
-  pipeline_stages: { stage: string; count: number }[];
-}
 
 const STAGE_LABELS: Record<string, string> = {
   new: "New",
@@ -215,28 +214,6 @@ function DonutChart({ segments }: { segments: { label: string; value: number; co
   );
 }
 
-// ─── Activity & Task types ────────────────────────────────────────────────────
-
-interface ActivityItem {
-  type: 'application' | 'stage_change' | 'interview';
-  candidate_name: string;
-  job_title: string;
-  job_location?: string;
-  current_location?: string;
-  stage?: string;
-  from_stage?: string;
-  to_stage?: string;
-  interview_type?: string;
-  scheduled_at?: string;
-  created_at: string;
-}
-
-interface TaskItem {
-  text: string;
-  due: string;
-  priority: 'overdue' | 'urgent' | 'normal';
-}
-
 function timeAgo(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (diff < 60) return `${diff}s ago`;
@@ -277,39 +254,15 @@ function activityMeta(a: ActivityItem): { icon: React.ComponentType<any>; color:
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const profile = useAppSelector(selectCurrentUser);
   const [activeCard, setActiveCard] = useState<CardType | null>(null);
-  const [jobsLoading, setJobsLoading] = useState(true);
-  const [jobsError, setJobsError] = useState(false);
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [activityLoading, setActivityLoading] = useState(true);
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(true);
+
+  const { data: stats } = useGetDashboardStatsQuery(undefined, { pollingInterval: 30_000 });
+  const { data: activity = [], isLoading: activityLoading } = useGetDashboardActivityQuery(undefined, { pollingInterval: 30_000 });
+  const { data: tasks = [], isLoading: tasksLoading } = useGetDashboardTasksQuery(undefined, { pollingInterval: 30_000 });
+  const { data: jobs = [], isLoading: jobsLoading, isError: jobsError } = useGetJobsQuery(undefined, { pollingInterval: 30_000 });
 
   const activeJobs = jobs.filter((j) => j.status === "active");
-
-  useEffect(() => {
-    let initial = true;
-    const load = () => {
-      if (initial) setJobsLoading(true);
-      setJobsError(false);
-      api.get("/jobs")
-        .then((d) => { setJobs(d); setJobsLoading(false); initial = false; })
-        .catch(() => { setJobsError(true); setJobsLoading(false); initial = false; });
-      api.get("/dashboard/stats").then(setStats).catch(() => {});
-      api.get("/dashboard/activity")
-        .then((d) => { setActivity(d); setActivityLoading(false); })
-        .catch(() => setActivityLoading(false));
-      api.get("/dashboard/tasks")
-        .then((d) => { setTasks(d); setTasksLoading(false); })
-        .catch(() => setTasksLoading(false));
-    };
-    load();
-    const iv = setInterval(load, 30_000);
-    return () => clearInterval(iv);
-  }, []);
 
   const fmt = (n: number | undefined) => (n !== undefined ? n.toLocaleString("en-IN") : "—");
 

@@ -1,6 +1,7 @@
 import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { createNotification } from "../notifications/notifications.controller";
 
 // NOTE (known adjacent bug, out of scope for A4 shortlisting): the DB CHECK constraint
 // on job_applications.stage also allows 'offer_rejected', but this array omits it, so
@@ -184,6 +185,71 @@ export const moveApplicationStage = async (req: AuthRequest, res: Response) => {
     );
 
     res.json(updateResult.rows[0]);
+
+    // Fire-and-forget: notifications + invoice trigger for significant stage changes
+    (async () => {
+      try {
+        const notifyStages = ["offer_extended", "offer_accepted", "joined", "disqualified"];
+        if (!notifyStages.includes(targetStage)) return;
+
+        const infoResult = await pool.query(
+          `SELECT c.first_name, c.last_name, j.title AS job_title,
+                  j.client_id, cl.markup, cl.billing_model
+           FROM job_applications ja
+           JOIN candidates c ON c.id = ja.candidate_id
+           JOIN jobs j ON j.id = ja.job_id
+           LEFT JOIN clients cl ON cl.id = j.client_id
+           WHERE ja.id = $1`,
+          [id],
+        );
+        if (infoResult.rows.length === 0) return;
+        const { first_name, last_name, job_title, client_id } = infoResult.rows[0];
+
+        const typeMap: Record<string, "success" | "info" | "warning"> = {
+          offer_extended: "success",
+          offer_accepted: "success",
+          joined: "success",
+          disqualified: "warning",
+        };
+        const labelMap: Record<string, string> = {
+          offer_extended: "Offer Extended",
+          offer_accepted: "Offer Accepted",
+          joined: "Candidate Joined",
+          disqualified: "Candidate Disqualified",
+        };
+
+        const recipientsResult = await pool.query(
+          `SELECT u.id FROM users u
+           JOIN tenant_memberships tm ON tm.user_id = u.id
+           WHERE tm.tenant_id = $1 AND tm.is_active = true
+             AND tm.role IN ('super_admin','accounts_manager')
+             AND u.id != $2`,
+          [tenantId, changedBy],
+        );
+        for (const row of recipientsResult.rows) {
+          await createNotification(
+            row.id,
+            typeMap[targetStage] ?? "info",
+            labelMap[targetStage] ?? `Stage: ${targetStage}`,
+            `${first_name} ${last_name} → ${job_title}`,
+            "application",
+            String(id),
+          );
+        }
+
+        // Auto-draft invoice when candidate joins and a client is linked
+        if (targetStage === "joined" && client_id) {
+          const invoiceNum = `INV-${Date.now().toString().slice(-8)}`;
+          const appRow = applicationResult.rows[0];
+          await pool.query(
+            `INSERT INTO invoices (tenant_id, client_id, job_id, application_id, candidate_id, invoice_number, currency, status)
+             VALUES ($1, $2, $3, $4, $5, $6, 'INR', 'draft')
+             ON CONFLICT DO NOTHING`,
+            [tenantId, client_id, appRow.job_id, id, appRow.candidate_id, invoiceNum],
+          );
+        }
+      } catch {}
+    })();
   } catch (error) {
     console.error("Move application stage error:", error);
     res.status(500).json({ message: "Internal server error" });

@@ -1,12 +1,19 @@
 import { useState } from "react";
 import { Briefcase, Eye, EyeOff, ArrowRight, Shield, KeyRound, CheckCircle2 } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
-import api from "../lib/api";
+import { useLoginMutation, useForgotPasswordMutation } from "../store/api/authApi";
+import { useAppDispatch } from "../hooks/useAppDispatch";
+import {
+  setCredentials,
+  setSessionStatus,
+} from "../store/slices/authSlice";
+import type { AuthUser } from "../store/slices/authSlice";
+import { setSubscription } from "../store/slices/subscriptionSlice";
 
 type View = "login" | "reset";
 
 export default function LoginPage() {
   const [view, setView] = useState<View>("login");
+  const dispatch = useAppDispatch();
 
   // Login state
   const [email, setEmail] = useState("");
@@ -14,21 +21,37 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const [login] = useLoginMutation();
 
   // Reset state
   const [resetEmail, setResetEmail] = useState("");
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [forgotPassword] = useForgotPasswordMutation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const { error } = await signIn(email, password, "");
-      if (error) setError(error.message || "Login failed. Please check your credentials.");
+      const data = await login({ email, password }).unwrap();
+      localStorage.setItem("jwt", data.token);
+      dispatch(setCredentials({ user: data.user as AuthUser, accessToken: data.token }));
+      dispatch(
+        setSubscription(
+          data.subscription
+            ? {
+                active: data.subscription.active,
+                isPlatformOwner: data.subscription.isPlatformOwner ?? false,
+                reason: data.subscription.reason ?? null,
+              }
+            : null
+        )
+      );
+      dispatch(setSessionStatus("active"));
+    } catch (err: any) {
+      setError(err?.data?.message || err?.message || "Login failed. Please check your credentials.");
     } finally {
       setLoading(false);
     }
@@ -39,10 +62,10 @@ export default function LoginPage() {
     setResetError("");
     setResetLoading(true);
     try {
-      await api.post("/auth/forgot-password", { email: resetEmail });
+      await forgotPassword({ email: resetEmail }).unwrap();
       setResetSuccess(true);
     } catch (err: any) {
-      setResetError(err?.message || "Failed to send reset link. Please try again.");
+      setResetError(err?.data?.message || err?.message || "Failed to send reset link. Please try again.");
     } finally {
       setResetLoading(false);
     }

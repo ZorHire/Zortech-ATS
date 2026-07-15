@@ -2,6 +2,61 @@ import { Response } from 'express';
 import pool from '../../db';
 import { AuthRequest } from '../../middleware/auth';
 
+// ─── Compute and persist vendor performance metrics ───────────────────────────
+export async function refreshVendorMetrics(
+  vendorId: string,
+  tenantId: string,
+): Promise<void> {
+  await pool.query(
+    `WITH sub_stats AS (
+       SELECT
+         COUNT(*)                                                           AS submission_count,
+         ROUND(
+           COUNT(*) FILTER (WHERE ja.stage IN ('shortlisted','offered','hired'))
+           * 100.0 / NULLIF(COUNT(*), 0)
+         )                                                                  AS shortlist_rate,
+         ROUND(
+           COUNT(*) FILTER (
+             WHERE j.sla_deadline IS NULL OR vps.created_at <= j.sla_deadline
+           ) * 100.0 / NULLIF(COUNT(*), 0)
+         )                                                                  AS sla_adherence
+       FROM vendor_portal_submissions vps
+       JOIN jobs j ON j.id = vps.job_id
+       LEFT JOIN job_applications ja ON ja.id = vps.application_id
+       WHERE vps.vendor_id = $1 AND vps.tenant_id = $2
+     ),
+     fill_stats AS (
+       SELECT
+         ROUND(
+           COUNT(DISTINCT vps.job_id) FILTER (WHERE ja.stage = 'hired')
+           * 100.0 / NULLIF(COUNT(DISTINCT j.id), 0)
+         ) AS fill_rate
+       FROM jobs j
+       LEFT JOIN vendor_portal_submissions vps
+         ON vps.job_id = j.id AND vps.vendor_id = $1 AND vps.tenant_id = $2
+       LEFT JOIN job_applications ja ON ja.id = vps.application_id
+       WHERE j.tenant_id = $2
+         AND j.deleted_at IS NULL
+         AND (j.assigned_vendor_ids @> ARRAY[$1::uuid] OR j.assigned_vendor_id = $1)
+     )
+     UPDATE vendors
+     SET
+       submission_count = COALESCE(ss.submission_count, 0),
+       shortlist_rate   = COALESCE(ss.shortlist_rate, 0),
+       sla_adherence    = COALESCE(ss.sla_adherence, 100),
+       fill_rate        = COALESCE(fs.fill_rate, 0),
+       quality_score    = ROUND(
+         COALESCE(ss.shortlist_rate, 0) * 0.5
+         + COALESCE(fs.fill_rate, 0) * 0.3
+         + COALESCE(ss.sla_adherence, 100) * 0.2
+       ),
+       updated_at = now()
+     FROM sub_stats ss, fill_stats fs
+     WHERE vendors.id = $1 AND vendors.tenant_id = $2`,
+    [vendorId, tenantId],
+  );
+}
+
 export const getVendors = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
@@ -103,6 +158,157 @@ export const deleteVendor = async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Vendor deleted successfully' });
   } catch (error) {
     console.error('Delete vendor error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── PATCH /vendors/:id/blacklist ───────────────────────────────────────────
+export const setVendorBlacklist = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  const { blacklisted, reason } = req.body as { blacklisted: boolean; reason?: string };
+
+  if (typeof blacklisted !== "boolean") {
+    return res.status(400).json({ message: "blacklisted (boolean) is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE vendors
+       SET is_blacklisted = $1,
+           blacklist_reason = $2,
+           blacklisted_at = CASE WHEN $1 THEN now() ELSE NULL END,
+           updated_at = now()
+       WHERE id = $3 AND tenant_id = $4 AND deleted_at IS NULL
+       RETURNING id, company_name, is_blacklisted, blacklist_reason, blacklisted_at`,
+      [blacklisted, blacklisted ? (reason || null) : null, id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Vendor not found" });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("setVendorBlacklist error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── GET /vendors/leaderboard ────────────────────────────────────────────────
+export const getVendorLeaderboard = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT
+         id, company_name, tier, submission_count, shortlist_rate,
+         fill_rate, quality_score, sla_adherence, is_active,
+         ROW_NUMBER() OVER (ORDER BY quality_score DESC, submission_count DESC)::int AS rank
+       FROM vendors
+       WHERE tenant_id = $1 AND deleted_at IS NULL
+       ORDER BY quality_score DESC, submission_count DESC`,
+      [tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('getVendorLeaderboard error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── PATCH /vendors/:id/submissions/:submissionId/feedback ───────────────────
+export const addSubmissionFeedback = async (req: AuthRequest, res: Response) => {
+  const { id, submissionId } = req.params;
+  const tenantId = req.user!.tenant_id;
+  const userId = req.user!.id;
+  const { recruiter_rating, recruiter_notes } = req.body;
+
+  if (
+    recruiter_rating !== undefined &&
+    recruiter_rating !== null &&
+    (Number(recruiter_rating) < 1 || Number(recruiter_rating) > 5)
+  ) {
+    return res.status(400).json({ message: 'recruiter_rating must be between 1 and 5' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE vendor_portal_submissions
+       SET recruiter_rating  = $1,
+           recruiter_notes   = $2,
+           feedback_given_by = $3,
+           feedback_given_at = now()
+       WHERE id = $4 AND vendor_id = $5 AND tenant_id = $6
+       RETURNING id, recruiter_rating, recruiter_notes, feedback_given_at`,
+      [recruiter_rating ?? null, recruiter_notes ?? null, userId, submissionId, id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('addSubmissionFeedback error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// ─── GET /vendors/:id/scorecard ───────────────────────────────────────────────
+export const getVendorScorecard = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user!.tenant_id;
+  try {
+    await refreshVendorMetrics(String(id), tenantId);
+
+    const [vendorRes, breakdownRes, recentRes] = await Promise.all([
+      pool.query(
+        `SELECT id, company_name, tier, submission_count, shortlist_rate,
+                fill_rate, quality_score, sla_adherence, is_active
+         FROM vendors WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+        [id, tenantId],
+      ),
+      pool.query(
+        `SELECT
+           j.id AS job_id, j.title, j.status AS job_status,
+           COUNT(vps.id)::int                                                           AS submissions,
+           COUNT(vps.id) FILTER (WHERE ja.stage IN ('shortlisted','offered','hired'))::int AS shortlisted,
+           COUNT(vps.id) FILTER (WHERE ja.stage = 'hired')::int                        AS hired,
+           COUNT(vps.id) FILTER (WHERE ja.stage = 'rejected')::int                     AS rejected
+         FROM jobs j
+         LEFT JOIN vendor_portal_submissions vps
+           ON vps.job_id = j.id AND vps.vendor_id = $1 AND vps.tenant_id = $2
+         LEFT JOIN job_applications ja ON ja.id = vps.application_id
+         WHERE j.tenant_id = $2
+           AND j.deleted_at IS NULL
+           AND (j.assigned_vendor_ids @> ARRAY[$1::uuid] OR j.assigned_vendor_id = $1)
+         GROUP BY j.id, j.title, j.status
+         ORDER BY submissions DESC
+         LIMIT 10`,
+        [id, tenantId],
+      ),
+      pool.query(
+        `SELECT
+           vps.id AS submission_id, vps.candidate_full_name, vps.candidate_email, vps.created_at,
+           vps.recruiter_rating, vps.recruiter_notes,
+           j.title AS job_title, ja.stage AS pipeline_stage
+         FROM vendor_portal_submissions vps
+         JOIN jobs j ON j.id = vps.job_id
+         LEFT JOIN job_applications ja ON ja.id = vps.application_id
+         WHERE vps.vendor_id = $1 AND vps.tenant_id = $2
+         ORDER BY vps.created_at DESC
+         LIMIT 5`,
+        [id, tenantId],
+      ),
+    ]);
+
+    if (vendorRes.rows.length === 0) {
+      return res.status(404).json({ message: 'Vendor not found' });
+    }
+
+    res.json({
+      ...vendorRes.rows[0],
+      job_breakdown: breakdownRes.rows,
+      recent_submissions: recentRes.rows,
+    });
+  } catch (error) {
+    console.error('getVendorScorecard error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

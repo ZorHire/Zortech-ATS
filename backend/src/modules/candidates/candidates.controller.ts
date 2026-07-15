@@ -76,9 +76,23 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
       const params: any[] = [tenantId];
 
       if (search) {
-        params.push(`%${String(search).toLowerCase()}%`);
+        const q = String(search);
+        const booleanQuery = q
+          .replace(/\bAND\b/gi, '&')
+          .replace(/\bOR\b/gi, '|')
+          .replace(/\bNOT\b/gi, '& !')
+          .split(/\s+/)
+          .filter(w => !['&', '|', '!', '&!'].includes(w))
+          .map(w => /^[&|!]/.test(w) ? w : "'" + w.replace(/'/g, '') + "'")
+          .join(' ');
+        params.push(booleanQuery || "'" + q.replace(/'/g, '') + "'");
+        const idxTs = params.length;
+        params.push('%' + q + '%');
+        const idxIlike = params.length;
         filters.push(
-          `(LOWER(first_name) LIKE $${params.length} OR LOWER(last_name) LIKE $${params.length} OR LOWER(email) LIKE $${params.length} OR LOWER(current_title) LIKE $${params.length} OR LOWER(current_company) LIKE $${params.length} OR LOWER(current_location) LIKE $${params.length})`,
+          `(to_tsvector('english', COALESCE(first_name,'') || ' ' || COALESCE(last_name,'') || ' ' || COALESCE(skills::text,'') || ' ' || COALESCE(current_title,''))
+            @@ to_tsquery('english', $${idxTs}) OR
+            first_name ILIKE $${idxIlike} OR last_name ILIKE $${idxIlike} OR email ILIKE $${idxIlike})`
         );
       }
 
@@ -116,6 +130,16 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
     });
 
     res.json(rows);
+    (async () => {
+      try {
+        if (search || Object.keys(req.query).length > 0) {
+          await pool.query(
+            'INSERT INTO search_history(tenant_id,user_id,query_text,filters,result_count) VALUES($1,$2,$3,$4,$5)',
+            [tenantId, req.user?.id, search || '', req.query, rows.length]
+          );
+        }
+      } catch (e) {}
+    })();
   } catch (error) {
     console.error("Get candidates error:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -403,6 +427,59 @@ function scoreCandidate(candidate: any, queryTerms: string[]): number {
   );
 }
 
+// ─── boolean search helpers ──────────────────────────────────────────────────
+
+function parseBooleanQuery(queryStr: string): {
+  mustHave: string[];
+  shouldHave: string[];
+  mustNot: string[];
+} {
+  const mustHave: string[] = [];
+  const shouldHave: string[] = [];
+  const mustNot: string[] = [];
+  const tokens = queryStr.trim().split(/\s+/);
+  let nextOp: "AND" | "OR" | "NOT" = "AND";
+
+  for (const token of tokens) {
+    const upper = token.toUpperCase();
+    if (upper === "AND") { nextOp = "AND"; continue; }
+    if (upper === "OR")  { nextOp = "OR";  continue; }
+    if (upper === "NOT") { nextOp = "NOT"; continue; }
+    const term = token.replace(/[()]/g, "").toLowerCase().trim();
+    if (!term) continue;
+    if (nextOp === "NOT")     mustNot.push(term);
+    else if (nextOp === "OR") shouldHave.push(term);
+    else                      mustHave.push(term);
+    nextOp = "AND";
+  }
+  return { mustHave, shouldHave, mustNot };
+}
+
+function matchesBooleanQuery(
+  candidate: any,
+  mustHave: string[],
+  shouldHave: string[],
+  mustNot: string[],
+): boolean {
+  const skills = normalizeSkillsArray(candidate.skills);
+  const text = [
+    candidate.first_name ?? "",
+    candidate.last_name ?? "",
+    candidate.current_title ?? "",
+    candidate.current_company ?? "",
+    candidate.summary ?? "",
+    ...skills,
+  ].join(" ").toLowerCase();
+
+  if (mustNot.some((t) => text.includes(t))) return false;
+  if (!mustHave.every((t) => text.includes(t))) return false;
+  if (shouldHave.length > 0) {
+    if (mustHave.length === 0) return shouldHave.some((t) => text.includes(t));
+    if (!shouldHave.some((t) => text.includes(t))) return false;
+  }
+  return true;
+}
+
 // ─── search ─────────────────────────────────────────────────────────────────
 
 export const searchCandidates = async (req: AuthRequest, res: Response) => {
@@ -427,22 +504,26 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
       params,
     );
 
-    // Parse query into individual search terms, stripping boolean operators
     const queryStr = String(rawQuery ?? "").trim();
-    const queryTerms = queryStr.length === 0
-      ? []
-      : queryStr
-          .toLowerCase()
-          .split(/\s+(?:AND|OR|NOT)\s+|\s+/i)
-          .map((t) => t.replace(/[()]/g, "").trim())
-          .filter(Boolean);
-
     let withScores: Array<{ candidate: any; score: number }>;
 
-    if (queryTerms.length === 0) {
-      // No query — return everything, score 100
+    if (queryStr.length === 0) {
       withScores = dbResult.rows.map((c) => ({ candidate: c, score: 100 }));
+    } else if (/\b(AND|OR|NOT)\b/i.test(queryStr)) {
+      // True boolean mode: parse AND/OR/NOT operators
+      const { mustHave, shouldHave, mustNot } = parseBooleanQuery(queryStr);
+      const scoreTerms = [...mustHave, ...shouldHave];
+      withScores = dbResult.rows
+        .filter((c) => matchesBooleanQuery(c, mustHave, shouldHave, mustNot))
+        .map((c) => ({ candidate: c, score: scoreCandidate(c, scoreTerms) }))
+        .sort((a, b) => b.score - a.score);
     } else {
+      // Plain text: all words treated as AND (all must appear somewhere)
+      const queryTerms = queryStr
+        .toLowerCase()
+        .split(/\s+/)
+        .map((t) => t.replace(/[()]/g, "").trim())
+        .filter(Boolean);
       withScores = dbResult.rows
         .map((c) => ({ candidate: c, score: scoreCandidate(c, queryTerms) }))
         .filter((r) => r.score > 55)
@@ -451,6 +532,36 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
 
     const total = withScores.length;
     const paginated = withScores.slice(offset, offset + limitNum);
+
+    // Fire-and-forget: record this search in history (only when there's something meaningful)
+    const userId = req.user?.id;
+    if (userId && (queryStr.length > 0 || req.query.location || req.query.experience || req.query.noticePeriod)) {
+      const histFilters = {
+        location: req.query.location ?? null,
+        experience: req.query.experience ?? null,
+        noticePeriod: req.query.noticePeriod ?? null,
+      };
+      (async () => {
+        try {
+          await pool.query(
+            `INSERT INTO search_history (tenant_id, user_id, query, filters, result_count)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [tenantId, userId, queryStr, JSON.stringify(histFilters), total],
+          );
+          // Prune to last 20 per user
+          await pool.query(
+            `DELETE FROM search_history
+             WHERE user_id = $1 AND tenant_id = $2
+               AND id NOT IN (
+                 SELECT id FROM search_history
+                 WHERE user_id = $1 AND tenant_id = $2
+                 ORDER BY created_at DESC LIMIT 20
+               )`,
+            [userId, tenantId],
+          );
+        } catch {}
+      })();
+    }
 
     return res.json({
       results: paginated,
@@ -466,6 +577,106 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
       message: "Search failed",
       error: process.env.NODE_ENV !== "production" ? error?.message : undefined,
     });
+  }
+};
+
+// ─── search history ──────────────────────────────────────────────────────────
+
+export const getSearchHistory = async (req: AuthRequest, res: Response) => {
+  const userId = req.user?.id;
+  const tenantId = req.user?.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM search_history
+       WHERE user_id = $1 AND tenant_id = $2
+       ORDER BY created_at DESC LIMIT 10`,
+      [userId, tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get search history error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── GDPR right-to-erasure ───────────────────────────────────────────────────
+
+export const purgeCandidatePII = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  try {
+    const result = await pool.query(
+      `UPDATE candidates SET
+         first_name         = 'GDPR',
+         last_name          = 'Erased',
+         email              = 'erased_' || id || '@gdpr.removed',
+         phone              = NULL,
+         current_title      = NULL,
+         current_company    = NULL,
+         resume_url         = NULL,
+         summary            = 'Data erased per GDPR right-to-erasure request.',
+         skills             = '{}',
+         current_location   = NULL,
+         preferred_location = NULL,
+         deleted_at         = now(),
+         updated_at         = now()
+       WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL
+       RETURNING id`,
+      [id, tenantId],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+    await invalidatePrefix(`tenant:${tenantId}:candidates:`);
+    res.json({ message: "Candidate PII permanently erased per GDPR right-to-erasure." });
+  } catch (error) {
+    console.error("Purge candidate PII error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── timeline ───────────────────────────────────────────────────────────────
+
+export const getCandidateTimeline = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  try {
+    const result = await pool.query(
+      `SELECT
+         ja.id,
+         ja.stage,
+         ja.notes,
+         ja.ai_score,
+         ja.created_at,
+         ja.updated_at,
+         j.id        AS job_id,
+         j.title     AS job_title,
+         j.location  AS job_location,
+         COALESCE(
+           json_agg(
+             json_build_object(
+               'id',               i.id,
+               'type',             i.interview_type,
+               'scheduled_at',     i.scheduled_at,
+               'status',           i.status,
+               'interviewer_name', i.interviewer_name,
+               'duration_minutes', i.duration_minutes
+             ) ORDER BY i.scheduled_at
+           ) FILTER (WHERE i.id IS NOT NULL),
+           '[]'
+         ) AS interviews
+       FROM job_applications ja
+       JOIN jobs j ON j.id = ja.job_id
+       LEFT JOIN interviews i ON i.application_id = ja.id
+       WHERE ja.candidate_id = $1 AND ja.tenant_id = $2
+       GROUP BY ja.id, j.id
+       ORDER BY ja.created_at DESC`,
+      [id, tenantId],
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Get candidate timeline error:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -522,6 +733,114 @@ export const exportCandidates = async (req: AuthRequest, res: Response) => {
     res.send(csv);
   } catch (error) {
     console.error("Export candidates error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ─── engagement history ─────────────────────────────────────────────────────
+
+export const getCandidateEngagement = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+
+  try {
+    // Verify candidate belongs to tenant
+    const check = await pool.query(
+      "SELECT id FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      [id, tenantId],
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+
+    const [pipelineEvents, interviews, manualLogs] = await Promise.all([
+      // Pipeline stage changes across all job applications
+      pool.query(
+        `SELECT
+           pe.id, pe.from_stage, pe.to_stage, pe.note, pe.created_at,
+           j.title AS job_title,
+           u.email AS changed_by_email
+         FROM pipeline_events pe
+         JOIN job_applications ja ON ja.id = pe.application_id
+         JOIN jobs j ON j.id = ja.job_id
+         LEFT JOIN users u ON u.id = pe.changed_by
+         WHERE ja.candidate_id = $1 AND pe.tenant_id = $2
+         ORDER BY pe.created_at DESC
+         LIMIT 100`,
+        [id, tenantId],
+      ),
+      // All interviews scheduled for this candidate
+      pool.query(
+        `SELECT
+           i.id, i.interview_type, i.scheduled_at, i.status,
+           i.interviewer_name, i.feedback_score, i.feedback_locked,
+           j.title AS job_title
+         FROM interviews i
+         JOIN job_applications ja ON ja.id = i.application_id
+         JOIN jobs j ON j.id = ja.job_id
+         WHERE ja.candidate_id = $1 AND i.tenant_id = $2
+         ORDER BY i.scheduled_at DESC
+         LIMIT 50`,
+        [id, tenantId],
+      ),
+      // Manual engagement logs (calls, notes, etc.)
+      pool.query(
+        `SELECT
+           cel.id, cel.event_type, cel.summary, cel.meta, cel.created_at,
+           p.full_name AS actor_name
+         FROM candidate_engagement_logs cel
+         LEFT JOIN profiles p ON p.id = cel.actor_id
+         WHERE cel.candidate_id = $1 AND cel.tenant_id = $2
+         ORDER BY cel.created_at DESC
+         LIMIT 100`,
+        [id, tenantId],
+      ),
+    ]);
+
+    res.json({
+      pipeline_events: pipelineEvents.rows,
+      interviews: interviews.rows,
+      manual_logs: manualLogs.rows,
+    });
+  } catch (error) {
+    console.error("getCandidateEngagement error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const logEngagementEvent = async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const tenantId = req.user?.tenant_id;
+  const actorId = req.user?.id;
+  const { event_type, summary, meta } = req.body;
+
+  const validTypes = ["call_logged", "note", "email_sent"];
+  if (!validTypes.includes(event_type)) {
+    return res.status(400).json({ message: `event_type must be one of: ${validTypes.join(", ")}` });
+  }
+  if (!summary) {
+    return res.status(400).json({ message: "summary is required" });
+  }
+
+  try {
+    const check = await pool.query(
+      "SELECT id FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+      [id, tenantId],
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ message: "Candidate not found" });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO candidate_engagement_logs (tenant_id, candidate_id, actor_id, event_type, summary, meta)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [tenantId, id, actorId, event_type, summary, meta ? JSON.stringify(meta) : "{}"],
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("logEngagementEvent error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
