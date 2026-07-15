@@ -50,6 +50,14 @@ export const generateScreeningToken = (): string => crypto.randomBytes(32).toStr
 export const hashScreeningToken = (token: string): string =>
   crypto.createHash("sha256").update(token).digest("hex");
 
+/** Constant-time comparison — a plain `!==` on the hash leaks timing information on this endpoint's only public surface. */
+export const verifyScreeningToken = (token: string, storedHash: string): boolean => {
+  const candidateHash = Buffer.from(hashScreeningToken(token), "hex");
+  const stored = Buffer.from(storedHash, "hex");
+  if (candidateHash.length !== stored.length) return false;
+  return crypto.timingSafeEqual(candidateHash, stored);
+};
+
 export interface JobForScreening {
   title: string;
   mandatory_skills: string[];

@@ -34,19 +34,30 @@ const normalizeStage = (value: any): Stage => {
  * System-initiated stage move (no req.user.id — this isn't an HTTP-request-shaped
  * action). Distinct from moveApplicationStage: changed_by is NULL, actor_type is 'ai',
  * so AI-driven moves are auditable and distinguishable from human ones.
+ *
+ * Returns false (no-op, nothing written) if the application's stage no longer
+ * matches `fromStage` at write time — guards against a caller that read the
+ * stage earlier (e.g. minutes/hours ago, mid-conversation in A5's screening
+ * chat) racing with a human or another AI move that already advanced it.
+ * Without this guard the UPDATE below would silently clobber whatever the
+ * real current stage is, and the pipeline_events row would record a stale
+ * from_stage that was never actually overwritten.
  */
 export const applyAiStageMove = async (
   params: { tenantId: string; applicationId: string; fromStage: string; toStage: Stage; note: string },
-): Promise<void> => {
-  await pool.query(
-    "UPDATE job_applications SET stage = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3",
-    [params.toStage, params.applicationId, params.tenantId],
+): Promise<boolean> => {
+  const updateResult = await pool.query(
+    "UPDATE job_applications SET stage = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3 AND stage = $4",
+    [params.toStage, params.applicationId, params.tenantId, params.fromStage],
   );
+  if (updateResult.rowCount === 0) return false;
+
   await pool.query(
     `INSERT INTO pipeline_events (tenant_id, application_id, from_stage, to_stage, changed_by, actor_type, note, created_at)
      VALUES ($1, $2, $3, $4, NULL, 'ai', $5, now())`,
     [params.tenantId, params.applicationId, params.fromStage, params.toStage, params.note],
   );
+  return true;
 };
 
 export const getJobApplications = async (req: AuthRequest, res: Response) => {

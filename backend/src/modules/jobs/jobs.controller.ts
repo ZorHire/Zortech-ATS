@@ -48,14 +48,13 @@ export const runJobShortlisting = async (req: AuthRequest, res: Response) => {
 
       let shortlisted = false;
       if (scoreResult.score >= SHORTLIST_THRESHOLD) {
-        await applyAiStageMove({
+        shortlisted = await applyAiStageMove({
           tenantId: tenantId!,
           applicationId: row.application_id,
           fromStage: row.current_stage,
           toStage: "shortlisted",
           note: `Auto-shortlisted by AI — score ${scoreResult.score}/100`,
         });
-        shortlisted = true;
       }
       return { application_id: row.application_id, scored: true, score: scoreResult.score, shortlisted };
     });

@@ -6,6 +6,7 @@ import { getUserTransporter } from "../email/email.controller";
 import {
   generateScreeningToken,
   hashScreeningToken,
+  verifyScreeningToken,
   runScreeningTurn,
   JobForScreening,
   ScreeningHistoryTurn,
@@ -101,7 +102,7 @@ export const getScreeningSession = async (req: Request, res: Response) => {
   try {
     const sessionResult = await pool.query(`SELECT * FROM screening_sessions WHERE id = $1`, [id]);
     const session = sessionResult.rows[0];
-    if (!session || session.token_hash !== hashScreeningToken(token)) {
+    if (!session || !verifyScreeningToken(token, session.token_hash)) {
       return res.status(404).json({ message: "Screening session not found" });
     }
     if (session.status === "expired" || session.status === "revoked" || new Date(session.expires_at) < new Date()) {
@@ -131,29 +132,48 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "message is required" });
   }
   const message = rawMessage.trim().slice(0, 2000);
+  const tokenHash = hashScreeningToken(token);
 
   try {
-    const sessionResult = await pool.query(`SELECT * FROM screening_sessions WHERE id = $1`, [id]);
-    const session = sessionResult.rows[0];
-    if (!session || session.token_hash !== hashScreeningToken(token)) {
-      return res.status(404).json({ message: "Screening session not found" });
-    }
-    if (session.status === "expired" || session.status === "revoked" || session.status === "completed") {
+    // Atomically reserve a message slot in one UPDATE — a plain read-then-check-then-write
+    // (SELECT message_count, compare, later UPDATE) lets two concurrent requests for the
+    // same session both read the same pre-increment count and both pass the cap check
+    // before either write lands, letting real Gemini calls slip past MAX_MESSAGES. Folding
+    // token verification into the same statement also avoids a separate non-constant-time
+    // JS string compare — token_hash = $2 is a UNIQUE-indexed equality lookup, not a
+    // network-timing-observable app-level comparison.
+    const reserveResult = await pool.query(
+      `UPDATE screening_sessions
+       SET message_count = message_count + 1, started_at = COALESCE(started_at, now())
+       WHERE id = $1 AND token_hash = $2 AND status NOT IN ('expired', 'revoked', 'completed')
+         AND expires_at > now() AND message_count < $3
+       RETURNING *`,
+      [id, tokenHash, MAX_MESSAGES],
+    );
+
+    if (reserveResult.rows.length === 0) {
+      // The atomic reservation already failed safely — this lookup is only to report an
+      // accurate reason, not to gate anything.
+      const diagResult = await pool.query(`SELECT * FROM screening_sessions WHERE id = $1`, [id]);
+      const diag = diagResult.rows[0];
+      if (!diag || !verifyScreeningToken(token, diag.token_hash)) {
+        return res.status(404).json({ message: "Screening session not found" });
+      }
+      if (new Date(diag.expires_at) < new Date()) {
+        await pool.query(`UPDATE screening_sessions SET status = 'expired' WHERE id = $1`, [id]);
+        return res.status(410).json({ message: "This screening link has expired" });
+      }
+      if (diag.message_count >= MAX_MESSAGES) {
+        await pool.query(
+          `UPDATE screening_sessions SET status = 'completed', completed_at = COALESCE(completed_at, now()) WHERE id = $1`,
+          [id],
+        );
+        return res.status(410).json({ message: "This screening session has reached its message limit" });
+      }
       return res.status(410).json({ message: "This screening session has ended" });
     }
-    if (new Date(session.expires_at) < new Date()) {
-      await pool.query(`UPDATE screening_sessions SET status = 'expired' WHERE id = $1`, [id]);
-      return res.status(410).json({ message: "This screening link has expired" });
-    }
-    // Defense in depth — checked before any Gemini call.
-    if (session.message_count >= MAX_MESSAGES) {
-      await pool.query(
-        `UPDATE screening_sessions SET status = 'completed', completed_at = COALESCE(completed_at, now()) WHERE id = $1`,
-        [id],
-      );
-      return res.status(410).json({ message: "This screening session has reached its message limit" });
-    }
 
+    const session = reserveResult.rows[0];
     const appResult = await pool.query(
       `SELECT ja.stage AS current_stage, j.title, j.mandatory_skills, j.preferred_skills, j.salary_min, j.salary_max, j.currency, j.work_mode
        FROM job_applications ja JOIN jobs j ON j.id = ja.job_id
@@ -196,25 +216,29 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
       [id, message, turnResult.reply],
     );
 
-    const newMessageCount = session.message_count + 1;
-    const shouldComplete = turnResult.is_complete || newMessageCount >= MAX_MESSAGES;
+    // message_count was already incremented atomically by the reservation UPDATE above.
+    const shouldComplete = turnResult.is_complete || session.message_count >= MAX_MESSAGES;
 
     await pool.query(
       `UPDATE screening_sessions
-       SET status = $1, message_count = $2, captured_answers = $3::jsonb,
-           started_at = COALESCE(started_at, now()), completed_at = $4
-       WHERE id = $5`,
-      [shouldComplete ? "completed" : "active", newMessageCount, JSON.stringify(turnResult.captured_answers), shouldComplete ? new Date() : null, id],
+       SET status = $1, captured_answers = $2::jsonb, completed_at = $3
+       WHERE id = $4`,
+      [shouldComplete ? "completed" : "active", JSON.stringify(turnResult.captured_answers), shouldComplete ? new Date() : null, id],
     );
 
     if (shouldComplete) {
-      await applyAiStageMove({
+      const moved = await applyAiStageMove({
         tenantId: session.tenant_id,
         applicationId: session.application_id,
         fromStage: row.current_stage,
         toStage: "screened",
         note: "Completed AI screening chat",
       });
+      if (!moved) {
+        console.warn(
+          `[Screening] Session ${id} completed but application ${session.application_id} had already moved past '${row.current_stage}' — stage left untouched.`,
+        );
+      }
     }
 
     res.json({ reply: turnResult.reply, is_complete: shouldComplete });
