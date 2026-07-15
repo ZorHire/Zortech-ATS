@@ -23,6 +23,7 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - '.env.production'
             backend:
               - 'backend/**'
               - 'docker-compose.yml'
