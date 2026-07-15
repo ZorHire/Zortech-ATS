@@ -1,22 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../contexts/AuthContext";
-import { api } from "../lib/api";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import { useGetOnboardingStatusQuery } from "../store/api/adminApi";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface OnboardingStatus {
-  tenant_id: string;
-  account_created: boolean;
-  profile_complete: boolean;
-  team_invited: boolean;
-  pipeline_created: boolean;
-  channel_connected: boolean;
-  first_job_posted: boolean;
-  completed_steps: number;
-  total_steps: number;
-  percent_complete: number;
-}
+import type { OnboardingStatus } from "../store/api/adminApi";
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
@@ -124,28 +112,13 @@ const C = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function OnboardingPage() {
-  const { user } = useAuth();
+  const user = useAppSelector(selectCurrentUser);
   const navigate = useNavigate();
-  const [status, setStatus] = useState<OnboardingStatus | null>(null);
-  const [loading, setLoading] = useState(true);
   const [animating, setAnimating] = useState(false);
 
-  const fetchStatus = useCallback(async () => {
-    try {
-      const data = await api.request("/onboarding/status");
-      setStatus(data);
-    } catch {
-      // silently ignore — page still renders without step data
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: status, isLoading: loading } = useGetOnboardingStatusQuery();
 
-  useEffect(() => {
-    fetchStatus();
-  }, [fetchStatus]);
-
-  // Animate progress bar after mount
+  // Animate progress bar after data loads
   useEffect(() => {
     if (!loading) {
       const t = setTimeout(() => setAnimating(true), 500);

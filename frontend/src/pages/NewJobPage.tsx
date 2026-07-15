@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ArrowLeft, Upload, CheckCircle, AlertCircle, Loader } from "lucide-react";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
-import { Client } from "../types";
+import { useGetClientsQuery, useParseJdMutation, useCreateJobMutation } from "../store/api/jobApi";
 
 const statusOptions = [
   { value: "draft", label: "Draft" },
@@ -14,8 +14,9 @@ const statusOptions = [
 
 export default function NewJobPage() {
   const navigate = useNavigate();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [jdParsing, setJdParsing] = useState(false);
+  const { data: clients = [] } = useGetClientsQuery();
+  const [parseJd, { isLoading: jdParsing }] = useParseJdMutation();
+  const [createJob] = useCreateJobMutation();
   const [jdParseMessage, setJdParseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -34,79 +35,43 @@ export default function NewJobPage() {
     mandatory_skills: "",
   });
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
-
-  const fetchClients = async () => {
-    try {
-      const data = await api.get("/clients");
-      setClients(data);
-    } catch (error) {
-      console.error("Fetch clients error:", error);
-    }
-  };
-
   const handleJDUpload = async (file: File) => {
-    setJdParsing(true);
     setJdParseMessage(null);
     try {
       const body = new FormData();
       body.append("file", file);
-      const parsed = await api.post("/parse/jd", body);
-
+      const parsed = await parseJd(body).unwrap();
       setFormData((current) => ({
         ...current,
-        title: parsed.title || current.title,
-        location: parsed.location || current.location,
-        experience_min:
-          parsed.experience_min !== undefined
-            ? parsed.experience_min
-            : current.experience_min,
-        experience_max:
-          parsed.experience_max !== undefined
-            ? parsed.experience_max
-            : current.experience_max,
-        salary_min:
-          parsed.salary_min !== undefined
-            ? parsed.salary_min
-            : current.salary_min,
-        salary_max:
-          parsed.salary_max !== undefined
-            ? parsed.salary_max
-            : current.salary_max,
+        title: (parsed.title as string) || current.title,
+        location: (parsed.location as string) || current.location,
+        experience_min: parsed.experience_min !== undefined ? (parsed.experience_min as number) : current.experience_min,
+        experience_max: parsed.experience_max !== undefined ? (parsed.experience_max as number) : current.experience_max,
+        salary_min: parsed.salary_min !== undefined ? (parsed.salary_min as number) : current.salary_min,
+        salary_max: parsed.salary_max !== undefined ? (parsed.salary_max as number) : current.salary_max,
         mandatory_skills:
-          parsed.required_skills?.length > 0
-            ? parsed.required_skills.join(", ")
+          Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
+            ? (parsed.required_skills as string[]).join(", ")
             : current.mandatory_skills,
-        description: parsed.description || current.description,
+        description: (parsed.description as string) || current.description,
       }));
-
-      setJdParseMessage({
-        type: "success",
-        text: "JD parsed successfully. Review fields and edit as needed.",
-      });
+      setJdParseMessage({ type: "success", text: "JD parsed successfully. Review fields and edit as needed." });
     } catch (error) {
       console.error("JD parse failed:", error);
-      setJdParseMessage({
-        type: "error",
-        text: "Could not extract data, please fill manually.",
-      });
-    } finally {
-      setJdParsing(false);
+      setJdParseMessage({ type: "error", text: "Could not extract data, please fill manually." });
     }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     try {
-      await api.post("/jobs", {
+      await createJob({
         ...formData,
         mandatory_skills: formData.mandatory_skills
           .split(",")
           .map((s) => s.trim())
           .filter((s) => s !== ""),
-      });
+      }).unwrap();
       navigate("/jobs");
     } catch (error: any) {
       alert(error?.data?.message || error?.message || "Unable to create job. Please verify all fields and try again.");
@@ -175,9 +140,7 @@ export default function NewJobPage() {
                 {jdParseMessage && (
                   <span
                     className={`flex items-center gap-1.5 text-xs font-medium ${
-                      jdParseMessage.type === "success"
-                        ? "text-emerald-600"
-                        : "text-red-500"
+                      jdParseMessage.type === "success" ? "text-emerald-600" : "text-red-500"
                     }`}
                   >
                     {jdParseMessage.type === "success" ? (
@@ -199,9 +162,7 @@ export default function NewJobPage() {
                 <input
                   required
                   value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                   placeholder="Senior Product Designer"
                 />
@@ -213,9 +174,7 @@ export default function NewJobPage() {
                 <select
                   required
                   value={formData.client_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, client_id: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 >
                   <option value="">Select client</option>
@@ -236,9 +195,7 @@ export default function NewJobPage() {
                 <input
                   required
                   value={formData.location}
-                  onChange={(e) =>
-                    setFormData({ ...formData, location: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                   placeholder="Bangalore"
                 />
@@ -249,9 +206,7 @@ export default function NewJobPage() {
                 </label>
                 <select
                   value={formData.status}
-                  onChange={(e) =>
-                    setFormData({ ...formData, status: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 >
                   {statusOptions.map((option) => (
@@ -270,9 +225,7 @@ export default function NewJobPage() {
                 </label>
                 <select
                   value={formData.priority}
-                  onChange={(e) =>
-                    setFormData({ ...formData, priority: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 >
                   <option value="low">Low</option>
@@ -289,12 +242,7 @@ export default function NewJobPage() {
                   type="number"
                   min={0}
                   value={formData.experience_min}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      experience_min: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, experience_min: Number(e.target.value) })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 />
               </div>
@@ -306,12 +254,7 @@ export default function NewJobPage() {
                   type="number"
                   min={0}
                   value={formData.experience_max}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      experience_max: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, experience_max: Number(e.target.value) })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 />
               </div>
@@ -326,12 +269,7 @@ export default function NewJobPage() {
                   type="number"
                   min={0}
                   value={formData.salary_min}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      salary_min: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, salary_min: Number(e.target.value) })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                   placeholder="0"
                 />
@@ -344,12 +282,7 @@ export default function NewJobPage() {
                   type="number"
                   min={0}
                   value={formData.salary_max}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      salary_max: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, salary_max: Number(e.target.value) })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                   placeholder="0"
                 />
@@ -362,12 +295,7 @@ export default function NewJobPage() {
                   type="number"
                   min={1}
                   value={formData.headcount}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      headcount: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => setFormData({ ...formData, headcount: Number(e.target.value) })}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 />
               </div>
@@ -379,9 +307,7 @@ export default function NewJobPage() {
               </label>
               <input
                 value={formData.mandatory_skills}
-                onChange={(e) =>
-                  setFormData({ ...formData, mandatory_skills: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, mandatory_skills: e.target.value })}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 placeholder="React, Node.js, Product Management"
               />
@@ -393,9 +319,7 @@ export default function NewJobPage() {
               </label>
               <textarea
                 value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={6}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 placeholder="Provide core JD, responsibilities and must-have skills."

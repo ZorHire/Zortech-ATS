@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Briefcase, Eye, EyeOff, Shield, CheckCircle2, AlertTriangle } from "lucide-react";
-import api from "../lib/api";
+import { useResetPasswordMutation } from "../store/api/authApi";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -13,8 +13,9 @@ export default function ResetPasswordPage() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  const [resetPassword, { isLoading: loading }] = useResetPasswordMutation();
 
   if (!token) {
     return (
@@ -47,14 +48,11 @@ export default function ResetPasswordPage() {
       setError("Passwords do not match.");
       return;
     }
-    setLoading(true);
     try {
-      await api.post("/auth/reset-password", { token, newPassword });
+      await resetPassword({ token, newPassword }).unwrap();
       setSuccess(true);
     } catch (err: any) {
-      setError(err?.message || "Failed to reset password. The link may have expired.");
-    } finally {
-      setLoading(false);
+      setError(err?.data?.message || err?.message || "Failed to reset password. The link may have expired.");
     }
   };
 

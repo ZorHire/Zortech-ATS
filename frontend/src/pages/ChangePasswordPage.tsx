@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { KeyRound, Lock, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../lib/api';
+import { useChangePasswordMutation } from '../store/api/authApi';
+import { useAppDispatch } from '../hooks/useAppDispatch';
+import { clearCredentials } from '../store/slices/authSlice';
 
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -10,7 +11,8 @@ export default function ChangePasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const { signOut } = useAuth();
+  const [changePassword] = useChangePasswordMutation();
+  const dispatch = useAppDispatch();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,14 +30,15 @@ export default function ChangePasswordPage() {
 
     setLoading(true);
     try {
-      await api.post('/auth/change-password', { currentPassword, newPassword });
+      await changePassword({ currentPassword, newPassword }).unwrap();
       setSuccess(true);
-      // Wait a bit then logout so they can login with new password
+      // Wait a bit then logout so they can login with new password.
+      // authMiddleware handles JWT removal + cache reset on clearCredentials.
       setTimeout(() => {
-        signOut();
+        dispatch(clearCredentials());
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Failed to change password');
+      setError(err?.data?.message || err?.message || 'Failed to change password');
     } finally {
       setLoading(false);
     }

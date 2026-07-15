@@ -6,6 +6,20 @@ permissions:
   pull-requests: write
 
 jobs:
+  # ── Detect which parts of the codebase changed ──────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+
   # ── TypeScript validation — runs on every PR ─────────────────────────────────
   validate:
     runs-on: ubuntu-latest
@@ -38,10 +52,12 @@ jobs:
       - name: Type check frontend
         run: cd frontend && npx tsc --noEmit
 
-  # ── Firebase preview deploy — only after validation passes ──────────────────
+  # ── Firebase preview deploy — only when frontend files changed ───────────────
   build_and_preview:
-    needs: validate
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    needs: [validate, changes]
+    if: >-
+      ${{ github.event.pull_request.head.repo.full_name == github.repository &&
+          needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +71,9 @@ jobs:
 
       - name: Build frontend
         run: cd frontend && npm install && npm run build
+
+      - name: Stamp build to ensure unique content per run
+        run: echo "${{ github.run_id }}" > frontend/dist/build.txt
 
       - name: Deploy preview to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0

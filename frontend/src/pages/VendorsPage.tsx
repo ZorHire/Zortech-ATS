@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
+  Upload,
   Search,
   Mail,
   Users,
@@ -17,13 +19,42 @@ import {
   Trash2,
   ClipboardList,
   Loader2,
+  Pencil,
+  BarChart2,
+  Trophy,
+  Star,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import BulkVendorUploadModal from "../components/bulk/BulkVendorUploadModal";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
 import { Vendor } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
 import EmailToast from "../components/ui/EmailToast";
-import { useAuth } from "../contexts/AuthContext";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import {
+  useGetVendorsQuery,
+  useCreateVendorMutation,
+  useUpdateVendorMutation,
+  useDeleteVendorMutation,
+  useParseVendorMutation,
+  useGetVendorScorecardQuery,
+  useListVendorContractsQuery,
+  useCreateVendorContractMutation,
+  useUpdateVendorContractMutation,
+  useDeleteVendorContractMutation,
+  useAddSubmissionFeedbackMutation,
+} from "../store/api/vendorApi";
+import type { VendorContract } from "../store/api/vendorApi";
+import { useGetJobsQuery, useUpdateJobMutation } from "../store/api/jobApi";
+import { useGetUsersQuery } from "../store/api/adminApi";
+import {
+  useAssignJdMutation,
+  useAssignJdRecruiterMutation,
+  useSendSingleEmailMutation,
+} from "../store/api/emailApi";
 
 const tierConfig: Record<
   string,
@@ -68,17 +99,6 @@ function ScoreBar({
       </span>
     </div>
   );
-}
-
-interface JobOption {
-  id: string;
-  title: string;
-}
-
-interface RecruiterOption {
-  id: string;
-  email: string;
-  full_name: string;
 }
 
 function MultiSelectList({
@@ -165,7 +185,7 @@ function AssignJdModal({
   userRole,
   onClose,
 }: {
-  vendors: import("../types").Vendor[];
+  vendors: Vendor[];
   userRole: string;
   onClose: () => void;
 }) {
@@ -173,10 +193,6 @@ function AssignJdModal({
   const canAssignRecruiter = userRole === "super_admin" || userRole === "accounts_manager";
 
   const [assignType, setAssignType] = useState<"recruiter" | "vendor">("vendor");
-  const [jobs, setJobs] = useState<JobOption[]>([]);
-  const [loadingJobs, setLoadingJobs] = useState(true);
-  const [recruiters, setRecruiters] = useState<RecruiterOption[]>([]);
-  const [loadingRecruiters, setLoadingRecruiters] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState("");
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
@@ -184,6 +200,20 @@ function AssignJdModal({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // RTK Query — data
+  const { data: jobs = [], isLoading: loadingJobs } = useGetJobsQuery();
+  const { data: allUsers = [], isLoading: loadingRecruiters } = useGetUsersQuery(
+    undefined,
+    { skip: assignType !== "recruiter" },
+  );
+  const recruiters = allUsers.filter((u) => u.role === "recruiter");
+
+  // RTK Query — mutations
+  const [assignJd] = useAssignJdMutation();
+  const [assignJdRecruiter] = useAssignJdRecruiterMutation();
+  const [updateJob] = useUpdateJobMutation();
+  const [sendSingleEmail] = useSendSingleEmailMutation();
 
   const toggleVendor = (id: string) =>
     setSelectedVendorIds((prev) =>
@@ -194,36 +224,6 @@ function AssignJdModal({
     setSelectedRecruiterIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
-
-  useEffect(() => {
-    api
-      .get("/jobs")
-      .then((data: any[]) =>
-        setJobs(data.map((j) => ({ id: j.id, title: j.title }))),
-      )
-      .catch(() => setError("Could not load jobs."))
-      .finally(() => setLoadingJobs(false));
-  }, []);
-
-  useEffect(() => {
-    if (assignType !== "recruiter") return;
-    setLoadingRecruiters(true);
-    api
-      .get("/admin/users")
-      .then((data: any[]) =>
-        setRecruiters(
-          data
-            .filter((u: any) => u.role === "recruiter")
-            .map((u: any) => ({
-              id: u.id,
-              email: u.email,
-              full_name: u.full_name || u.email,
-            })),
-        ),
-      )
-      .catch(() => setError("Could not load recruiters."))
-      .finally(() => setLoadingRecruiters(false));
-  }, [assignType]);
 
   const handleAssign = async () => {
     setError("");
@@ -245,20 +245,20 @@ function AssignJdModal({
     setSending(true);
     try {
       if (assignType === "vendor") {
-        await api.post("/email/assign-jd", {
+        await assignJd({
           job_id: selectedJobId,
           vendor_ids: selectedVendorIds,
           deadline_days: deadlineDays,
           site_url: window.location.origin,
-        });
+        }).unwrap();
       } else {
         try {
-          await api.post("/email/assign-jd-recruiter", {
+          await assignJdRecruiter({
             job_id: selectedJobId,
             recruiter_ids: selectedRecruiterIds,
             deadline_days: deadlineDays,
             site_url: window.location.origin,
-          });
+          }).unwrap();
         } catch (recruiterAssignError: any) {
           const status = recruiterAssignError?.status;
           if (status !== 404 && status !== 405) throw recruiterAssignError;
@@ -266,22 +266,23 @@ function AssignJdModal({
           const selectedJob = jobs.find((j) => j.id === selectedJobId);
           if (!selectedJob) throw recruiterAssignError;
 
-          await api.patch(`/jobs/${selectedJobId}`, {
-            assigned_recruiter_ids: selectedRecruiterIds,
-          });
+          await updateJob({
+            id: selectedJobId,
+            body: { assigned_recruiter_ids: selectedRecruiterIds },
+          }).unwrap();
 
           const dayLabel = deadlineDays === 1 ? "1 day" : `${deadlineDays} days`;
           await Promise.allSettled(
             selectedRecruiterIds.map((rid) => {
               const rec = recruiters.find((r) => r.id === rid);
               if (!rec) return Promise.resolve();
-              return api.post("/email/send-single", {
+              return sendSingleEmail({
                 to: rec.email,
                 subject: `JD Assignment: ${selectedJob.title}`,
                 body:
                   `Hi ${rec.full_name || rec.email},\n\n` +
                   `You have been assigned "${selectedJob.title}". Please submit candidates within ${dayLabel} at ${window.location.origin}.`,
-              });
+              }).unwrap();
             }),
           );
         }
@@ -487,19 +488,80 @@ function AssignJdModal({
   );
 }
 
+const stageLabel: Record<string, string> = {
+  new: "New", screening: "Screening", interview: "Interview",
+  shortlisted: "Shortlisted", offered: "Offered", hired: "Hired", rejected: "Rejected",
+};
+
 function VendorDetailModal({
   vendor,
   onClose,
   onSendEmail,
   emailSending,
+  onEdit,
 }: {
   vendor: Vendor;
   onClose: () => void;
   onSendEmail: (email: string) => void;
   emailSending: boolean;
+  onEdit: (v: Vendor) => void;
 }) {
   const tier = tierConfig[vendor.tier];
   const TierIcon = tier.icon;
+  const { data: scorecard } = useGetVendorScorecardQuery(vendor.id);
+  const metrics = scorecard ?? vendor;
+
+  const [addSubmissionFeedback] = useAddSubmissionFeedbackMutation();
+  const { data: contracts = [] } = useListVendorContractsQuery(vendor.id);
+  const [createVendorContract, { isLoading: contractCreating }] = useCreateVendorContractMutation();
+  const [updateVendorContract] = useUpdateVendorContractMutation();
+  const [deleteVendorContract] = useDeleteVendorContractMutation();
+
+  const emptyContractForm = { title: "", contract_type: "msa", start_date: "", end_date: "", status: "active", value: "", notes: "" };
+  const [showContractForm, setShowContractForm] = useState(false);
+  const [editingContract, setEditingContract] = useState<VendorContract | null>(null);
+  const [contractForm, setContractForm] = useState(emptyContractForm);
+  const [contractError, setContractError] = useState("");
+  const [localFeedback, setLocalFeedback] = useState<Record<string, { rating: number | null; notes: string; saving: boolean }>>({});
+
+  const handleSaveContract = async () => {
+    setContractError("");
+    if (!contractForm.title || !contractForm.start_date) { setContractError("Title and start date are required."); return; }
+    try {
+      const body = {
+        title: contractForm.title, contract_type: contractForm.contract_type,
+        start_date: contractForm.start_date, end_date: contractForm.end_date || null,
+        status: contractForm.status, value: contractForm.value ? Number(contractForm.value) : null,
+        notes: contractForm.notes || null,
+      };
+      if (editingContract) {
+        await updateVendorContract({ vendorId: vendor.id, contractId: editingContract.id, body }).unwrap();
+      } else {
+        await createVendorContract({ vendorId: vendor.id, body }).unwrap();
+      }
+      setShowContractForm(false); setEditingContract(null); setContractForm(emptyContractForm);
+    } catch { setContractError("Failed to save contract."); }
+  };
+
+  const handleDeleteContract = async (contractId: string) => {
+    if (!window.confirm("Delete this contract?")) return;
+    await deleteVendorContract({ vendorId: vendor.id, contractId }).unwrap();
+  };
+
+  const handleSaveFeedback = async (submissionId: string) => {
+    const fb = localFeedback[submissionId];
+    if (!fb) return;
+    setLocalFeedback((prev) => ({ ...prev, [submissionId]: { ...fb, saving: true } }));
+    try {
+      await addSubmissionFeedback({ vendorId: vendor.id, submissionId, body: { recruiter_rating: fb.rating, recruiter_notes: fb.notes || null } }).unwrap();
+    } catch {}
+    setLocalFeedback((prev) => ({ ...prev, [submissionId]: { ...prev[submissionId], saving: false } }));
+  };
+
+  const contractStatusColor: Record<string, string> = {
+    active: "bg-emerald-50 text-emerald-700", draft: "bg-gray-100 text-gray-600",
+    expired: "bg-amber-50 text-amber-700", terminated: "bg-red-50 text-red-600",
+  };
 
   return (
     <div
@@ -630,28 +692,26 @@ function VendorDetailModal({
             </div>
           )}
 
-          {/* Performance metrics */}
+          {/* Performance metrics — live from scorecard when available */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+              <BarChart2 size={12} />
               Performance Metrics
+              {scorecard && (
+                <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Live</span>
+              )}
             </h3>
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="text-center p-3 bg-gray-50 rounded-xl">
-                <p className="text-xl font-bold text-gray-900">
-                  {vendor.submission_count}
-                </p>
+                <p className="text-xl font-bold text-gray-900">{metrics.submission_count}</p>
                 <p className="text-xs text-gray-400 mt-0.5">Submissions</p>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-xl">
-                <p className="text-xl font-bold text-gray-900">
-                  {vendor.shortlist_rate}%
-                </p>
+                <p className="text-xl font-bold text-gray-900">{metrics.shortlist_rate}%</p>
                 <p className="text-xs text-gray-400 mt-0.5">Shortlist Rate</p>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-xl">
-                <p className="text-xl font-bold text-gray-900">
-                  {vendor.fill_rate}%
-                </p>
+                <p className="text-xl font-bold text-gray-900">{metrics.fill_rate}%</p>
                 <p className="text-xs text-gray-400 mt-0.5">Fill Rate</p>
               </div>
             </div>
@@ -659,51 +719,259 @@ function VendorDetailModal({
             <div className="space-y-3">
               <div>
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <span className="flex items-center gap-1">
-                    <TrendingUp size={12} />
-                    Quality Score
-                  </span>
-                  <span className="font-semibold text-gray-700">
-                    {vendor.quality_score}%
-                  </span>
+                  <span className="flex items-center gap-1"><TrendingUp size={12} />Quality Score</span>
+                  <span className="font-semibold text-gray-700">{metrics.quality_score}%</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      vendor.quality_score >= 80
-                        ? "bg-emerald-500"
-                        : vendor.quality_score >= 60
-                          ? "bg-amber-500"
-                          : "bg-red-400"
-                    }`}
-                    style={{ width: `${vendor.quality_score}%` }}
+                    className={`h-full rounded-full transition-all ${metrics.quality_score >= 80 ? "bg-emerald-500" : metrics.quality_score >= 60 ? "bg-amber-500" : "bg-red-400"}`}
+                    style={{ width: `${metrics.quality_score}%` }}
                   />
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                  <span className="flex items-center gap-1">
-                    <CheckCircle2 size={12} />
-                    SLA Adherence
-                  </span>
-                  <span className="font-semibold text-gray-700">
-                    {vendor.sla_adherence}%
-                  </span>
+                  <span className="flex items-center gap-1"><CheckCircle2 size={12} />SLA Adherence</span>
+                  <span className="font-semibold text-gray-700">{metrics.sla_adherence}%</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      vendor.sla_adherence >= 85
-                        ? "bg-blue-500"
-                        : vendor.sla_adherence >= 65
-                          ? "bg-amber-500"
-                          : "bg-red-400"
-                    }`}
-                    style={{ width: `${vendor.sla_adherence}%` }}
+                    className={`h-full rounded-full transition-all ${metrics.sla_adherence >= 85 ? "bg-blue-500" : metrics.sla_adherence >= 65 ? "bg-amber-500" : "bg-red-400"}`}
+                    style={{ width: `${metrics.sla_adherence}%` }}
                   />
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Job breakdown — only when scorecard loaded */}
+          {scorecard && scorecard.job_breakdown.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Job Breakdown
+              </h3>
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      {["Job", "Submitted", "Shortlisted", "Hired"].map((h) => (
+                        <th key={h} className="px-3 py-2.5 font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {scorecard.job_breakdown.map((row) => (
+                      <tr key={row.job_id} className="hover:bg-gray-50/60">
+                        <td className="px-3 py-2.5 font-medium text-gray-800 max-w-[180px] truncate">{row.title}</td>
+                        <td className="px-3 py-2.5 text-gray-600">{row.submissions}</td>
+                        <td className="px-3 py-2.5 text-amber-600 font-semibold">{row.shortlisted}</td>
+                        <td className="px-3 py-2.5 text-emerald-600 font-semibold">{row.hired}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Recent submissions */}
+          {scorecard && scorecard.recent_submissions.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Recent Submissions
+              </h3>
+              <ol className="space-y-2">
+                {scorecard.recent_submissions.map((s) => {
+                  const fb = localFeedback[s.submission_id];
+                  const currentRating = fb !== undefined ? fb.rating : s.recruiter_rating;
+                  const currentNotes = fb !== undefined ? fb.notes : (s.recruiter_notes ?? "");
+                  const isDirty = fb !== undefined && (fb.rating !== s.recruiter_rating || fb.notes !== (s.recruiter_notes ?? ""));
+                  return (
+                    <li key={s.submission_id} className="p-3 bg-gray-50 rounded-xl space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{s.candidate_full_name}</p>
+                          <p className="text-xs text-gray-400 truncate">{s.job_title}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          {s.pipeline_stage && (
+                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                              {stageLabel[s.pipeline_stage] ?? s.pipeline_stage}
+                            </span>
+                          )}
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            {new Date(s.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                          </p>
+                        </div>
+                      </div>
+                      {/* Star rating */}
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setLocalFeedback((prev) => ({
+                              ...prev,
+                              [s.submission_id]: { rating: star === currentRating ? null : star, notes: currentNotes, saving: false },
+                            }))}
+                            className="transition-colors"
+                          >
+                            <Star
+                              size={14}
+                              className={star <= (currentRating ?? 0) ? "text-amber-400 fill-amber-400" : "text-gray-300"}
+                            />
+                          </button>
+                        ))}
+                        {isDirty && (
+                          <button
+                            onClick={() => handleSaveFeedback(s.submission_id)}
+                            disabled={fb?.saving}
+                            className="ml-2 text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded-full font-semibold disabled:opacity-50"
+                          >
+                            {fb?.saving ? "Saving…" : "Save"}
+                          </button>
+                        )}
+                      </div>
+                      {isDirty && (
+                        <input
+                          type="text"
+                          placeholder="Add a note…"
+                          value={currentNotes}
+                          onChange={(e) => setLocalFeedback((prev) => ({
+                            ...prev,
+                            [s.submission_id]: { ...prev[s.submission_id], notes: e.target.value },
+                          }))}
+                          className="w-full text-xs px-2 py-1 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        />
+                      )}
+                      {!isDirty && s.recruiter_notes && (
+                        <p className="text-xs text-gray-400 italic">"{s.recruiter_notes}"</p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
+
+          {/* Contracts */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText size={12} />
+                Contracts
+                {contracts.length > 0 && (
+                  <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">{contracts.length}</span>
+                )}
+              </h3>
+              <button
+                onClick={() => { setEditingContract(null); setContractForm(emptyContractForm); setContractError(""); setShowContractForm((v) => !v); }}
+                className="flex items-center gap-1 text-xs text-blue-600 font-semibold hover:text-blue-800"
+              >
+                {showContractForm && !editingContract ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {showContractForm && !editingContract ? "Cancel" : "Add"}
+              </button>
+            </div>
+
+            {/* Add/Edit contract form */}
+            {showContractForm && (
+              <div className="bg-gray-50 rounded-xl p-4 mb-3 space-y-3 border border-gray-100">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Title *</label>
+                    <input type="text" value={contractForm.title} onChange={(e) => setContractForm((f) => ({ ...f, title: e.target.value }))}
+                      placeholder="Master Service Agreement 2025"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Type</label>
+                    <select value={contractForm.contract_type} onChange={(e) => setContractForm((f) => ({ ...f, contract_type: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                      <option value="msa">MSA</option>
+                      <option value="nda">NDA</option>
+                      <option value="sow">SOW</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                    <select value={contractForm.status} onChange={(e) => setContractForm((f) => ({ ...f, status: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+                      <option value="active">Active</option>
+                      <option value="draft">Draft</option>
+                      <option value="expired">Expired</option>
+                      <option value="terminated">Terminated</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Start Date *</label>
+                    <input type="date" value={contractForm.start_date} onChange={(e) => setContractForm((f) => ({ ...f, start_date: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+                    <input type="date" value={contractForm.end_date} onChange={(e) => setContractForm((f) => ({ ...f, end_date: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Value (INR)</label>
+                    <input type="number" value={contractForm.value} onChange={(e) => setContractForm((f) => ({ ...f, value: e.target.value }))}
+                      placeholder="500000"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
+                    <input type="text" value={contractForm.notes} onChange={(e) => setContractForm((f) => ({ ...f, notes: e.target.value }))}
+                      placeholder="Optional notes…"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white" />
+                  </div>
+                </div>
+                {contractError && <p className="text-xs text-red-600">{contractError}</p>}
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => { setShowContractForm(false); setEditingContract(null); setContractForm(emptyContractForm); }}
+                    className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button>
+                  <button onClick={handleSaveContract} disabled={contractCreating}
+                    className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    {contractCreating ? "Saving…" : editingContract ? "Update" : "Add Contract"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Contracts list */}
+            {contracts.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">No contracts yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {contracts.map((c) => (
+                  <div key={c.id} className="flex items-start justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-sm font-medium text-gray-800 truncate">{c.title}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${contractStatusColor[c.status] ?? "bg-gray-100 text-gray-600"}`}>
+                          {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        {c.contract_type.toUpperCase()} · {new Date(c.start_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                        {c.end_date && ` → ${new Date(c.end_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}
+                        {c.value ? ` · ₹${Number(c.value).toLocaleString("en-IN")}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button onClick={() => { setEditingContract(c); setContractForm({ title: c.title, contract_type: c.contract_type, start_date: c.start_date, end_date: c.end_date ?? "", status: c.status, value: c.value ? String(c.value) : "", notes: c.notes ?? "" }); setContractError(""); setShowContractForm(true); }}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => handleDeleteContract(c.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Specializations & Geographies */}
@@ -749,14 +1017,23 @@ function VendorDetailModal({
 
         {/* Footer actions */}
         <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
-          <button
-            onClick={() => onSendEmail(vendor.primary_contact_email)}
-            disabled={emailSending}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            <Mail size={14} />
-            {emailSending ? "Sending…" : "Send Job"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onSendEmail(vendor.primary_contact_email)}
+              disabled={emailSending}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Mail size={14} />
+              {emailSending ? "Sending…" : "Send Job"}
+            </button>
+            <button
+              onClick={() => onEdit(vendor)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <Pencil size={14} />
+              Edit
+            </button>
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-colors"
@@ -769,24 +1046,154 @@ function VendorDetailModal({
   );
 }
 
+function EditVendorModal({
+  vendor,
+  onClose,
+}: {
+  vendor: Vendor;
+  onClose: () => void;
+}) {
+  const [updateVendor, { isLoading: saving }] = useUpdateVendorMutation();
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    company_name: vendor.company_name,
+    registration_number: vendor.registration_number ?? "",
+    gst_id: vendor.gst_id ?? "",
+    primary_contact_name: vendor.primary_contact_name,
+    primary_contact_email: vendor.primary_contact_email,
+    primary_contact_phone: vendor.primary_contact_phone ?? "",
+    industry_specializations: vendor.industry_specializations.join(", "),
+    geographies: vendor.geographies.join(", "),
+    tier: vendor.tier as string,
+    is_active: vendor.is_active,
+  });
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await updateVendor({
+        id: vendor.id,
+        body: {
+          company_name: form.company_name,
+          registration_number: form.registration_number || null,
+          gst_id: form.gst_id || null,
+          primary_contact_name: form.primary_contact_name,
+          primary_contact_email: form.primary_contact_email,
+          primary_contact_phone: form.primary_contact_phone || null,
+          industry_specializations: form.industry_specializations.split(",").map((s) => s.trim()).filter(Boolean),
+          geographies: form.geographies.split(",").map((s) => s.trim()).filter(Boolean),
+          tier: form.tier,
+          is_active: form.is_active,
+        },
+      }).unwrap();
+      onClose();
+    } catch (err: any) {
+      setError(err?.data?.message ?? "Failed to save changes.");
+    }
+  };
+
+  const field = (label: string, key: keyof typeof form, placeholder?: string, type = "text") => (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type={type}
+        value={form[key] as string}
+        onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+      />
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Pencil size={16} className="text-blue-600" />
+            <h2 className="text-base font-bold text-gray-900">Edit Vendor</h2>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-gray-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+          <div className="grid gap-4 md:grid-cols-2">
+            {field("Company Name", "company_name", "Staffing Agency Ltd")}
+            {field("Contact Name", "primary_contact_name", "Primary Contact")}
+            {field("Contact Email", "primary_contact_email", "contact@agency.com")}
+            {field("Contact Phone", "primary_contact_phone", "+91-XXXXXXXXXX")}
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {field("Industry Specializations", "industry_specializations", "IT staffing, healthcare")}
+            {field("Geographies", "geographies", "India, UAE")}
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Tier</label>
+              <select
+                value={form.tier}
+                onChange={(e) => setForm((f) => ({ ...f, tier: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="standard">Standard</option>
+                <option value="preferred">Preferred</option>
+                <option value="blocked">Blocked</option>
+              </select>
+            </div>
+            {field("Registration Number", "registration_number", "123456789")}
+            {field("GST ID", "gst_id", "GSTIN")}
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={form.is_active}
+              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+              className="w-4 h-4 rounded border-gray-300 accent-blue-600"
+            />
+            <label htmlFor="is_active" className="text-sm font-medium text-gray-700">Active vendor</label>
+          </div>
+          {error && <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-2.5">{error}</p>}
+        </form>
+
+        <div className="px-6 pb-6 pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
+          <button onClick={onClose} className="px-4 py-2 border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+          >
+            {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VendorsPage() {
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const user = useAppSelector(selectCurrentUser);
   const userRole: string = user?.role ?? "";
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [vendorToEdit, setVendorToEdit] = useState<Vendor | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [showAddVendor, setShowAddVendor] = useState(false);
+  const [showBulkVendorUpload, setShowBulkVendorUpload] = useState(false);
   const [showAssignJd, setShowAssignJd] = useState(false);
   const [vendorFile, setVendorFile] = useState<File | null>(null);
-  const [vendorParsing, setVendorParsing] = useState(false);
   const [vendorParseMessage, setVendorParseMessage] = useState("");
   const [vendorParseError, setVendorParseError] = useState("");
-  const [formLoading, setFormLoading] = useState(false);
   const [vendorFormData, setVendorFormData] = useState({
     company_name: "",
     registration_number: "",
@@ -799,20 +1206,11 @@ export default function VendorsPage() {
     tier: "standard",
   });
 
-  useEffect(() => {
-    fetchVendors();
-  }, []);
-
-  const fetchVendors = async () => {
-    try {
-      const data = await api.get("/vendors");
-      setVendors(data);
-    } catch (error) {
-      console.error("Fetch vendors error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // RTK Query
+  const { data: vendors = [], isLoading: loading } = useGetVendorsQuery();
+  const [createVendor, { isLoading: formLoading }] = useCreateVendorMutation();
+  const [deleteVendor] = useDeleteVendorMutation();
+  const [parseVendor, { isLoading: vendorParsing }] = useParseVendorMutation();
 
   const resetVendorForm = () => {
     setVendorFormData({
@@ -829,35 +1227,32 @@ export default function VendorsPage() {
     setVendorFile(null);
     setVendorParseMessage("");
     setVendorParseError("");
-    setVendorParsing(false);
   };
 
   const parseVendorFile = async (file: File) => {
-    setVendorParsing(true);
     setVendorParseMessage("");
     setVendorParseError("");
-
     try {
       const body = new FormData();
       body.append("file", file);
-      const parsed = await api.post("/parse/vendor", body);
+      const parsed = await parseVendor(body).unwrap();
 
       setVendorFormData((current) => ({
         ...current,
-        company_name: parsed.company_name || current.company_name,
+        company_name: (parsed.company_name as string) || current.company_name,
         primary_contact_name:
-          parsed.primary_contact_name || current.primary_contact_name,
+          (parsed.primary_contact_name as string) || current.primary_contact_name,
         primary_contact_email:
-          parsed.primary_contact_email || current.primary_contact_email,
+          (parsed.primary_contact_email as string) || current.primary_contact_email,
         primary_contact_phone:
-          parsed.primary_contact_phone || current.primary_contact_phone,
+          (parsed.primary_contact_phone as string) || current.primary_contact_phone,
         industry_specializations:
-          parsed.industry_specializations?.length > 0
-            ? parsed.industry_specializations.join(", ")
+          (parsed.industry_specializations as string[])?.length > 0
+            ? (parsed.industry_specializations as string[]).join(", ")
             : current.industry_specializations,
         geographies:
-          parsed.geographies?.length > 0
-            ? parsed.geographies.join(", ")
+          (parsed.geographies as string[])?.length > 0
+            ? (parsed.geographies as string[]).join(", ")
             : current.geographies,
       }));
 
@@ -865,22 +1260,18 @@ export default function VendorsPage() {
         "Vendor document parsed successfully. Please review the data.",
       );
     } catch (error: any) {
-      console.error("Vendor parse failed:", error);
       setVendorParseError(
         error?.message || "Could not extract vendor data from the file.",
       );
-    } finally {
-      setVendorParsing(false);
     }
   };
 
   const handleAddVendor = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setFormLoading(true);
     setVendorParseError("");
 
     try {
-      const payload = {
+      await createVendor({
         company_name: vendorFormData.company_name,
         registration_number: vendorFormData.registration_number,
         gst_id: vendorFormData.gst_id,
@@ -896,27 +1287,20 @@ export default function VendorsPage() {
           .map((item) => item.trim())
           .filter(Boolean),
         tier: vendorFormData.tier,
-      };
-
-      const createdVendor = await api.post("/vendors", payload);
-      setVendors([createdVendor, ...vendors]);
+      }).unwrap();
       setShowAddVendor(false);
       resetVendorForm();
     } catch (error: any) {
-      console.error("Add vendor failed:", error);
       setVendorParseError(
         error?.message || "Failed to create vendor. Please check the form.",
       );
-    } finally {
-      setFormLoading(false);
     }
   };
 
   const handleDeleteVendor = async (id: string) => {
     if (!window.confirm("Delete this vendor? This cannot be undone.")) return;
     try {
-      await api.delete(`/vendors/${id}`);
-      setVendors((prev) => prev.filter((v) => v.id !== id));
+      await deleteVendor(id).unwrap();
       if (selectedVendor?.id === id) setSelectedVendor(null);
     } catch {
       alert("Failed to delete vendor");
@@ -952,15 +1336,12 @@ export default function VendorsPage() {
     setDeleting(true);
     const ids = Array.from(selectedIds);
     const results = await Promise.allSettled(
-      ids.map((id) => api.delete(`/vendors/${id}`)),
+      ids.map((id) => deleteVendor(id).unwrap()),
     );
-
-    const deleted = ids.filter((_, i) => results[i].status === "fulfilled");
-    setVendors((prev) => prev.filter((v) => !deleted.includes(v.id)));
     setSelectedIds(new Set());
     setDeleting(false);
 
-    const failed = ids.length - deleted.length;
+    const failed = results.filter((r) => r.status === "rejected").length;
     if (failed > 0) {
       alert(`${failed} vendor${failed > 1 ? "s" : ""} could not be deleted.`);
     }
@@ -1003,11 +1384,25 @@ export default function VendorsPage() {
         actions={
           <div className="flex gap-2">
             <button
+              onClick={() => navigate("/vendors/leaderboard")}
+              className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Trophy size={16} className="text-amber-500" />
+              Leaderboard
+            </button>
+            <button
               onClick={() => setShowAssignJd(true)}
               className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               <ClipboardList size={16} />
               Assign JD
+            </button>
+            <button
+              onClick={() => setShowBulkVendorUpload(true)}
+              className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+            >
+              <Upload size={16} />
+              Bulk Import
             </button>
             <button
               onClick={() => setShowAddVendor(true)}
@@ -1171,6 +1566,13 @@ export default function VendorsPage() {
 
       {emailToast && <EmailToast {...emailToast} />}
 
+      {showBulkVendorUpload && (
+        <BulkVendorUploadModal
+          onClose={() => setShowBulkVendorUpload(false)}
+          onSuccess={() => {}}
+        />
+      )}
+
       {showAssignJd && (
         <AssignJdModal
           vendors={vendors}
@@ -1187,6 +1589,14 @@ export default function VendorsPage() {
             sendEmail(email, { subject: "Job Opportunity from ZorHire" })
           }
           emailSending={emailSending}
+          onEdit={(v) => { setSelectedVendor(null); setVendorToEdit(v); }}
+        />
+      )}
+
+      {vendorToEdit && (
+        <EditVendorModal
+          vendor={vendorToEdit}
+          onClose={() => setVendorToEdit(null)}
         />
       )}
 
@@ -1374,9 +1784,7 @@ export default function VendorsPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0] || null;
                     setVendorFile(file);
-                    if (file) {
-                      parseVendorFile(file);
-                    }
+                    if (file) parseVendorFile(file);
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />

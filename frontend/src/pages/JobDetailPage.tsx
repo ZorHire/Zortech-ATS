@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -12,13 +12,18 @@ import {
   Building2,
   TrendingUp,
   UserPlus,
+  Globe,
 } from 'lucide-react';
 import Header from '../components/layout/Header';
 import { jobStatusLabels } from '../lib/mockData';
-import { Job } from '../types';
-import api from '../lib/api';
-import { useAuth } from '../contexts/AuthContext';
+import { useGetJobQuery, useUpdateJobMutation } from '../store/api/jobApi';
+import { useAppSelector } from '../hooks/useAppSelector';
+import { selectCurrentUser } from '../store/slices/authSlice';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
+import JdApprovalPanel from '../components/jobs/JdApprovalPanel';
+import JdVersionHistory from '../components/jobs/JdVersionHistory';
+import JobBoardStatusSection from '../components/jobs/JobBoardStatusSection';
+import JobBoardPublishModal from '../components/jobs/JobBoardPublishModal';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -55,12 +60,11 @@ const STATUS_OPTIONS = [
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { profile } = useAuth();
-  const [job, setJob] = useState<Job | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const profile = useAppSelector(selectCurrentUser);
+  const { data: job, isLoading, error, refetch } = useGetJobQuery(id!, { skip: !id });
+  const [updateJob, { isLoading: statusChanging }] = useUpdateJobMutation();
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
-  const [statusChanging, setStatusChanging] = useState(false);
+  const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
 
   const canEditStatus =
     profile?.role === 'super_admin' ||
@@ -69,31 +73,14 @@ export default function JobDetailPage() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!job || !id) return;
-    const prev = job.status;
-    setJob({ ...job, status: newStatus as Job['status'] });
-    setStatusChanging(true);
     try {
-      await api.patch(`/jobs/${id}`, { status: newStatus });
+      await updateJob({ id, body: { status: newStatus } }).unwrap();
     } catch {
-      setJob({ ...job, status: prev });
       alert('Failed to update job status');
-    } finally {
-      setStatusChanging(false);
     }
   };
 
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    api
-      .get(`/jobs/${id}`)
-      .then((data) => setJob(data))
-      .catch((err: any) => setError(err.message || 'Failed to load job'))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header title="Job Details" subtitle="Loading..." />
@@ -111,7 +98,9 @@ export default function JobDetailPage() {
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center">
             <Briefcase size={40} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-700 font-medium mb-1">{error || 'Job not found'}</p>
+            <p className="text-gray-700 font-medium mb-1">
+              {(error as any)?.data?.message || 'Job not found'}
+            </p>
             <Link to="/jobs" className="text-blue-600 text-sm hover:underline mt-2 block">
               Back to jobs
             </Link>
@@ -151,6 +140,15 @@ export default function JobDetailPage() {
               <Mail size={14} />
               Send to Vendors
             </button>
+            {canEditStatus && (
+              <button
+                onClick={() => setIsPublishBoardsOpen(true)}
+                className="flex items-center gap-2 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                <Globe size={14} />
+                Publish to Boards
+              </button>
+            )}
           </div>
         }
       />
@@ -203,15 +201,11 @@ export default function JobDetailPage() {
                   />
                 </div>
               ) : (
-                <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[job.status]}`}
-                >
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[job.status]}`}>
                   {jobStatusLabels[job.status]}
                 </span>
               )}
-              <span
-                className={`px-2.5 py-1 rounded-full text-xs font-medium ${priorityColors[job.priority]}`}
-              >
+              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${priorityColors[job.priority]}`}>
                 {job.priority.charAt(0).toUpperCase() + job.priority.slice(1)} Priority
               </span>
             </div>
@@ -238,9 +232,7 @@ export default function JobDetailPage() {
               {job.headcount} headcount
             </span>
             <span className="text-gray-500">{salary}</span>
-            {job.department && (
-              <span className="text-gray-500">{job.department}</span>
-            )}
+            {job.department && <span className="text-gray-500">{job.department}</span>}
           </div>
 
           {/* Skills */}
@@ -311,17 +303,38 @@ export default function JobDetailPage() {
             Open Pipeline
           </Link>
         </div>
+
+        {/* Job Board Distribution */}
+        {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
+          <JobBoardStatusSection jobId={id!} />
+        )}
+
+        {/* Approval Workflow + Version History — only for non-portal roles */}
+        {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
+          <>
+            <JdApprovalPanel
+              jobId={id!}
+              jobStatus={job.status}
+              userRole={profile.role}
+            />
+            <JdVersionHistory jobId={id!} />
+          </>
+        )}
       </div>
+
       {isAddCandidateOpen && id && (
         <AddCandidateModal
           jobId={id}
           onClose={() => setIsAddCandidateOpen(false)}
-          onSuccess={() => {
-            setJob((prev) => prev
-              ? { ...prev, application_count: (prev.application_count ?? 0) + 1 }
-              : prev
-            );
-          }}
+          onSuccess={() => { refetch(); }}
+        />
+      )}
+
+      {isPublishBoardsOpen && id && (
+        <JobBoardPublishModal
+          jobId={id}
+          onClose={() => setIsPublishBoardsOpen(false)}
+          onSuccess={() => {}}
         />
       )}
     </div>

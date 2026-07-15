@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL || "/v1";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/v1";
+console.log("API BASE URL:", API_URL);
 
 /**
  * Structured error thrown for non-2xx API responses.
@@ -16,10 +17,14 @@ export class ApiError extends Error {
 }
 
 export const api = {
-  async request(endpoint: string, options: RequestInit = {}, retry = true): Promise<any> {
+  async request(
+    endpoint: string,
+    options: RequestInit = {},
+    retry = true,
+  ): Promise<any> {
+    const token = localStorage.getItem("jwt");
     const body = options.body as any;
 
-    const token = localStorage.getItem("jwt");
     const headers = {
       ...(body instanceof FormData
         ? {}
@@ -32,7 +37,6 @@ export const api = {
       const response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
         headers,
-        credentials: "include",
         body:
           body instanceof FormData
             ? body
@@ -42,21 +46,16 @@ export const api = {
       });
 
       if (response.status === 401) {
-        // Dispatch event so AuthContext can clear state and let React Router redirect
-        // without a hard page reload (which would cause an infinite reload loop).
+        localStorage.removeItem("jwt");
         window.dispatchEvent(new CustomEvent("auth:unauthorized"));
         const errorBody = await response
           .json()
-          .catch(() => ({ message: "Token expired" }));
-        throw new ApiError(errorBody.message || "Token expired", 401, errorBody);
-      }
-
-      if (response.status === 402) {
-        // Let ProtectedRoute's subscription gate handle the redirect to /pricing.
-        const errorBody = await response
-          .json()
-          .catch(() => ({ message: "Subscription required" }));
-        throw new ApiError(errorBody.message || "Subscription required", 402, errorBody);
+          .catch(() => ({ message: "Unauthorized" }));
+        throw new ApiError(
+          errorBody.message || "Unauthorized",
+          401,
+          errorBody,
+        );
       }
 
       if (!response.ok) {

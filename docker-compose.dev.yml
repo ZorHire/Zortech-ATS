@@ -1,0 +1,29 @@
+services:
+
+  # ── Local PostgreSQL ─────────────────────────────────────────────────────────
+  # Matches: SERVER_DATABASE_URL=postgresql://zortech:zortech@localhost:5432/zortech_hosting
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zortech
+      POSTGRES_PASSWORD: zortech
+      POSTGRES_DB: zortech_hosting
+    ports:
+      - "5432:5432"
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+
+  # ── Local Redis ──────────────────────────────────────────────────────────────
+  # Matches: REDIS_URL=redis://localhost:6379
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - dev_redis_data:/data
+
+volumes:
+  dev_postgres_data:
+  dev_redis_data:
