@@ -22,6 +22,9 @@ export const env = {
   // A5 dark-build gate — defaults false in every environment. Must be explicitly set
   // to "true" for the screening-invite endpoint to create sessions or send emails.
   SCREENING_CHAT_ENABLED: process.env.SCREENING_CHAT_ENABLED === "true",
+  // Ledger app — separate Neon database, completely isolated from the ATS DB
+  LEDGER_DATABASE_URL: process.env.LEDGER_DATABASE_URL || "",
+  LEDGER_API_KEY: process.env.LEDGER_API_KEY || "",
 };
 
 export default env;

@@ -32,6 +32,8 @@ import savedSearchRoutes from "./modules/saved-searches/saved-searches.routes";
 import invoicesRoutes from "./modules/invoices/invoices.routes";
 import analyticsEnhancedRoutes from "./modules/analytics/analytics-enhanced.routes";
 import integrationsRoutes from "./modules/integrations/integrations.routes";
+import ledgerRoutes from "./modules/ledger/ledger.routes";
+import { initLedgerDb } from "./modules/ledger/ledger.db";
 import { startScheduler } from "./scheduler";
 
 const app = express();
@@ -98,6 +100,11 @@ pool.connect((err, client, release) => {
   release();
 });
 
+// Ledger DB — separate Neon database
+initLedgerDb().catch((err) =>
+  console.error("Ledger DB init failed:", err.message)
+);
+
 // Health check — registered before the v1Router so it is never shadowed by
 // route middleware. curl and Docker healthcheck both hit this path.
 app.get("/v1/health", (_req, res) => {
@@ -132,6 +139,7 @@ v1Router.use("/saved-searches", savedSearchRoutes);
 v1Router.use("/invoices", invoicesRoutes);
 v1Router.use("/analytics-enhanced", analyticsEnhancedRoutes);
 v1Router.use("/integrations", integrationsRoutes);
+v1Router.use("/ledger/kv", ledgerRoutes);
 // v1Router.use("/parse", parseRoutes); // Moved up to before express.json()
 
 app.use("/v1", v1Router);
