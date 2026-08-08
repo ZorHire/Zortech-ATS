@@ -133,6 +133,8 @@
   .stamp.paid{color:var(--green);}
   .stamp.pending{color:var(--amber);}
   .stamp.overdue{color:var(--rust);}
+  .stamp.void{color:var(--slate);text-decoration:line-through;}
+  .ledger-row.is-void{opacity:0.55;}
 
   .btn{font-family:'Inter';font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:2px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;}
   .btn:hover{background:var(--ink-soft);}
@@ -168,8 +170,8 @@
   }
 
   /* ---------- GST INVOICE ---------- */
-  .inv-list-row{display:grid;grid-template-columns:1.2fr 1.6fr 1fr 1fr 1fr 1fr;padding:13px 4px;border-bottom:1px solid var(--line-soft);align-items:center;font-size:13.5px;}
-  .inv-list-head{display:grid;grid-template-columns:1.2fr 1.6fr 1fr 1fr 1fr 1fr;font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--slate);padding:9px 4px;border-bottom:1px solid var(--line);}
+  .inv-list-row{display:grid;grid-template-columns:1.1fr 1.3fr 0.9fr 0.9fr 0.9fr 0.7fr 1.5fr;padding:13px 4px;border-bottom:1px solid var(--line-soft);align-items:center;font-size:13.5px;}
+  .inv-list-head{display:grid;grid-template-columns:1.1fr 1.3fr 0.9fr 0.9fr 0.9fr 0.7fr 1.5fr;font-family:'IBM Plex Mono';font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--slate);padding:9px 4px;border-bottom:1px solid var(--line);}
   .line-items{border:1px solid var(--line);border-radius:2px;margin-bottom:14px;overflow:hidden;}
   .li-row{display:grid;grid-template-columns:1.8fr 0.8fr 1fr 0.9fr 1fr 30px;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line-soft);align-items:center;background:#fff;}
   .li-row input{padding:6px 8px;font-size:12.5px;}
@@ -375,7 +377,7 @@
 
       <div class="section-label">GST invoices generated here</div>
       <div class="ledger" id="gstInvoiceLedger">
-        <div class="inv-list-head"><div>Number</div><div>Client</div><div>Date</div><div>Due</div><div>Total</div><div></div></div>
+        <div class="inv-list-head"><div>Number</div><div>Client</div><div>Date</div><div>Due</div><div>Total</div><div>Status</div><div></div></div>
       </div>
 
       <div class="section-label">Clients</div>
@@ -644,14 +646,34 @@
           <h2 class="page-title">Bank &amp; Reconciliation</h2>
           <div class="page-desc">Track account balances and reconcile against your bank statement.</div>
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn ghost" id="toggleBankAccountForm">+ Account</button>
           <button class="btn ghost" id="importFromLedger">Import from ledger</button>
+          <button class="btn ghost" id="toggleBankImport">Import Statement</button>
           <button class="btn" id="toggleBankTxnForm">+ Transaction</button>
         </div>
       </div>
 
       <div class="notice">Balances here are only as accurate as what's entered — either log transactions manually as they clear, or use "Import from ledger" to pull in paid invoices, paid bills, and expenses as transactions, then reconcile against your actual bank statement periodically.</div>
+
+      <div class="add-form" id="bankImportForm">
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="field"><label>Import into account</label><select id="bi_account"></select></div>
+        </div>
+
+        <div class="section-label" style="margin-top:0;">Option A — CSV export from netbanking</div>
+        <div style="font-size:13px;line-height:1.6;margin-bottom:10px;">Most banks let you export transaction history as CSV (Date, Narration/Description, Debit/Withdrawal, Credit/Deposit, Balance). Upload it here — it's read entirely in your browser.</div>
+        <input type="file" id="bankStmtCsvInput" accept=".csv" style="margin-bottom:14px;">
+        <div id="bankStmtCsvPreview"></div>
+
+        <div class="section-label">Option B — PDF statement, read by Claude</div>
+        <div style="font-size:13px;line-height:1.6;margin-bottom:10px;">
+          Upload the PDF statement to Claude in this chat and ask it to extract the opening balance, closing balance, and transaction list for the Zortech Ledger. Paste what Claude gives you below and click Apply.
+        </div>
+        <textarea id="bankStmtJson" placeholder='Paste the extracted JSON here, e.g. {"openingBalance": 125000, "openingDate": "2026-06-01", "closingBalance": 178400, "closingDate": "2026-06-30", "transactions": [{"date":"2026-06-05","description":"NEFT from client","type":"credit","amount":50000}]}' style="width:100%;min-height:100px;padding:10px;border:1px solid var(--line);border-radius:2px;font-family:'IBM Plex Mono';font-size:12px;margin-bottom:10px;"></textarea>
+        <button class="btn small" id="applyBankStmtJson">Apply</button>
+        <div id="bankStmtJsonStatus"></div>
+      </div>
 
       <div class="add-form" id="bankAccountForm">
         <div class="form-grid">
@@ -859,27 +881,15 @@ function showToast(msg){
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
-const _LEDGER_BASE = 'https://zorhire.zortechs.in/v1/ledger/kv';
-const _LEDGER_KEY  = '34774d1812c652d778f8f7a1b7fb4304027c8e80820e06f0c9e614e307129b64';
-
 async function storageGet(key){
   try{
-    const r = await fetch(`${_LEDGER_BASE}/${encodeURIComponent(key)}`, {
-      headers: { 'X-Ledger-Key': _LEDGER_KEY }
-    });
-    if(!r.ok) return null;
-    const data = await r.json();
-    return data.value ? JSON.parse(data.value) : null;
+    const r = await window.storage.get(key, true);
+    return r ? JSON.parse(r.value) : null;
   }catch(e){ return null; }
 }
 async function storageSet(key, value){
   try{
-    const r = await fetch(`${_LEDGER_BASE}/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Ledger-Key': _LEDGER_KEY },
-      body: JSON.stringify({ value: JSON.stringify(value) })
-    });
-    if(!r.ok){ showToast('Could not save — try again'); return false; }
+    await window.storage.set(key, JSON.stringify(value), true);
     return true;
   }catch(e){ console.error('storage error', e); showToast('Could not save — try again'); return false; }
 }
@@ -941,6 +951,7 @@ function numberToWords(num){
 }
 
 function computeStatus(inv){
+  if(inv.voided) return 'void';
   if(inv.status === 'paid') return 'paid';
   return inv.dueDate && inv.dueDate < todayISO() ? 'overdue' : 'pending';
 }
@@ -1054,6 +1065,7 @@ document.getElementById('toggleEmployeeForm').addEventListener('click', ()=>{
 });
 bindToggle('toggleBankAccountForm','bankAccountForm');
 bindToggle('toggleBankTxnForm','bankTxnForm');
+bindToggle('toggleBankImport','bankImportForm');
 bindToggle('toggleAdjustmentForm','adjustmentForm');
 
 /* ---------------- SAVE HANDLERS ---------------- */
@@ -1339,6 +1351,64 @@ function confirmMarkPaid(id, kind){
   }
 }
 
+/* ---------------- VOID / CANCEL INVOICE ---------------- */
+let voidingIds = new Set();
+function voidCellHtml(id, kind){
+  if(!voidingIds.has(id)){
+    return `<button class="btn small danger-ghost" onclick="startVoid('${id}')">Void</button>`;
+  }
+  return `<div class="mark-paid-panel">
+    <input type="text" id="void_reason_${id}" placeholder="Reason (optional)">
+    <button class="btn small danger-ghost" onclick="confirmVoid('${id}','${kind}')">Confirm void</button>
+    <button class="btn small ghost" onclick="cancelVoid('${id}')">Cancel</button>
+  </div>`;
+}
+function startVoid(id){ voidingIds.add(id); renderAll(); }
+function cancelVoid(id){ voidingIds.delete(id); renderAll(); }
+function confirmVoid(id, kind){
+  const reasonEl = document.getElementById('void_reason_'+id);
+  const reason = reasonEl ? reasonEl.value.trim() : '';
+  voidingIds.delete(id);
+  if(kind==='gst') voidGstInvoice(id, reason);
+  else voidArInvoice(id, reason);
+}
+async function voidGstInvoice(gstInvId, reason){
+  const gstInv = state.gstInvoices.find(i=>i.id===gstInvId);
+  if(!gstInv) return;
+  gstInv.voided = true;
+  gstInv.voidedDate = todayISO();
+  gstInv.voidReason = reason || '';
+  await storageSet('zortech-gst-invoices', state.gstInvoices);
+  const arInv = state.invoices.find(i=>i.gstInvoiceId===gstInvId);
+  if(arInv){
+    arInv.voided = true;
+    arInv.voidedDate = todayISO();
+    arInv.voidReason = reason || '';
+    await storageSet('zortech-invoices', state.invoices);
+  }
+  showToast('Invoice voided');
+  renderAll();
+}
+async function voidArInvoice(invId, reason){
+  const inv = state.invoices.find(i=>i.id===invId);
+  if(!inv) return;
+  inv.voided = true;
+  inv.voidedDate = todayISO();
+  inv.voidReason = reason || '';
+  await storageSet('zortech-invoices', state.invoices);
+  if(inv.gstInvoiceId){
+    const gstInv = state.gstInvoices.find(g=>g.id===inv.gstInvoiceId);
+    if(gstInv){
+      gstInv.voided = true;
+      gstInv.voidedDate = todayISO();
+      gstInv.voidReason = reason || '';
+      await storageSet('zortech-gst-invoices', state.gstInvoices);
+    }
+  }
+  showToast('Invoice voided');
+  renderAll();
+}
+
 /* ---------------- GST INVOICE ---------------- */
 let gfLineItems = [];
 let gfInvoiceType = 'placement';
@@ -1555,6 +1625,7 @@ function openInvoicePreview(invId){
        <tr><td colspan="3" class="inv-totals-lbl">SGST (9%)</td><td class="inv-totals-val">${fmtMoney(inv.sgst)}</td></tr>`;
 
   const html = `
+    ${inv.voided ? `<div style="position:absolute;top:40%;left:50%;transform:translate(-50%,-50%) rotate(-25deg);font-size:64px;font-weight:700;color:rgba(178,58,46,0.25);border:6px solid rgba(178,58,46,0.25);padding:6px 24px;z-index:5;pointer-events:none;font-family:'IBM Plex Mono';letter-spacing:.1em;">CANCELLED</div>` : ''}
     <img class="inv-mark" src="${COMPANY.mark}" alt="">
     <div class="inv-head">
       <img class="inv-logo" src="${COMPANY.logo}" alt="Zortech logo">
@@ -1608,13 +1679,20 @@ function closeInvoicePreview(){
 function renderGstInvoices(){
   const wrap = document.getElementById('gstInvoiceLedger');
   const rows = [...state.gstInvoices].sort((a,b)=>b.date.localeCompare(a.date));
-  wrap.innerHTML = '<div class="inv-list-head"><div>Number</div><div>Client</div><div>Date</div><div>Due</div><div>Total</div><div></div></div>' +
+  wrap.innerHTML = '<div class="inv-list-head"><div>Number</div><div>Client</div><div>Date</div><div>Due</div><div>Total</div><div>Status</div><div></div></div>' +
     (rows.length===0 ? '<div class="empty-state">No GST invoices generated yet.</div>' :
-    rows.map(i=>`<div class="inv-list-row">
+    rows.map(i=>{
+      const isVoid = !!i.voided;
+      return `<div class="inv-list-row${isVoid?' is-void':''}">
       <div><b>${i.number}</b></div><div>${i.clientName}</div><div class="num">${i.date}</div><div class="num">${i.dueDate}</div>
       <div class="num">${fmtMoney(i.grandTotal)}</div>
-      <div><button class="btn small ghost" onclick="openInvoicePreview('${i.id}')">View / Print</button></div>
-    </div>`).join(''));
+      <div>${isVoid?'<span class="stamp void">void</span>':'<span class="stamp paid">active</span>'}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="btn small ghost" onclick="openInvoicePreview('${i.id}')">View / Print</button>
+        ${!isVoid ? voidCellHtml(i.id,'gst') : ''}
+      </div>
+    </div>`;
+    }).join(''));
 }
 
 /* ---------------- ACCOUNTS PAYABLE ---------------- */
@@ -2161,7 +2239,7 @@ function monthLabel(ym){
 
 /* ---------------- MONTHLY P&L ---------------- */
 function computePnl(month){
-  const revenue = state.invoices.filter(i=>i.status==='paid' && (i.paidDate||'').slice(0,7)===month).reduce((s,i)=>s+Number(i.amount),0);
+  const revenue = state.invoices.filter(i=>!i.voided && i.status==='paid' && (i.paidDate||'').slice(0,7)===month).reduce((s,i)=>s+Number(i.amount),0);
   const vendorCosts = state.bills.filter(b=>b.status==='paid' && (b.paidDate||'').slice(0,7)===month).reduce((s,b)=>s+Number(b.amount),0);
   const opExpenses = state.expenses.filter(e=>(e.date||'').slice(0,7)===month).reduce((s,e)=>s+Number(e.amount),0);
   const payrollCost = state.employees.reduce((s,e)=>{
@@ -2277,7 +2355,7 @@ function renderGstFiling(){
   monthInput.onchange = renderGstFiling;
   const month = monthInput.value;
 
-  const monthInvoices = state.gstInvoices.filter(i=>(i.date||'').slice(0,7)===month);
+  const monthInvoices = state.gstInvoices.filter(i=>!i.voided && (i.date||'').slice(0,7)===month);
   const outTaxable = monthInvoices.reduce((s,i)=>s+i.subTotal,0);
   const outIgst = monthInvoices.reduce((s,i)=>s+i.igst,0);
   const outCgst = monthInvoices.reduce((s,i)=>s+i.cgst,0);
@@ -2340,7 +2418,7 @@ document.getElementById('saveBankAccount').onclick = async ()=>{
 
 function refreshBankAccountSelects(){
   const opts = state.bankAccounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('') || '<option value="">Add an account first</option>';
-  ['bt_account','bankTxnFilter','rc_account'].forEach(id=>{
+  ['bt_account','bankTxnFilter','rc_account','bi_account'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     const keepValue = el.value;
@@ -2366,6 +2444,155 @@ document.getElementById('saveBankTxn').onclick = async ()=>{
   ['bt_date','bt_amount','bt_desc'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('bankTxnForm').classList.remove('open');
   showToast('Transaction logged');
+  renderBank();
+};
+
+/* ---------------- IMPORT BANK STATEMENT (CSV or pasted JSON from a PDF read by Claude) ---------------- */
+const BANK_STMT_ALIASES = {
+  date: ['date','txn date','transaction date','value date'],
+  description: ['narration','description','particulars','transaction details','remarks'],
+  debit: ['debit','withdrawal','withdrawal amt','withdrawal amount','dr'],
+  credit: ['credit','deposit','deposit amt','deposit amount','cr'],
+  balance: ['balance','closing balance','running balance']
+};
+function pickBankField(row, key){
+  for(const alias of BANK_STMT_ALIASES[key]){
+    if(row[alias] !== undefined && row[alias] !== '') return row[alias];
+  }
+  return '';
+}
+
+let bankStmtCsvRows = [];
+document.getElementById('bankStmtCsvInput').onchange = (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const accountId = document.getElementById('bi_account').value;
+  if(!accountId){ showToast('Pick an account to import into first'); e.target.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const rows = parseCSV(reader.result);
+    if(rows.length===0){
+      document.getElementById('bankStmtCsvPreview').innerHTML = `<div class="notice" style="border-color:var(--rust);">Couldn't find any rows in that file — check it's a CSV export from your bank.</div>`;
+      return;
+    }
+    bankStmtCsvRows = rows.map(row=>{
+      const date = parseCsvDate(pickBankField(row,'date'));
+      const description = pickBankField(row,'description').trim();
+      const debit = parseCsvAmount(pickBankField(row,'debit'));
+      const credit = parseCsvAmount(pickBankField(row,'credit'));
+      const balanceRaw = pickBankField(row,'balance');
+      const balance = balanceRaw !== '' ? parseCsvAmount(balanceRaw) : null;
+      const type = credit > 0 ? 'credit' : 'debit';
+      const amount = credit > 0 ? credit : debit;
+      const duplicate = state.bankTransactions.some(t=>t.accountId===accountId && t.date===date && t.description===description && Number(t.amount)===amount);
+      return {date, description, type, amount, balance, valid: !!(date && amount), duplicate};
+    });
+    renderBankStmtCsvPreview();
+  };
+  reader.readAsText(file);
+};
+
+function renderBankStmtCsvPreview(){
+  const valid = bankStmtCsvRows.filter(r=>r.valid && !r.duplicate);
+  const dupCount = bankStmtCsvRows.filter(r=>r.duplicate).length;
+  const invalidCount = bankStmtCsvRows.filter(r=>!r.valid).length;
+  const withBalance = bankStmtCsvRows.filter(r=>r.balance!==null);
+  const openingGuess = withBalance.length
+    ? withBalance[0].balance - (withBalance[0].type==='credit' ? withBalance[0].amount : -withBalance[0].amount)
+    : null;
+  const closingGuess = withBalance.length ? withBalance[withBalance.length-1].balance : null;
+
+  const rowsHtml = bankStmtCsvRows.slice(0,50).map(r=>`
+    <div class="ledger-row cols-banktxn" style="opacity:${r.valid && !r.duplicate ? 1 : 0.45};">
+      <div class="num">${r.date||'<span style="color:var(--rust);">bad date</span>'}</div>
+      <div>${r.description||'—'}</div>
+      <div class="num" style="color:var(--green);">${r.type==='credit'?fmtMoney(r.amount):''}</div>
+      <div class="num" style="color:var(--rust);">${r.type==='debit'?fmtMoney(r.amount):''}</div>
+      <div class="num">${r.balance!==null?fmtMoney(r.balance):'—'}</div>
+      <div style="font-size:11px;color:var(--slate);">${r.duplicate?'dup':''}</div>
+    </div>`).join('');
+
+  document.getElementById('bankStmtCsvPreview').innerHTML = `
+    <div class="notice">${bankStmtCsvRows.length} row(s) found — <b>${valid.length}</b> ready to import${dupCount?`, ${dupCount} already imported (skipped)`:''}${invalidCount?`, ${invalidCount} missing date/amount (skipped)`:''}.
+    ${openingGuess!==null ? `<br>Estimated opening balance from the statement: <b>${fmtMoney(openingGuess)}</b>.` : ''}
+    ${closingGuess!==null ? ` Closing balance on the statement: <b>${fmtMoney(closingGuess)}</b> — use "Reconcile against statement" below after importing to verify it matches your book balance.` : ''}
+    </div>
+    <div class="ledger" style="margin-bottom:14px;max-height:340px;overflow-y:auto;">
+      <div class="ledger-head-row cols-banktxn"><div>Date</div><div>Description</div><div>Credit</div><div>Debit</div><div>Balance</div><div></div></div>
+      ${rowsHtml}
+    </div>
+    <button class="btn small" id="confirmBankStmtCsv" ${valid.length===0?'disabled':''}>Import ${valid.length} transaction${valid.length===1?'':'s'}</button>
+    <button class="btn small ghost" id="cancelBankStmtCsv">Cancel</button>
+  `;
+  document.getElementById('confirmBankStmtCsv').onclick = confirmBankStmtCsv;
+  document.getElementById('cancelBankStmtCsv').onclick = ()=>{
+    bankStmtCsvRows = [];
+    document.getElementById('bankStmtCsvPreview').innerHTML = '';
+    document.getElementById('bankStmtCsvInput').value = '';
+  };
+}
+
+async function confirmBankStmtCsv(){
+  const accountId = document.getElementById('bi_account').value;
+  if(!accountId){ showToast('Pick an account to import into'); return; }
+  const toImport = bankStmtCsvRows.filter(r=>r.valid && !r.duplicate);
+  toImport.forEach(r=>{
+    state.bankTransactions.push({
+      id: uid(), accountId, date: r.date, type: r.type, amount: r.amount,
+      description: r.description, reconciled: false, source: 'statement'
+    });
+  });
+  await storageSet('zortech-bank-transactions', state.bankTransactions);
+  bankStmtCsvRows = [];
+  document.getElementById('bankStmtCsvPreview').innerHTML = '';
+  document.getElementById('bankStmtCsvInput').value = '';
+  showToast(`Imported ${toImport.length} transaction${toImport.length===1?'':'s'}`);
+  renderBank();
+}
+
+document.getElementById('applyBankStmtJson').onclick = async ()=>{
+  const accountId = document.getElementById('bi_account').value;
+  const account = state.bankAccounts.find(a=>a.id===accountId);
+  if(!account){ showToast('Pick an account to import into first'); return; }
+  const raw = document.getElementById('bankStmtJson').value.trim();
+  if(!raw){ showToast('Paste the extracted statement JSON first'); return; }
+  let parsed;
+  try{
+    const clean = raw.replace(/```json|```/g,'').trim();
+    parsed = JSON.parse(clean);
+  } catch(err){
+    document.getElementById('bankStmtJsonStatus').innerHTML = `<div class="notice" style="border-color:var(--rust);">Couldn't read that as JSON (${err.message}). Make sure you pasted exactly what Claude gave you.</div>`;
+    return;
+  }
+  const txns = Array.isArray(parsed.transactions) ? parsed.transactions : [];
+  let added = 0, skipped = 0;
+  txns.forEach(t=>{
+    const date = t.date;
+    const amount = Number(t.amount)||0;
+    const description = (t.description||'').trim();
+    const type = t.type==='debit' ? 'debit' : 'credit';
+    if(!date || !amount){ skipped++; return; }
+    const duplicate = state.bankTransactions.some(tx=>tx.accountId===accountId && tx.date===date && tx.description===description && Number(tx.amount)===amount);
+    if(duplicate){ skipped++; return; }
+    state.bankTransactions.push({id:uid(), accountId, date, type, amount, description, reconciled:false, source:'statement'});
+    added++;
+  });
+  await storageSet('zortech-bank-transactions', state.bankTransactions);
+
+  let openingNote = '';
+  if(parsed.openingBalance !== undefined && parsed.openingDate){
+    account.opening = Number(parsed.openingBalance)||account.opening;
+    account.openDate = parsed.openingDate;
+    await storageSet('zortech-bank-accounts', state.bankAccounts);
+    openingNote = ` Opening balance set to ${fmtMoney(account.opening)} as of ${account.openDate}.`;
+  }
+  let closingNote = '';
+  if(parsed.closingBalance !== undefined){
+    closingNote = ` Statement closing balance: ${fmtMoney(parsed.closingBalance)}${parsed.closingDate?' as of '+parsed.closingDate:''} — check this under "Reconcile against statement" below.`;
+  }
+
+  document.getElementById('bankStmtJsonStatus').innerHTML = `<div class="notice">Imported ${added} transaction${added===1?'':'s'}${skipped?`, skipped ${skipped} (duplicate or missing data)`:''}.${openingNote}${closingNote}</div>`;
+  document.getElementById('bankStmtJson').value = '';
   renderBank();
 };
 
@@ -2507,7 +2734,7 @@ function computeYearlyPnl(fyLabel){
   return {rows, totals};
 }
 function computeBalancePosition(asOfDate){
-  const ar = state.invoices.filter(i => i.issueDate <= asOfDate && (i.status!=='paid' || (i.paidDate||'9999-99-99') > asOfDate))
+  const ar = state.invoices.filter(i => !i.voided && i.issueDate <= asOfDate && (i.status!=='paid' || (i.paidDate||'9999-99-99') > asOfDate))
     .reduce((s,i)=>s+Number(i.amount),0);
   const ap = state.bills.filter(b => b.billDate <= asOfDate && (b.status!=='paid' || (b.paidDate||'9999-99-99') > asOfDate))
     .reduce((s,b)=>s+Number(b.amount),0);
@@ -2524,7 +2751,7 @@ function computeBalancePosition(asOfDate){
   const [ay,am] = asOfMonth.split('-').map(Number);
   const elapsedMonths = Math.max(1, (ay-ey)*12 + (am-em) + 1);
 
-  const cumRevenue = state.invoices.filter(i=>i.status==='paid' && (i.paidDate||'') <= asOfDate).reduce((s,i)=>s+Number(i.amount),0);
+  const cumRevenue = state.invoices.filter(i=>!i.voided && i.status==='paid' && (i.paidDate||'') <= asOfDate).reduce((s,i)=>s+Number(i.amount),0);
   const cumVendorCosts = state.bills.filter(b=>b.status==='paid' && (b.paidDate||'') <= asOfDate).reduce((s,b)=>s+Number(b.amount),0);
   const cumOpExpenses = state.expenses.filter(e=>(e.date||'') <= asOfDate).reduce((s,e)=>s+Number(e.amount),0);
   const applyCeiling = document.getElementById('pfCeilingToggle') ? document.getElementById('pfCeilingToggle').checked : true;
@@ -2679,14 +2906,14 @@ function generateAuditPack(fy){
   const fyExpenses = state.expenses.filter(e=>months.includes((e.date||'').slice(0,7)));
   const fyArInvoices = state.invoices.filter(i=>months.includes((i.issueDate||'').slice(0,7)));
 
-  const gstOut = fyInvoices.reduce((s,i)=>s+i.subTotal,0);
-  const gstTax = fyInvoices.reduce((s,i)=>s+i.igst+i.cgst+i.sgst,0);
+  const gstOut = fyInvoices.filter(i=>!i.voided).reduce((s,i)=>s+i.subTotal,0);
+  const gstTax = fyInvoices.filter(i=>!i.voided).reduce((s,i)=>s+i.igst+i.cgst+i.sgst,0);
 
   const monthRowsHtml = rows.map(r=>`<tr><td class="pnl-lbl">${monthLabel(r.month)}</td><td class="pnl-val">${fmtMoney(r.totalRevenue)}</td><td class="pnl-val">${fmtMoney(r.totalExpenses)}</td><td class="pnl-val">${fmtMoney(r.netProfit)}</td></tr>`).join('');
 
   const arRows = fyArInvoices.map(i=>`<tr><td>${i.clientName}</td><td>${i.issueDate}</td><td>${i.dueDate}</td><td class="num">${fmtMoney(i.amount)}</td><td>${computeStatus(i)}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#888;">None</td></tr>';
   const apRows = fyBills.map(b=>`<tr><td>${b.vendorName}</td><td>${b.billDate}</td><td>${b.dueDate}</td><td class="num">${fmtMoney(b.amount)}</td><td>${computeBillStatus(b)}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#888;">None</td></tr>';
-  const gstRows = fyInvoices.map(i=>`<tr><td>${i.number}</td><td>${i.date}</td><td>${i.clientName}</td><td class="num">${fmtMoney(i.subTotal)}</td><td class="num">${fmtMoney(i.igst+i.cgst+i.sgst)}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#888;">None</td></tr>';
+  const gstRows = fyInvoices.map(i=>`<tr${i.voided?' style="color:#999;text-decoration:line-through;"':''}><td>${i.number}${i.voided?' (VOID)':''}</td><td>${i.date}</td><td>${i.clientName}</td><td class="num">${fmtMoney(i.subTotal)}</td><td class="num">${fmtMoney(i.igst+i.cgst+i.sgst)}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#888;">None</td></tr>';
   const expByCategory = {};
   fyExpenses.forEach(e=>{ expByCategory[e.category] = (expByCategory[e.category]||0) + Number(e.amount); });
   const expRows = Object.entries(expByCategory).map(([cat,amt])=>`<tr><td>${cat}</td><td class="num">${fmtMoney(amt)}</td></tr>`).join('') || '<tr><td colspan="2" style="color:#888;">None</td></tr>';
@@ -2757,7 +2984,7 @@ function renderDashboard(){
   const month = monthInput.value;
 
   const monthInvoices = state.invoices.filter(i => (i.paidDate||i.dueDate||'').slice(0,7)===month || (i.issueDate||'').slice(0,7)===month);
-  const collected = state.invoices.filter(i=>i.status==='paid' && (i.paidDate||'').slice(0,7)===month).reduce((s,i)=>s+Number(i.amount),0);
+  const collected = state.invoices.filter(i=>!i.voided && i.status==='paid' && (i.paidDate||'').slice(0,7)===month).reduce((s,i)=>s+Number(i.amount),0);
   const overdueAmt = state.invoices.filter(i=>computeStatus(i)==='overdue').reduce((s,i)=>s+Number(i.amount),0);
   const pendingAmt = state.invoices.filter(i=>computeStatus(i)==='pending').reduce((s,i)=>s+Number(i.amount),0);
   const payableAmt = state.bills.filter(b=>computeBillStatus(b)!=='paid').reduce((s,b)=>s+Number(b.amount),0);
@@ -2778,7 +3005,7 @@ function renderDashboard(){
     barsEl.innerHTML = '<div class="empty-state">No targets set for this month yet. Add one under Revenue Targets.</div>';
   } else {
     barsEl.innerHTML = monthTargets.map(t=>{
-      const earned = state.invoices.filter(i=>i.status==='paid' && i.owner===t.person && (i.paidDate||'').slice(0,7)===month).reduce((s,i)=>s+Number(i.amount),0);
+      const earned = state.invoices.filter(i=>!i.voided && i.status==='paid' && i.owner===t.person && (i.paidDate||'').slice(0,7)===month).reduce((s,i)=>s+Number(i.amount),0);
       const p = Math.min(100, Math.round((earned/Number(t.amount))*100) || 0);
       return `<div class="person-bar-row">
         <div class="person-name">${t.person}</div>
@@ -2815,8 +3042,8 @@ function renderInvoices(){
   tdsMonthInput.onchange = renderInvoices;
   const tdsMonth = tdsMonthInput.value;
   const fyMonthsForTds = fyMonths(fyLabelForMonth(tdsMonth));
-  const tdsThisMonth = state.invoices.filter(i=>i.status==='paid' && (i.paidDate||'').slice(0,7)===tdsMonth).reduce((s,i)=>s+(Number(i.tdsDeducted)||0),0);
-  const tdsFy = state.invoices.filter(i=>i.status==='paid' && fyMonthsForTds.includes((i.paidDate||'').slice(0,7))).reduce((s,i)=>s+(Number(i.tdsDeducted)||0),0);
+  const tdsThisMonth = state.invoices.filter(i=>!i.voided && i.status==='paid' && (i.paidDate||'').slice(0,7)===tdsMonth).reduce((s,i)=>s+(Number(i.tdsDeducted)||0),0);
+  const tdsFy = state.invoices.filter(i=>!i.voided && i.status==='paid' && fyMonthsForTds.includes((i.paidDate||'').slice(0,7))).reduce((s,i)=>s+(Number(i.tdsDeducted)||0),0);
   document.getElementById('arTdsMonthAmt').textContent = fmtMoney(tdsThisMonth);
   document.getElementById('arTdsFyAmt').textContent = fmtMoney(tdsFy);
 
@@ -2826,13 +3053,17 @@ function renderInvoices(){
     (rows.length===0 ? '<div class="empty-state">No invoices yet.</div>' :
     rows.map(i=>{
       const st = computeStatus(i);
-      return `<div class="ledger-row cols-invoice">
+      const actions = [];
+      if(i.gstInvoiceId) actions.push(`<button class="btn small ghost" onclick="openInvoicePreview('${i.gstInvoiceId}')">Print</button>`);
+      if(st!=='paid' && st!=='void') actions.push(markPaidCellHtml(i.id,'invoice'));
+      if(st!=='void') actions.push(voidCellHtml(i.id,'invoice'));
+      return `<div class="ledger-row cols-invoice${st==='void'?' is-void':''}">
         <div><b>${i.clientName}</b><br><span style="color:var(--slate);font-size:11.5px;">${i.notes||''}</span></div>
         <div class="num">${fmtMoney(i.amount)}</div>
         <div class="num">${i.issueDate}</div>
         <div class="num">${i.dueDate}</div>
-        <div><span class="stamp ${st}">${st}</span>${st==='paid' && i.paymentSource?`<div class="payment-meta">${i.paymentSource}${i.paymentReference?' · '+i.paymentReference:''}${i.tdsDeducted?' · TDS '+fmtMoney(i.tdsDeducted):''}</div>`:''}</div>
-        <div>${st!=='paid' ? markPaidCellHtml(i.id,'invoice') : ''}</div>
+        <div><span class="stamp ${st}">${st}</span>${st==='paid' && i.paymentSource?`<div class="payment-meta">${i.paymentSource}${i.paymentReference?' · '+i.paymentReference:''}${i.tdsDeducted?' · TDS '+fmtMoney(i.tdsDeducted):''}</div>`:''}${st==='void'?`<div class="payment-meta">${i.voidedDate}${i.voidReason?' · '+i.voidReason:''}</div>`:''}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">${actions.join('')}</div>
       </div>`;
     }).join(''));
 }
@@ -2862,7 +3093,7 @@ function renderTargets(){
 
 function renderFollowups(){
   const fl = document.getElementById('followupLedger');
-  const rows = state.invoices.filter(i=>computeStatus(i)!=='paid').sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  const rows = state.invoices.filter(i=>{ const st = computeStatus(i); return st!=='paid' && st!=='void'; }).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
   fl.innerHTML = '<div class="ledger-head-row cols-followup"><div>Client</div><div>Amount</div><div>Due date</div><div>Days over</div><div>Notes</div><div></div></div>' +
     (rows.length===0 ? '<div class="empty-state">Nothing pending follow-up.</div>' :
     rows.map(i=>{

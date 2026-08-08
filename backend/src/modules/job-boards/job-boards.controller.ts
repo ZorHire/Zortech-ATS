@@ -348,26 +348,28 @@ export const handleWebhook = async (req: Request, res: Response) => {
   }
 
   try {
-    // Find tenant + job from the external_job_id
-    const { rows: postingRows } = await pool.query(
-      `SELECT tenant_id, job_id FROM job_board_postings
-       WHERE board_key = $1 AND external_job_id = $2 LIMIT 1`,
+    // Single JOIN query: get posting + credentials atomically so secret check comes first
+    const { rows } = await pool.query(
+      `SELECT jbp.tenant_id, jbp.job_id, jbc.webhook_secret
+       FROM job_board_postings jbp
+       LEFT JOIN job_board_credentials jbc
+         ON jbc.tenant_id = jbp.tenant_id AND jbc.board_key = jbp.board_key
+       WHERE jbp.board_key = $1 AND jbp.external_job_id = $2
+       LIMIT 1`,
       [boardKey, incoming.external_job_id],
     );
-    if (postingRows.length === 0) {
+    if (rows.length === 0) {
       return res.status(200).json({ message: 'Job posting not found — ignoring' });
     }
 
-    const { tenant_id: tenantId, job_id: jobId } = postingRows[0];
+    const { tenant_id: tenantId, job_id: jobId, webhook_secret: storedSecret } = rows[0];
 
-    // Verify webhook secret if configured
-    const { rows: credRows } = await pool.query(
-      `SELECT webhook_secret FROM job_board_credentials WHERE tenant_id = $1 AND board_key = $2`,
-      [tenantId, boardKey],
-    );
-    if (credRows.length > 0 && credRows[0].webhook_secret) {
-      const provided = req.headers['x-webhook-secret'] || req.headers['x-hub-signature-256'] || '';
-      if (provided !== credRows[0].webhook_secret) {
+    // Auth check BEFORE touching any payload data — constant-time comparison prevents timing attacks
+    if (storedSecret) {
+      const provided = String(req.headers['x-webhook-secret'] || req.headers['x-hub-signature-256'] || '');
+      const providedBuf = Buffer.from(provided);
+      const expectedBuf = Buffer.from(storedSecret);
+      if (providedBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(providedBuf, expectedBuf)) {
         return res.status(401).json({ message: 'Invalid webhook secret' });
       }
     }

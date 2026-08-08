@@ -64,6 +64,8 @@ function buildTrackedHtml(
 
 export const listCampaigns = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user!.tenant_id;
+  const pageLimit = Math.min(200, Math.max(1, parseInt(String(req.query.limit ?? "200"), 10) || 200));
+  const pageOffset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
   try {
     const result = await pool.query(
       `SELECT id, name, subject, body, status,
@@ -72,8 +74,9 @@ export const listCampaigns = async (req: AuthRequest, res: Response) => {
               scheduled_at, sent_at, created_by, created_at, updated_at
        FROM email_campaigns
        WHERE tenant_id = $1
-       ORDER BY created_at DESC`,
-      [tenantId],
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [tenantId, pageLimit, pageOffset],
     );
     res.json(result.rows);
   } catch (error) {
@@ -136,15 +139,39 @@ export const sendCampaignById = async (req: AuthRequest, res: Response) => {
     const scheduledDate = new Date(scheduled_at);
     if (!isNaN(scheduledDate.getTime()) && scheduledDate > new Date()) {
       try {
+        // Resolve recipients now and persist them so the scheduler can fire later
+        let sched: Array<{ email: string; first_name?: string; last_name?: string; name?: string }> = [];
+        if (Array.isArray(recipientsRaw) && recipientsRaw.length > 0) {
+          sched = recipientsRaw;
+        } else if (Array.isArray(recipient_ids) && recipient_ids.length > 0) {
+          const rows = await pool.query(
+            `SELECT email, first_name, last_name FROM candidates WHERE id = ANY($1::uuid[]) AND tenant_id = $2`,
+            [recipient_ids, tenantId],
+          );
+          sched = rows.rows;
+        }
+
         await pool.query(
           `UPDATE email_campaigns
-           SET status = 'scheduled', scheduled_at = $1, updated_at = now()
-           WHERE id = $2 AND tenant_id = $3`,
-          [scheduledDate.toISOString(), id, tenantId],
+           SET status = 'scheduled', scheduled_at = $1, recipient_count = $2, updated_at = now()
+           WHERE id = $3 AND tenant_id = $4`,
+          [scheduledDate.toISOString(), sched.length, id, tenantId],
         );
+
+        for (const r of sched) {
+          const fullName = ((r.first_name || '') + ' ' + (r.last_name || '')).trim() || r.name || null;
+          await pool.query(
+            `INSERT INTO email_campaign_recipients (tenant_id, campaign_id, email, name)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (campaign_id, email) DO UPDATE SET status = 'pending', bounce_reason = NULL`,
+            [tenantId, id, r.email, fullName],
+          );
+        }
+
         return res.json({
           message: 'Campaign scheduled',
           scheduled_at: scheduledDate.toISOString(),
+          recipients: sched.length,
         });
       } catch (error) {
         console.error('Schedule campaign error:', error);
@@ -338,6 +365,91 @@ export const deleteCampaign = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+// ─── Scheduler helper: dispatch a claimed campaign ───────────────────────────
+// Called by scheduler.ts after atomically claiming campaigns (status='sending').
+// Reads pre-populated pending recipients from email_campaign_recipients.
+
+export async function dispatchScheduledCampaign(
+  campaignId: string,
+  tenantId: string,
+  createdBy?: string,
+): Promise<{ deliveredCount: number; failedCount: number }> {
+  const campResult = await pool.query(
+    `SELECT * FROM email_campaigns WHERE id = $1 AND tenant_id = $2`,
+    [campaignId, tenantId],
+  );
+  const campaign = campResult.rows[0];
+  if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
+
+  const userId = createdBy || campaign.created_by;
+  let userMail = userId ? await getUserTransporter(userId) : null;
+  if (!userMail) userMail = await getTenantTransporter(tenantId);
+  if (!userMail) throw new Error('EMAIL_NOT_CONFIGURED: No SMTP configuration found.');
+
+  const unsubRes = await pool.query(
+    `SELECT email FROM email_unsubscribes WHERE tenant_id = $1`,
+    [tenantId],
+  );
+  const unsubSet = new Set<string>(
+    unsubRes.rows.map((r: { email: string }) => r.email.toLowerCase()),
+  );
+
+  const recipientRes = await pool.query(
+    `SELECT id, email, name, tracking_id FROM email_campaign_recipients
+     WHERE campaign_id = $1 AND status = 'pending'`,
+    [campaignId],
+  );
+  const eligible = recipientRes.rows.filter(
+    (r) => !unsubSet.has(r.email.toLowerCase()),
+  );
+
+  const baseUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+  const track_opens: boolean = campaign.track_opens ?? true;
+  const track_clicks: boolean = campaign.track_clicks ?? true;
+
+  let deliveredCount = 0;
+  let failedCount = 0;
+
+  for (const r of eligible) {
+    const name = r.name || '';
+    const personalizedBody = (campaign.body || '')
+      .replace(/{{full_name}}/gi, name)
+      .replace(/{{email}}/gi, r.email);
+    const personalizedSubject = (campaign.subject || '')
+      .replace(/{{full_name}}/gi, name)
+      .replace(/{{email}}/gi, r.email);
+    const html = buildTrackedHtml(
+      personalizedBody,
+      r.tracking_id,
+      baseUrl,
+      track_opens,
+      track_clicks,
+    );
+    try {
+      await userMail.transporter.sendMail({
+        from: userMail.fromEmail,
+        to: r.email,
+        subject: personalizedSubject,
+        text: personalizedBody,
+        html,
+      });
+      await pool.query(
+        `UPDATE email_campaign_recipients SET status = 'delivered', delivered_at = now() WHERE id = $1`,
+        [r.id],
+      );
+      deliveredCount++;
+    } catch (err: any) {
+      await pool.query(
+        `UPDATE email_campaign_recipients SET status = 'failed', bounce_reason = $1 WHERE id = $2`,
+        [String(err?.message ?? '').substring(0, 255), r.id],
+      );
+      failedCount++;
+    }
+  }
+
+  return { deliveredCount, failedCount };
+}
 
 // ─── POST /email-campaigns/test-send ─────────────────────────────────────────
 // NEW FEATURE: Send a test email with all tokens replaced by '[TEST]'.

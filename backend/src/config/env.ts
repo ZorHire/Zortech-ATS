@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 export const env = {
   PORT: process.env.PORT || process.env.SERVER_PORT || "5000",
   DATABASE_URL: process.env.SERVER_DATABASE_URL || "",
-  JWT_SECRET: process.env.SERVER_JWT_SECRET || "fallback_secret",
+  JWT_SECRET: process.env.SERVER_JWT_SECRET || "",
   NODE_ENV: process.env.SERVER_NODE_ENV || "production",
   UPLOAD_DIR:
     process.env.SERVER_UPLOAD_DIR || path.resolve(__dirname, "../uploads"),
@@ -18,6 +18,7 @@ export const env = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "",
+  RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || "",
   FRONTEND_URL: process.env.SERVER_FRONTEND_URL || "https://zorhire.zortechs.in",
   // A5 dark-build gate — defaults false in every environment. Must be explicitly set
   // to "true" for the screening-invite endpoint to create sessions or send emails.
@@ -26,5 +27,17 @@ export const env = {
   LEDGER_DATABASE_URL: process.env.LEDGER_DATABASE_URL || "",
   LEDGER_API_KEY: process.env.LEDGER_API_KEY || "",
 };
+
+// Fail fast on startup if critical secrets are missing
+const REQUIRED = ["DATABASE_URL", "JWT_SECRET", "ENCRYPTION_KEY"] as const;
+const ENV_VAR_NAMES: Record<string, string> = {
+  JWT_SECRET: "SERVER_JWT_SECRET",
+  ENCRYPTION_KEY: "EMAIL_ENCRYPTION_KEY",
+};
+for (const key of REQUIRED) {
+  if (!env[key]) {
+    throw new Error(`Missing required environment variable: ${ENV_VAR_NAMES[key] ?? key}`);
+  }
+}
 
 export default env;

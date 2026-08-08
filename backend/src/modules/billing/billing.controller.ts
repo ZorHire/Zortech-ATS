@@ -344,11 +344,20 @@ export const refundPayment = async (req: AuthRequest, res: Response) => {
   const { payment_id, amount, notes } = req.body;
   if (!payment_id) return res.status(400).json({ message: 'payment_id is required' });
   try {
+    // Verify the payment_id belongs to this tenant — razorpay_subscription_id is set
+    // at subscription activation time (verifyPayment stores razorpay_payment_id there)
+    const ownership = await pool.query(
+      `SELECT id FROM subscriptions WHERE razorpay_subscription_id = $1 AND tenant_id = $2`,
+      [payment_id, tenantId]
+    );
+    if (ownership.rows.length === 0) {
+      return res.status(403).json({ message: 'Payment not found for this tenant' });
+    }
     // Razorpay refund via REST API
     const Razorpay = require('razorpay');
     const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
+      key_id: env.RAZORPAY_KEY_ID,
+      key_secret: env.RAZORPAY_KEY_SECRET,
     });
     const refund = await razorpay.payments.refund(payment_id, {
       amount: amount ? Math.round(amount * 100) : undefined,
@@ -368,12 +377,16 @@ export const refundPayment = async (req: AuthRequest, res: Response) => {
 
 export const razorpayWebhook = async (req: any, res: Response) => {
   const signature = req.headers['x-razorpay-signature'];
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+  const secret = env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    console.error('RAZORPAY_WEBHOOK_SECRET is not configured — rejecting webhook');
+    return res.status(500).json({ message: 'Webhook not configured' });
+  }
   try {
     const crypto = require('crypto');
     const body = JSON.stringify(req.body);
     const expectedSig = crypto.createHmac('sha256', secret).update(body).digest('hex');
-    if (signature !== expectedSig) {
+    if (!signature || !crypto.timingSafeEqual(Buffer.from(signature as string), Buffer.from(expectedSig))) {
       return res.status(400).json({ message: 'Invalid webhook signature' });
     }
     const event = req.body;

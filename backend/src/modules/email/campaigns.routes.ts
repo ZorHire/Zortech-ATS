@@ -5,11 +5,13 @@ import { authMiddleware, tenantIsolation, authorize } from '../../middleware/aut
 
 const router = Router();
 
-router.get('/', authMiddleware, tenantIsolation, listCampaigns);
-router.post('/', authMiddleware, tenantIsolation, createCampaign);
-router.post('/test-send', authMiddleware, tenantIsolation, sendTestEmail);
-router.post('/:id/send', authMiddleware, tenantIsolation, sendCampaignById);
-router.post('/:id/send-test', authMiddleware, tenantIsolation, authorize(['super_admin', 'accounts_manager', 'recruiter']), sendTestEmail);
+const CAMPAIGN_ROLES = ['super_admin', 'accounts_manager', 'recruiter'];
+
+router.get('/', authMiddleware, tenantIsolation, authorize(CAMPAIGN_ROLES), listCampaigns);
+router.post('/', authMiddleware, tenantIsolation, authorize(CAMPAIGN_ROLES), createCampaign);
+router.post('/test-send', authMiddleware, tenantIsolation, authorize(CAMPAIGN_ROLES), sendTestEmail);
+router.post('/:id/send', authMiddleware, tenantIsolation, authorize(CAMPAIGN_ROLES), sendCampaignById);
+router.post('/:id/send-test', authMiddleware, tenantIsolation, authorize(CAMPAIGN_ROLES), sendTestEmail);
 router.delete('/:id', authMiddleware, tenantIsolation, deleteCampaign);
 router.get('/:id/analytics', authMiddleware, tenantIsolation, getCampaignAnalytics);
 router.get('/:id/recipients', authMiddleware, tenantIsolation, getCampaignRecipients);

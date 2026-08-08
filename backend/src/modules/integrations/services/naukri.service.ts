@@ -45,6 +45,7 @@ export async function searchNaukriResumes(opts: {
 
   const resp = await fetch(`${NAUKRI_RESDEX_BASE}/resume/search?${params}`, {
     headers: getNaukriHeaders(),
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!resp.ok) {
@@ -84,6 +85,7 @@ export async function getNaukriResumeDetails(candidateId: string): Promise<{
 
   const resp = await fetch(`${NAUKRI_RESDEX_BASE}/resume/${candidateId}`, {
     headers: getNaukriHeaders(),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!resp.ok) throw new Error("Failed to fetch Naukri resume details");
@@ -129,6 +131,7 @@ export async function postJobToNaukri(opts: {
   const resp = await fetch(`${NAUKRI_BASE}/jobs`, {
     method: "POST",
     headers: getNaukriHeaders(),
+    signal: AbortSignal.timeout(15_000),
     body: JSON.stringify({
       title: opts.title,
       jobDescription: opts.description,

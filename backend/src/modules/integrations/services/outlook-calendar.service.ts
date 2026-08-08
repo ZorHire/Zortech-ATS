@@ -25,6 +25,7 @@ export async function exchangeOutlookCode(code: string): Promise<{ access_token:
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!resp.ok) throw new Error("Outlook token exchange failed");
@@ -63,6 +64,7 @@ export async function createOutlookCalendarEvent(opts: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(event),
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!resp.ok) {
@@ -76,5 +78,6 @@ export async function deleteOutlookCalendarEvent(accessToken: string, eventId: s
   await fetch(`https://graph.microsoft.com/v1.0/me/events/${eventId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10_000),
   });
 }

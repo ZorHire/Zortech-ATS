@@ -69,7 +69,9 @@ const normalizeSkills = (value: any) => {
 export const getCandidates = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const { search, location, skills, min_experience, max_experience } = req.query;
+    const { search, location, skills, min_experience, max_experience, limit: qLimit, offset: qOffset } = req.query;
+    const pageLimit = Math.min(500, Math.max(1, parseInt(String(qLimit ?? "500"), 10) || 500));
+    const pageOffset = Math.max(0, parseInt(String(qOffset ?? "0"), 10) || 0);
 
     const cacheKey = buildCandidateCacheKey(tenantId!, req.query as Record<string, any>);
 
@@ -126,7 +128,8 @@ export const getCandidates = async (req: AuthRequest, res: Response) => {
         filters.push(`experience_years <= $${params.length}`);
       }
 
-      const sql = `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC`;
+      params.push(pageLimit, pageOffset);
+      const sql = `SELECT * FROM candidates WHERE ${filters.join(" AND ")} ORDER BY created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
       const result = await pool.query(sql, params);
       return result.rows;
     });

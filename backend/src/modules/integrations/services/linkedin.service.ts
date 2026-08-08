@@ -32,6 +32,7 @@ export async function exchangeLinkedInCode(code: string): Promise<{ access_token
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
+    signal: AbortSignal.timeout(10_000),
   });
   if (!resp.ok) throw new Error("LinkedIn token exchange failed");
   return resp.json() as any;
@@ -65,6 +66,7 @@ export async function postJobToLinkedIn(opts: {
     method: "POST",
     headers: getHeaders(opts.accessToken),
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!resp.ok) {
@@ -80,5 +82,6 @@ export async function closeLinkedInJobPosting(accessToken: string, jobId: string
   await fetch(`${LINKEDIN_BASE}/simpleJobPostings/${jobId}`, {
     method: "DELETE",
     headers: getHeaders(accessToken),
+    signal: AbortSignal.timeout(10_000),
   });
 }

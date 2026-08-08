@@ -38,15 +38,19 @@ export const authMiddleware = async (
       exp?: number;
     };
 
-    if (decoded.jti) {
-      try {
-        const blacklisted = await redis.get(`blacklist:${decoded.jti}`);
-        if (blacklisted) {
-          return res.status(401).json({ message: "Token revoked" });
-        }
-      } catch {
-        // Redis unavailable — fail open, same pattern as caching
+    // Tokens without a jti can never be revoked — reject them to enforce logout security
+    if (!decoded.jti) {
+      return res.status(401).json({ message: "Please log in again" });
+    }
+
+    try {
+      const blacklisted = await redis.get(`blacklist:${decoded.jti}`);
+      if (blacklisted) {
+        return res.status(401).json({ message: "Token revoked" });
       }
+    } catch {
+      // Redis unavailable — fail closed: cannot verify revocation, reject the request.
+      return res.status(503).json({ message: "Authentication service temporarily unavailable" });
     }
 
     req.user = decoded;

@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import pool from "./db";
+import { dispatchScheduledCampaign } from "./modules/email/campaigns.controller";
 
 export function startScheduler(): void {
   // Nightly at 00:05 — expire overdue jobs and vendor contracts
@@ -39,21 +40,33 @@ export function startScheduler(): void {
   cron.schedule('*/5 * * * *', async () => {
     try {
       const now = new Date().toISOString();
+      // Atomically claim campaigns to prevent double-send across instances
       const due = await pool.query(
-        "SELECT * FROM email_campaigns WHERE status='scheduled' AND scheduled_at <= $1",
+        `UPDATE email_campaigns SET status='sending'
+         WHERE status='scheduled' AND scheduled_at <= $1
+         RETURNING *`,
         [now]
       );
       for (const campaign of due.rows) {
-        // Mark as sending first to prevent double-send
-        await pool.query("UPDATE email_campaigns SET status='sending' WHERE id=$1", [campaign.id]);
-        // Fire send (import the sendCampaignById helper or inline the send logic)
-        // For now log that it's ready to send - the send function will be called
-        console.log('[scheduler] Triggering scheduled campaign:', campaign.id);
-        // Update to sent
-        await pool.query(
-          "UPDATE email_campaigns SET status='sent', sent_at=now() WHERE id=$1",
-          [campaign.id]
-        );
+        try {
+          const { deliveredCount } = await dispatchScheduledCampaign(
+            campaign.id,
+            campaign.tenant_id,
+            campaign.created_by,
+          );
+          await pool.query(
+            "UPDATE email_campaigns SET status='sent', delivered_count=$1, sent_at=now() WHERE id=$2",
+            [deliveredCount, campaign.id]
+          );
+          console.log(`[scheduler] Campaign ${campaign.id} sent, delivered=${deliveredCount}`);
+        } catch (sendErr) {
+          console.error(`[scheduler] Failed to send campaign ${campaign.id}:`, sendErr);
+          // Roll back to scheduled so it retries next tick
+          await pool.query(
+            "UPDATE email_campaigns SET status='scheduled' WHERE id=$1",
+            [campaign.id]
+          );
+        }
       }
     } catch(e) { console.error('[scheduler] campaign-send error:', e); }
   });
@@ -102,10 +115,23 @@ export function startScheduler(): void {
     } catch(e) { console.error('[scheduler] daily-digest error:', e); }
   });
 
+  // Notification cleanup — weekly at 02:30, delete read notifications > 90 days old
+  cron.schedule('30 2 * * 0', async () => {
+    try {
+      const result = await pool.query(
+        `DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < NOW() - INTERVAL '90 days'`
+      );
+      if ((result.rowCount ?? 0) > 0) {
+        console.log(`[scheduler] Cleaned up ${result.rowCount} old read notifications`);
+      }
+    } catch(e) { console.error('[scheduler] notification-cleanup error:', e); }
+  });
+
   console.log(
     "[Scheduler] Nightly expiry cron registered — runs daily at 00:05",
   );
   console.log("[Scheduler] Scheduled campaigns cron registered — runs every 5 minutes");
   console.log("[Scheduler] Vendor document expiry alerts cron registered — runs daily at 08:00");
   console.log("[Scheduler] Daily digest cron registered — runs daily at 07:00");
+  console.log("[Scheduler] Notification cleanup cron registered — runs weekly Sunday at 02:30");
 }

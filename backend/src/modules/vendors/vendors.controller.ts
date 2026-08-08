@@ -60,9 +60,11 @@ export async function refreshVendorMetrics(
 export const getVendors = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
+    const pageLimit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+    const pageOffset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
     const result = await pool.query(
-      'SELECT * FROM vendors WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY company_name ASC',
-      [tenantId]
+      'SELECT * FROM vendors WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY company_name ASC LIMIT $2 OFFSET $3',
+      [tenantId, pageLimit, pageOffset]
     );
     res.json(result.rows);
   } catch (error) {

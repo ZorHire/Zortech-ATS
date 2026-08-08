@@ -46,6 +46,10 @@ export const listInvoices = async (req: AuthRequest, res: Response) => {
   if (status) { conditions.push(`i.status = $${idx++}`); params.push(status); }
   if (client_id) { conditions.push(`i.client_id = $${idx++}`); params.push(client_id); }
 
+  const pageLimit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+  const pageOffset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+  params.push(pageLimit, pageOffset);
+
   try {
     const result = await pool.query(
       `SELECT i.*,
@@ -57,7 +61,8 @@ export const listInvoices = async (req: AuthRequest, res: Response) => {
        LEFT JOIN jobs j ON j.id = i.job_id
        LEFT JOIN candidates c ON c.id = i.candidate_id
        WHERE ${conditions.join(" AND ")}
-       ORDER BY i.created_at DESC`,
+       ORDER BY i.created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params,
     );
     res.json(result.rows);

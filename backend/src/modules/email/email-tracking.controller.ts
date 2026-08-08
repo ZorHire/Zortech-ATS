@@ -51,6 +51,7 @@ export const handleOpenPixel = async (req: Request, res: Response) => {
 
 export const handleClickRedirect = async (req: Request, res: Response) => {
   const targetUrl = req.query.url as string;
+  const { trackingId } = req.params;
 
   if (!targetUrl) return res.status(400).send('Missing url');
 
@@ -63,34 +64,41 @@ export const handleClickRedirect = async (req: Request, res: Response) => {
     return res.status(400).send('Invalid URL');
   }
 
-  res.redirect(302, targetUrl);
-
+  // Validate trackingId exists BEFORE redirecting — prevents open-redirect abuse
+  // (unauthenticated endpoint should only redirect URLs recorded by this platform)
   try {
-    const { trackingId } = req.params;
     const recipientRes = await pool.query(
       `SELECT id, campaign_id, tenant_id FROM email_campaign_recipients WHERE tracking_id = $1`,
       [trackingId],
     );
-    if (recipientRes.rows.length === 0) return;
+    if (recipientRes.rows.length === 0) {
+      return res.status(404).send('Invalid tracking link');
+    }
     const { id: recipientId, campaign_id, tenant_id } = recipientRes.rows[0];
 
-    await pool.query(
-      `INSERT INTO email_events (tenant_id, campaign_id, recipient_id, event_type, metadata, ip_address)
-       VALUES ($1, $2, $3, 'click', $4, $5)`,
-      [tenant_id, campaign_id, recipientId, JSON.stringify({ url: targetUrl }), req.ip],
-    );
+    res.redirect(302, targetUrl);
 
-    await pool.query(
-      `UPDATE email_campaigns
-       SET clicked_count = (
-         SELECT COUNT(DISTINCT recipient_id)::int FROM email_events
-         WHERE campaign_id = $1 AND event_type = 'click'
-       ), updated_at = now()
-       WHERE id = $1`,
-      [campaign_id],
-    );
-  } catch {
-    // Silently fail
+    // Record click event after the redirect is sent
+    try {
+      await pool.query(
+        `INSERT INTO email_events (tenant_id, campaign_id, recipient_id, event_type, metadata, ip_address)
+         VALUES ($1, $2, $3, 'click', $4, $5)`,
+        [tenant_id, campaign_id, recipientId, JSON.stringify({ url: targetUrl }), req.ip],
+      );
+      await pool.query(
+        `UPDATE email_campaigns
+         SET clicked_count = (
+           SELECT COUNT(DISTINCT recipient_id)::int FROM email_events
+           WHERE campaign_id = $1 AND event_type = 'click'
+         ), updated_at = now()
+         WHERE id = $1`,
+        [campaign_id],
+      );
+    } catch {
+      // Tracking failure must never surface to the user
+    }
+  } catch (err) {
+    if (!res.headersSent) res.status(400).send('Invalid tracking link');
   }
 };
 

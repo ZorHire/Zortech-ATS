@@ -1,10 +1,12 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import fs from "fs";
 import path from "path";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import pool from "./db";
+import { authMiddleware } from "./middleware/auth";
 import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
 import clientRoutes from "./modules/clients/clients.routes";
@@ -48,11 +50,12 @@ const uploadsPath = path.resolve(
 fs.mkdirSync(uploadsPath, { recursive: true });
 
 // Middleware
+app.use(helmet());
+
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "https://zorhire.zortechs.in",
-  "http://zorhire.zortechs.in",
   /\.run\.app$/, // any Cloud Run frontend
   /\.web\.app$/, // Firebase Hosting
   /\.firebaseapp\.com$/, // Firebase Hosting alt
@@ -60,8 +63,9 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, server-to-server)
-      if (!origin) return callback(null, true);
+      // Null/undefined origin (server-to-server, curl) rejected when credentials=true
+      // to prevent CSRF from non-browser callers that forge a null Origin.
+      if (!origin) return callback(null, false);
       const allowed = allowedOrigins.some((o) =>
         typeof o === "string" ? o === origin : o.test(origin),
       );
@@ -70,11 +74,41 @@ app.use(
     credentials: true,
   }),
 );
+
+// Rate limiter for auth endpoints — brute-force protection
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+  skipSuccessfulRequests: true,
+});
+
+// Dedicated forgot-password limiter — stricter, counts every request (no skipSuccessfulRequests).
+// skipSuccessfulRequests would let attackers enumerate accounts indefinitely via successful calls.
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+});
+
+// Per-IP limiter for the AI-backed parse endpoints (Gemini cost exposure)
+const parseLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests. Please slow down." },
+});
+
 // CRITICAL: Mount parse routes BEFORE express.json() to prevent stream consumption
 // This allows Multer to handle the multipart/form-data request first
 const parseRouter = express.Router();
 parseRouter.use("/", parseRoutes);
-app.use("/v1/parse", parseRouter);
+app.use("/v1/parse", parseLimiter, parseRouter);
 
 // A5 screening chat is the first unauthenticated, LLM-cost-exposed public endpoint
 // in this backend — no rate limiting existed here at all before this.
@@ -88,8 +122,10 @@ const screeningLimiter = rateLimit({
 app.use("/v1/screening", screeningLimiter);
 
 app.use(express.json());
-app.use(express.static(uploadsPath));
 app.use(morgan("dev"));
+
+// Serve uploaded files only to authenticated users
+app.use("/uploads", authMiddleware as express.RequestHandler, express.static(uploadsPath));
 
 // Test DB Connection
 pool.connect((err, client, release) => {
@@ -114,7 +150,9 @@ app.get("/v1/health", (_req, res) => {
 // Routes
 const v1Router = express.Router();
 
-v1Router.use("/auth", authRoutes);
+// Tighter rate limit on forgot-password specifically (applies before the broader authLimiter)
+v1Router.post("/auth/forgot-password", forgotPasswordLimiter);
+v1Router.use("/auth", authLimiter, authRoutes);
 v1Router.use("/clients", clientRoutes);
 v1Router.use("/jobs", jobRoutes);
 v1Router.use("/candidates", candidateRoutes);

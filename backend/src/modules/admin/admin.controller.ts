@@ -37,6 +37,11 @@ export const createUser = async (req: AuthRequest, res: Response) => {
     return res.status(400).json({ message: 'Email, password, and role are required' });
   }
 
+  const ALLOWED_ADMIN_ROLES = new Set(['super_admin', 'accounts_manager', 'recruiter', 'vendor_manager', 'vendor_user']);
+  if (!ALLOWED_ADMIN_ROLES.has(role)) {
+    return res.status(400).json({ message: 'Invalid role.' });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -151,9 +156,13 @@ export const updateUser = async (req: AuthRequest, res: Response) => {
     }
 
     if (is_active !== undefined) {
+      // Scope to tenant — prevent cross-tenant deactivation
       await client.query(
-        'UPDATE users SET is_active = $1, updated_at = now() WHERE id = $2',
-        [is_active, id]
+        `UPDATE users SET is_active = $1, updated_at = now()
+         WHERE id = $2 AND EXISTS (
+           SELECT 1 FROM tenant_memberships WHERE user_id = $2 AND tenant_id = $3
+         )`,
+        [is_active, id, tenantId]
       );
     }
 
@@ -214,26 +223,41 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
   const { newPassword } = req.body;
   const tenantId = req.user?.tenant_id;
 
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+  }
+
+  const client = await pool.connect();
   try {
-    // Verify user belongs to tenant
-    const member = await pool.query(
+    await client.query('BEGIN');
+
+    // Verify user belongs to this tenant
+    const member = await client.query(
       'SELECT id FROM tenant_memberships WHERE user_id = $1 AND tenant_id = $2',
       [id, tenantId]
     );
     if (member.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: 'User not found in this tenant' });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query(
-      'UPDATE users SET password = $1, must_change_password = true, updated_at = now() WHERE id = $2',
-      [hashedPassword, id]
+    // Tenant guard in WHERE ensures cross-tenant resets are impossible even if membership
+    // check above is somehow bypassed (defence in depth)
+    await client.query(
+      `UPDATE users SET password = $1, must_change_password = true, updated_at = now()
+       WHERE id = $2 AND id IN (SELECT user_id FROM tenant_memberships WHERE tenant_id = $3)`,
+      [hashedPassword, id, tenantId]
     );
 
+    await client.query('COMMIT');
     await invalidate(`user:${id}:me`);
     res.json({ message: 'Password reset successfully. User must change it on next login.' });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Reset password error:', error);
     res.status(500).json({ message: 'Internal server error' });
+  } finally {
+    client.release();
   }
 };

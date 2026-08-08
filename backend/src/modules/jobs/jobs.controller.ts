@@ -120,15 +120,18 @@ export const getJobMatches = async (req: AuthRequest, res: Response) => {
 export const getJobs = async (req: AuthRequest, res: Response) => {
   try {
     const tenantId = req.user?.tenant_id;
-    const rows = await withCache(`tenant:${tenantId}:jobs`, 120, async () => {
+    const pageLimit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
+    const pageOffset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
+    const rows = await withCache(`tenant:${tenantId}:jobs:${pageLimit}:${pageOffset}`, 120, async () => {
       const result = await pool.query(
         `SELECT j.*, json_build_object('id', c.id, 'name', c.name, 'tier', c.tier) AS client,
                 (SELECT COUNT(*) FROM job_applications ja WHERE ja.job_id = j.id AND ja.tenant_id = $1) AS application_count
          FROM jobs j
          JOIN clients c ON c.id = j.client_id
          WHERE j.tenant_id = $1 AND j.deleted_at IS NULL
-         ORDER BY j.created_at DESC`,
-        [tenantId],
+         ORDER BY j.created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [tenantId, pageLimit, pageOffset],
       );
       return result.rows;
     });
@@ -305,7 +308,7 @@ export const updateJob = async (req: AuthRequest, res: Response) => {
     await invalidate(`tenant:${tenantId}:jobs`);
     (async()=>{
       try {
-        const snap = await pool.query('SELECT * FROM jobs WHERE id=$1',[id]);
+        const snap = await pool.query('SELECT * FROM jobs WHERE id=$1 AND tenant_id=$2',[id, tenantId]);
         if(snap.rows[0]){
           const maxV = await pool.query('SELECT COALESCE(MAX(version_number),0)+1 as n FROM job_versions WHERE job_id=$1',[id]);
           await pool.query('INSERT INTO job_versions(tenant_id,job_id,version_number,snapshot,changed_by)VALUES($1,$2,$3,$4,$5)',

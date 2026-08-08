@@ -72,6 +72,10 @@ export interface JobForScreening {
   work_mode: string;
 }
 
+// Strip characters that could allow prompt injection from recruiter-controlled job fields
+const sanitizeForPrompt = (s: string): string =>
+  s.replace(/[\n\r]/g, ' ').replace(/[`\\]/g, '').trim().slice(0, 200);
+
 /**
  * Fixed, human-authored questions + hard guardrails. The model conducts natural
  * back-and-forth around these; it never invents new questions. Guardrails are a
@@ -80,17 +84,22 @@ export interface JobForScreening {
  * pending a red-team review before any real candidate ever sees it.
  */
 export const buildSystemInstruction = (job: JobForScreening): string => {
+  // Sanitize recruiter-controlled fields before interpolating into the system prompt
+  const safeTitle    = sanitizeForPrompt(job.title);
+  const safeWorkMode = sanitizeForPrompt(job.work_mode);
+  const safeSkills   = job.mandatory_skills.map(sanitizeForPrompt).join(", ") || "none listed";
+
   const salaryLine =
     job.salary_min && job.salary_max
       ? `The role's budgeted salary range is ${job.salary_min}-${job.salary_max} ${job.currency || "INR"} — you may reference this range if asked, but never state a figure outside it.`
       : `No salary range is available to you — if asked about compensation, say a recruiter will follow up with those details rather than guessing.`;
 
-  return `You are a professional, courteous screening assistant conducting a short pre-screening chat with a job candidate for the role "${job.title}". Ask the following fixed questions conversationally, one at a time, acknowledging each answer before moving to the next. Do not invent additional questions beyond this list:
+  return `You are a professional, courteous screening assistant conducting a short pre-screening chat with a job candidate for the role "${safeTitle}". Ask the following fixed questions conversationally, one at a time, acknowledging each answer before moving to the next. Do not invent additional questions beyond this list:
 
 1. Confirm their current notice period (in days).
 2. Confirm their current and expected CTC.
-3. Confirm their availability/fit for this role's work mode: ${job.work_mode}.
-4. Ask them to briefly self-assess against these mandatory skills: ${job.mandatory_skills.join(", ") || "none listed"}.
+3. Confirm their availability/fit for this role's work mode: ${safeWorkMode}.
+4. Ask them to briefly self-assess against these mandatory skills: ${safeSkills}.
 5. Ask if there's anything else they'd like to share about their fit for the role.
 
 ${salaryLine}

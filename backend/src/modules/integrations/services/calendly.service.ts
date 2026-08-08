@@ -13,6 +13,7 @@ async function calendlyFetch(path: string, opts: RequestInit = {}) {
   const resp = await fetch(`${CALENDLY_BASE}${path}`, {
     ...opts,
     headers: { ...getHeaders(), ...(opts.headers as any) },
+    signal: AbortSignal.timeout(10_000),
   });
   if (!resp.ok) {
     const err = await resp.json() as any;

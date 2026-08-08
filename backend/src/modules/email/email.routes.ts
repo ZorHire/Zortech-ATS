@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import * as emailController from "./email.controller";
 import {
   handleOpenPixel,
@@ -12,6 +13,14 @@ import {
   authorize,
   tenantIsolation,
 } from "../../middleware/auth";
+
+// Prevent bulk unsubscribe-link scraping / abuse
+const unsubscribeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = Router();
 
@@ -96,7 +105,7 @@ router.post(
 
 router.get("/track/open/:trackingId",   handleOpenPixel);
 router.get("/track/click/:trackingId",  handleClickRedirect);
-router.get("/unsubscribe/:trackingId",  handleUnsubscribe);
+router.get("/unsubscribe/:trackingId",  unsubscribeLimiter, handleUnsubscribe);
 
 // ─── Unsubscribe list management (authenticated) ──────────────────────────────
 

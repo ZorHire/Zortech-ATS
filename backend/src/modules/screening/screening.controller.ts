@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
 import { AuthRequest } from "../../middleware/auth";
 import pool from "../../db";
 import env from "../../config/env";
@@ -101,7 +102,12 @@ export const getScreeningSession = async (req: Request, res: Response) => {
   try {
     const sessionResult = await pool.query(`SELECT * FROM screening_sessions WHERE id = $1`, [id]);
     const session = sessionResult.rows[0];
-    if (!session || session.token_hash !== hashScreeningToken(token)) {
+    const expectedHash = hashScreeningToken(token);
+    const storedHash = session?.token_hash ?? "";
+    const hashMatch =
+      expectedHash.length === storedHash.length &&
+      crypto.timingSafeEqual(Buffer.from(expectedHash), Buffer.from(storedHash));
+    if (!session || !hashMatch) {
       return res.status(404).json({ message: "Screening session not found" });
     }
     if (session.status === "expired" || session.status === "revoked" || new Date(session.expires_at) < new Date()) {
@@ -135,7 +141,12 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
   try {
     const sessionResult = await pool.query(`SELECT * FROM screening_sessions WHERE id = $1`, [id]);
     const session = sessionResult.rows[0];
-    if (!session || session.token_hash !== hashScreeningToken(token)) {
+    const expectedHash2 = hashScreeningToken(token);
+    const storedHash2 = session?.token_hash ?? "";
+    const hashMatch2 =
+      expectedHash2.length === storedHash2.length &&
+      crypto.timingSafeEqual(Buffer.from(expectedHash2), Buffer.from(storedHash2));
+    if (!session || !hashMatch2) {
       return res.status(404).json({ message: "Screening session not found" });
     }
     if (session.status === "expired" || session.status === "revoked" || session.status === "completed") {
@@ -145,14 +156,23 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
       await pool.query(`UPDATE screening_sessions SET status = 'expired' WHERE id = $1`, [id]);
       return res.status(410).json({ message: "This screening link has expired" });
     }
-    // Defense in depth — checked before any Gemini call.
-    if (session.message_count >= MAX_MESSAGES) {
+    // Atomically claim a message slot before any Gemini call to prevent concurrent
+    // requests from both passing the limit check and double-sending.
+    const claimed = await pool.query(
+      `UPDATE screening_sessions
+       SET message_count = message_count + 1
+       WHERE id = $1 AND message_count < $2 AND status = 'active'
+       RETURNING message_count`,
+      [id, MAX_MESSAGES],
+    );
+    if (claimed.rows.length === 0) {
       await pool.query(
-        `UPDATE screening_sessions SET status = 'completed', completed_at = COALESCE(completed_at, now()) WHERE id = $1`,
+        `UPDATE screening_sessions SET status = 'completed', completed_at = COALESCE(completed_at, now()) WHERE id = $1 AND status != 'completed'`,
         [id],
       );
       return res.status(410).json({ message: "This screening session has reached its message limit" });
     }
+    const newMessageCount = claimed.rows[0].message_count;
 
     const appResult = await pool.query(
       `SELECT ja.stage AS current_stage, j.title, j.mandatory_skills, j.preferred_skills, j.salary_min, j.salary_max, j.currency, j.work_mode
@@ -196,7 +216,6 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
       [id, message, turnResult.reply],
     );
 
-    const newMessageCount = session.message_count + 1;
     const shouldComplete = turnResult.is_complete || newMessageCount >= MAX_MESSAGES;
 
     await pool.query(

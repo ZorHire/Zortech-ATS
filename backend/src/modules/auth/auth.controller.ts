@@ -26,11 +26,23 @@ export const login = async (req: Request, res: Response) => {
 
     const user = userResult.rows[0];
 
+    // Per-account brute-force lockout (5 failures → 15-min lock)
+    const lockKey = `login_fails:${user.id}`;
+    const failCount = await redis.get(lockKey);
+    if (failCount && parseInt(failCount, 10) >= 5) {
+      return res.status(429).json({ message: "Account temporarily locked. Please try again in 15 minutes." });
+    }
+
     // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      await redis.incr(lockKey);
+      await redis.expire(lockKey, 900); // sliding 15-min window
       return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    // Successful login — clear failure counter
+    await redis.del(lockKey);
 
     // Get user memberships, profile, and subscription in parallel
     const [membershipResult, profileResult] = await Promise.all([
@@ -109,15 +121,19 @@ export const register = async (req: Request, res: Response) => {
     return res.status(400).json({ message: "Invalid role. Allowed: recruiter, vendor_user." });
   }
 
+  if (!password || password.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
+
   try {
-    // Check if user already exists
+    // Check if user already exists — respond generically to avoid email enumeration
     const existingUser = await pool.query(
       "SELECT id FROM users WHERE email = $1",
       [email],
     );
-    
+
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: "Email already registered" });
+      return res.status(400).json({ message: "Registration failed. Please try a different email or contact your administrator." });
     }
 
     // Hash password
@@ -269,6 +285,10 @@ export const resetPassword = async (req: Request, res: Response) => {
 export const changePassword = async (req: any, res: Response) => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.user.id;
+
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ message: "Password must be at least 8 characters." });
+  }
 
   try {
     const userResult = await pool.query("SELECT * FROM users WHERE id = $1", [

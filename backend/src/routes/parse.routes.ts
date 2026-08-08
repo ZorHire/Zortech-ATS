@@ -7,27 +7,29 @@ const router = Router();
 
 console.log("Parse routes loaded");
 
+// authMiddleware MUST come before memoryUpload — otherwise unauthenticated
+// requests buffer up to 8 MB into server RAM before being rejected.
 router.post(
   "/resume",
-  memoryUpload.single("file"),
   authMiddleware,
   tenantIsolation,
+  memoryUpload.single("file"),
   parseController.parseResume,
 );
 
 router.post(
   "/vendor",
-  memoryUpload.single("file"),
   authMiddleware,
   tenantIsolation,
+  memoryUpload.single("file"),
   parseController.parseVendor,
 );
 
 router.post(
   "/jd",
-  memoryUpload.single("file"),
   authMiddleware,
   tenantIsolation,
+  memoryUpload.single("file"),
   parseController.parseJobDescription,
 );
 
