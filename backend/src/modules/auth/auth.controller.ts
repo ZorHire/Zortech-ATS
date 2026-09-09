@@ -31,7 +31,12 @@ export const login = async (req: Request, res: Response) => {
     const lockKey = `login_fails:${user.id}`;
     const failCount = await redis.get(lockKey);
     if (failCount && parseInt(failCount, 10) >= 5) {
-      return res.status(429).json({ message: "Account temporarily locked. Please try again in 15 minutes." });
+      return res
+        .status(429)
+        .json({
+          message:
+            "Account temporarily locked. Please try again in 15 minutes.",
+        });
     }
 
     // Check password
@@ -62,22 +67,25 @@ export const login = async (req: Request, res: Response) => {
 
     // Fetch tenant platform-owner flag and active subscription
     const tenantRow = primaryMembership
-      ? (await pool.query(
-          `SELECT t.is_platform_owner,
+      ? (
+          await pool.query(
+            `SELECT t.is_platform_owner,
                   (SELECT status FROM subscriptions
                    WHERE tenant_id = t.id AND status IN ('active','trial')
                    ORDER BY created_at DESC LIMIT 1) AS sub_status
            FROM tenants t WHERE t.id = $1`,
-          [primaryMembership.tenant_id],
-        )).rows[0]
+            [primaryMembership.tenant_id],
+          )
+        ).rows[0]
       : null;
 
     const isPlatformOwner = !!tenantRow?.is_platform_owner;
     const subStatus = tenantRow?.sub_status ?? null;
     const subscription = {
-      active: isPlatformOwner || subStatus === 'active' || subStatus === 'trial',
+      active:
+        isPlatformOwner || subStatus === "active" || subStatus === "trial",
       isPlatformOwner,
-      reason: subStatus ?? (isPlatformOwner ? 'platform_owner' : 'none'),
+      reason: subStatus ?? (isPlatformOwner ? "platform_owner" : "none"),
     };
 
     // Generate token
@@ -109,9 +117,13 @@ export const login = async (req: Request, res: Response) => {
     });
   } catch (error) {
     if (isDbUnavailable(error)) {
-      console.error("Login failed — database unavailable:", (error as Error).message);
+      console.error(
+        "Login failed — database unavailable:",
+        (error as Error).message,
+      );
       return res.status(503).json({
-        message: "Service temporarily unavailable. Please try again in a few minutes.",
+        message:
+          "Service temporarily unavailable. Please try again in a few minutes.",
       });
     }
     console.error("Login error:", error);
@@ -119,17 +131,21 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-const ALLOWED_REGISTRATION_ROLES = new Set(['recruiter', 'vendor_user']);
+const ALLOWED_REGISTRATION_ROLES = new Set(["recruiter", "vendor_user"]);
 
 export const register = async (req: Request, res: Response) => {
-  const { email, password, full_name, role = 'recruiter' } = req.body;
+  const { email, password, full_name, role = "recruiter" } = req.body;
 
   if (!ALLOWED_REGISTRATION_ROLES.has(role)) {
-    return res.status(400).json({ message: "Invalid role. Allowed: recruiter, vendor_user." });
+    return res
+      .status(400)
+      .json({ message: "Invalid role. Allowed: recruiter, vendor_user." });
   }
 
   if (!password || password.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters." });
+    return res
+      .status(400)
+      .json({ message: "Password must be at least 8 characters." });
   }
 
   try {
@@ -140,7 +156,12 @@ export const register = async (req: Request, res: Response) => {
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: "Registration failed. Please try a different email or contact your administrator." });
+      return res
+        .status(400)
+        .json({
+          message:
+            "Registration failed. Please try a different email or contact your administrator.",
+        });
     }
 
     // Hash password
@@ -151,7 +172,7 @@ export const register = async (req: Request, res: Response) => {
       "INSERT INTO users (email, password, is_active, must_change_password) VALUES ($1, $2, $3, $4) RETURNING id",
       [email, hashedPassword, true, false],
     );
-    
+
     const userId = userResult.rows[0].id;
 
     // Create profile
@@ -162,15 +183,15 @@ export const register = async (req: Request, res: Response) => {
 
     // Get or create default tenant
     const tenantResult = await pool.query(
-      "SELECT id FROM tenants WHERE name = 'Default' LIMIT 1"
+      "SELECT id FROM tenants WHERE name = 'Default' LIMIT 1",
     );
-    
+
     let tenantId = tenantResult.rows[0]?.id;
-    
+
     if (!tenantId) {
       const newTenant = await pool.query(
         "INSERT INTO tenants (name, slug) VALUES ($1, $2) RETURNING id",
-        ['Default', 'default']
+        ["Default", "default"],
       );
       tenantId = newTenant.rows[0].id;
     }
@@ -192,7 +213,9 @@ export const forgotPassword = async (req: Request, res: Response) => {
   const { email } = req.body;
   // Always respond generically — never reveal whether the email is registered
   const respond = () =>
-    res.json({ message: "If that email is registered, a reset link has been sent." });
+    res.json({
+      message: "If that email is registered, a reset link has been sent.",
+    });
 
   try {
     const userResult = await pool.query(
@@ -218,7 +241,9 @@ export const forgotPassword = async (req: Request, res: Response) => {
       );
 
       if (memberResult.rows.length > 0) {
-        const mailer = await getTenantTransporter(memberResult.rows[0].tenant_id);
+        const mailer = await getTenantTransporter(
+          memberResult.rows[0].tenant_id,
+        );
         if (mailer) {
           await mailer.transporter.sendMail({
             from: mailer.fromEmail,
@@ -248,7 +273,9 @@ export const resetPassword = async (req: Request, res: Response) => {
   const { token, newPassword } = req.body;
 
   if (newPassword.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters." });
+    return res
+      .status(400)
+      .json({ message: "Password must be at least 8 characters." });
   }
 
   try {
@@ -258,7 +285,9 @@ export const resetPassword = async (req: Request, res: Response) => {
     if (!userId) {
       return res
         .status(400)
-        .json({ message: "Invalid or expired reset link. Please request a new one." });
+        .json({
+          message: "Invalid or expired reset link. Please request a new one.",
+        });
     }
 
     const userResult = await pool.query(
@@ -270,7 +299,9 @@ export const resetPassword = async (req: Request, res: Response) => {
       await redis.del(`pwd_reset:${token}`);
       return res
         .status(400)
-        .json({ message: "Invalid or expired reset link. Please request a new one." });
+        .json({
+          message: "Invalid or expired reset link. Please request a new one.",
+        });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -294,7 +325,9 @@ export const changePassword = async (req: any, res: Response) => {
   const userId = req.user.id;
 
   if (!newPassword || newPassword.length < 8) {
-    return res.status(400).json({ message: "Password must be at least 8 characters." });
+    return res
+      .status(400)
+      .json({ message: "Password must be at least 8 characters." });
   }
 
   try {
@@ -328,7 +361,10 @@ export const getMe = async (req: any, res: Response) => {
 
     const data = await withCache(`user:${userId}:me`, 300, async () => {
       const [userResult, profileResult, membershipResult] = await Promise.all([
-        pool.query("SELECT email, must_change_password FROM users WHERE id = $1", [userId]),
+        pool.query(
+          "SELECT email, must_change_password FROM users WHERE id = $1",
+          [userId],
+        ),
         pool.query("SELECT * FROM profiles WHERE id = $1", [userId]),
         pool.query(
           `SELECT m.tenant_id, m.role, t.name as tenant_name
@@ -343,14 +379,16 @@ export const getMe = async (req: any, res: Response) => {
       const primaryMembership = membershipResult.rows[0];
 
       const tenantRow = primaryMembership
-        ? (await pool.query(
-            `SELECT t.is_platform_owner,
+        ? (
+            await pool.query(
+              `SELECT t.is_platform_owner,
                     (SELECT status FROM subscriptions
                      WHERE tenant_id = t.id AND status IN ('active','trial')
                      ORDER BY created_at DESC LIMIT 1) AS sub_status
              FROM tenants t WHERE t.id = $1`,
-            [primaryMembership.tenant_id],
-          )).rows[0]
+              [primaryMembership.tenant_id],
+            )
+          ).rows[0]
         : null;
 
       const isPlatformOwner = !!tenantRow?.is_platform_owner;
@@ -366,9 +404,10 @@ export const getMe = async (req: any, res: Response) => {
         must_change_password: user.must_change_password,
         avatar_url: profile?.avatar_url,
         subscription: {
-          active: isPlatformOwner || subStatus === 'active' || subStatus === 'trial',
+          active:
+            isPlatformOwner || subStatus === "active" || subStatus === "trial",
           isPlatformOwner,
-          reason: subStatus ?? (isPlatformOwner ? 'platform_owner' : 'none'),
+          reason: subStatus ?? (isPlatformOwner ? "platform_owner" : "none"),
         },
       };
     });
@@ -395,3 +434,7 @@ export const logout = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export function microsoftCallback(arg0: string, microsoftCallback: any) {
+  throw new Error("Function not implemented.");
+}
