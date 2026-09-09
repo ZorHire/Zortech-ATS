@@ -1,5 +1,4 @@
 import { baseApi } from "./baseApi";
-import type { Job } from "../../types";
 
 export interface DashboardStats {
   active_jobs: number;

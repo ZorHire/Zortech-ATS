@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import { useGetVendorLeaderboardQuery } from "../store/api/vendorApi";
-import type { VendorLeaderboardEntry } from "../store/api/vendorApi";
 
 const tierConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   preferred: { label: "Preferred", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: Award },

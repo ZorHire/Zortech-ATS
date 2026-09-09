@@ -1,16 +1,14 @@
-/**
- * Config-only, single-provider model router. Centralizes which model each
- * agent uses instead of hardcoding the model string at each call site.
- *
- * fallback/escalate/capUsdMonth are declared but inert — nothing reads or
- * enforces them yet. They exist so this shape doesn't need redesigning once
- * real multi-provider fallback and cost/audit logging (Phase 3 Step 2) land.
- *
- * No vendor_parser entry here — backend/'s vendor parser has no independent
- * Gemini call site (it delegates to parseResumeText), so it reuses
- * resume_parser's config by virtue of reusing the resume code path.
- */
-export type AgentId = "resume_parser" | "jd_parser" | "candidate_scorer" | "screening_chat";
+// At the top, export type AgentId with new values
+export type AgentId =
+  | "resume_parser"
+  | "jd_parser"
+  | "candidate_scorer"
+  | "screening_chat"
+  | "candidate_embedder"
+  | "candidate_summariser"
+  | "outreach_writer"
+  | "interview_kit_generator"
+  | "boolean_search_builder";
 
 interface AgentModelConfig {
   model: string;
@@ -22,25 +20,49 @@ interface AgentModelConfig {
 const MODEL_CONFIG: Record<AgentId, AgentModelConfig> = {
   resume_parser: {
     model: "gemini-2.5-flash-lite",
-    fallback: "gpt-5.4-mini",
-    escalate: "claude-haiku-4-5",
-    capUsdMonth: 60,
+    fallback: "gemini-2.5-flash",
+    capUsdMonth: 20,
   },
   jd_parser: {
     model: "gemini-2.5-flash-lite",
-    fallback: "gpt-5.4-mini",
+    fallback: "gemini-2.5-flash",
     capUsdMonth: 20,
   },
   candidate_scorer: {
     model: "gemini-2.5-flash-lite",
-    fallback: "gpt-5.4-mini",
-    capUsdMonth: 40,
+    fallback: "gemini-2.5-flash",
+    capUsdMonth: 50,
   },
   screening_chat: {
     model: "gemini-2.5-flash-lite",
-    fallback: "gpt-5.4-mini",
+    fallback: "gemini-2.5-flash",
+    capUsdMonth: 80,
+  },
+  candidate_embedder: { model: "gemini-embedding-001", capUsdMonth: 10 },
+  candidate_summariser: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gemini-2.5-flash",
     capUsdMonth: 30,
+  },
+  outreach_writer: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gemini-2.5-flash",
+    capUsdMonth: 40,
+  },
+  interview_kit_generator: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gemini-2.5-flash",
+    capUsdMonth: 25,
+  },
+  boolean_search_builder: {
+    model: "gemini-2.5-flash-lite",
+    fallback: "gemini-2.5-flash",
+    capUsdMonth: 15,
   },
 };
 
-export const getModelForAgent = (agentId: AgentId): string => MODEL_CONFIG[agentId].model;
+export const getAgentModelConfig = (agentId: AgentId): AgentModelConfig =>
+  MODEL_CONFIG[agentId];
+
+export const getModelForAgent = (agentId: AgentId): string =>
+  MODEL_CONFIG[agentId].model;

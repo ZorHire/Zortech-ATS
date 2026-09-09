@@ -8,6 +8,7 @@ import { withCache, invalidate } from "../../lib/cache";
 import redis from "../../lib/redis";
 import { AuthRequest } from "../../middleware/auth";
 import { getTenantTransporter } from "../email/email.controller";
+import { isDbUnavailable } from "../../lib/db-errors";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -107,6 +108,12 @@ export const login = async (req: Request, res: Response) => {
       subscription,
     });
   } catch (error) {
+    if (isDbUnavailable(error)) {
+      console.error("Login failed — database unavailable:", (error as Error).message);
+      return res.status(503).json({
+        message: "Service temporarily unavailable. Please try again in a few minutes.",
+      });
+    }
     console.error("Login error:", error);
     res.status(500).json({ message: "Internal server error" });
   }

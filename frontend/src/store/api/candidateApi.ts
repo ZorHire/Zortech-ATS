@@ -1,5 +1,5 @@
 import { baseApi } from "./baseApi";
-import type { Candidate } from "../../types";
+import type { Candidate, ParsedResumeData } from "../../types";
 
 export interface InterviewEntry {
   id: string;
@@ -75,7 +75,7 @@ export const candidateApi = baseApi.injectEndpoints({
       invalidatesTags: ["Candidates"],
     }),
 
-    parseResume: builder.mutation<Partial<Candidate>, FormData>({
+    parseResume: builder.mutation<Partial<Candidate> & ParsedResumeData, FormData>({
       query: (body) => ({ url: "/parse/resume", method: "POST", body }),
     }),
 

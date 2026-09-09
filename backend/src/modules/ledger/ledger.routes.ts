@@ -1,22 +1,22 @@
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, Request, Response } from "express";
 import ledgerPool from "./ledger.db";
-import env from "../../config/env";
+import { authMiddleware, authorize } from "../../middleware/auth";
 
 const router = Router();
 
 const MAX_KEY_LEN = 500;
 const MAX_VAL_LEN = 1_000_000; // 1 MB text cap
 
-function apiKeyGuard(req: Request, res: Response, next: NextFunction): void {
-  const key = req.headers["x-ledger-key"];
-  if (!env.LEDGER_API_KEY || key !== env.LEDGER_API_KEY) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
-}
-
-router.use(apiKeyGuard);
+/**
+ * Authentication: a normal ATS session (JWT), restricted to finance roles.
+ *
+ * This replaces the previous static `x-ledger-key` header guard. That key had to
+ * be embedded in ledger.html, which is served publicly from frontend/public — so
+ * anyone who opened the page could read it from view-source and then read or
+ * overwrite payroll, salaries and bank details. The key that was shipped that way
+ * must be treated as compromised; it is no longer accepted.
+ */
+router.use(authMiddleware, authorize(["super_admin", "accounts_manager"]));
 
 router.get("/:key", async (req: Request, res: Response): Promise<void> => {
   const { key } = req.params;

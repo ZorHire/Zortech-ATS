@@ -223,3 +223,51 @@ export interface DashboardStats {
   slaBreaches: number;
   newApplicationsToday: number;
 }
+
+
+// ---------------------------------------------------------------------------
+// Parser responses — mirrors ParsedResumeData / ParsedJobData in
+// backend/src/modules/parse/parse.utils.ts. Every field is optional: the parser
+// returns only what it could extract, and lists what it was unsure about in
+// low_confidence_fields so the UI can flag those inputs for review.
+// ---------------------------------------------------------------------------
+
+export type ParsedResumeData = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  skills?: string[];
+  experience_years?: number;
+  current_title?: string;
+  current_company?: string;
+  current_location?: string;
+  summary?: string;
+  preferred_location?: string;
+  notice_period_days?: number;
+  current_ctc?: number;
+  expected_ctc?: number;
+  low_confidence_fields?: string[];
+  parsed?: boolean;
+  raw_text?: string;
+};
+
+export type ParsedJobData = {
+  title?: string;
+  location?: string;
+  required_skills?: string[];
+  mandatory_skills?: string[];
+  preferred_skills?: string[];
+  experience_min?: number;
+  experience_max?: number;
+  budget_text?: string;
+  salary_min?: number;
+  salary_max?: number;
+  description?: string;
+  department?: string;
+  work_mode?: string;
+  priority?: string;
+  headcount?: number;
+  low_confidence_fields?: string[];
+  parsed?: boolean;
+  raw_text?: string;
+};

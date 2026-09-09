@@ -1,5 +1,5 @@
 import { baseApi } from "./baseApi";
-import type { Job, Client } from "../../types";
+import type { Job, Client, ParsedJobData } from "../../types";
 
 export const jobApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -28,7 +28,7 @@ export const jobApi = baseApi.injectEndpoints({
       invalidatesTags: ["Jobs"],
     }),
 
-    parseJd: builder.mutation<Record<string, unknown>, FormData>({
+    parseJd: builder.mutation<ParsedJobData, FormData>({
       query: (body) => ({ url: "/parse/jd", method: "POST", body }),
     }),
 

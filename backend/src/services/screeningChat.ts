@@ -1,63 +1,12 @@
-import axios from "axios";
 import crypto from "crypto";
 import env from "../config/env";
-import { logAiCall, PROMPT_VERSION } from "./aiCallLog";
+import { logAiCall, PROMPT_VERSION, checkBudget } from "./aiCallLog";
 import { getModelForAgent } from "./modelRouter";
+import { withRetry, safeJson, categorizeError } from "../lib/ai/helpers";
+import { generateJson } from "../lib/ai/geminiClient";
 
-const GEMINI_URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const isTransientError = (err: unknown): boolean => {
-  if (axios.isAxiosError(err)) {
-    if (!err.response) return true;
-    const status = err.response.status;
-    return status === 429 || status >= 500;
-  }
-  return false;
-};
-
-const withRetry = async <T>(fn: () => Promise<T>, maxRetries = 2): Promise<T> => {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (attempt === maxRetries || !isTransientError(err)) throw err;
-      const backoff = 400 * 2 ** attempt + Math.random() * 200;
-      console.warn(
-        `[ScreeningChat] Transient error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${Math.round(backoff)}ms:`,
-        err instanceof Error ? err.message : err,
-      );
-      await sleep(backoff);
-    }
-  }
-  throw lastErr;
-};
-
-const safeJson = (raw: string): any => {
-  try {
-    const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    return JSON.parse(clean);
-  } catch {
-    return null;
-  }
-};
-
-const categorizeError = (err: unknown): string => {
-  const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-  if (typeof status === "number") {
-    if (status === 403) return "403_forbidden";
-    if (status === 429) return "429_rate_limit";
-    if (status >= 500) return "5xx";
-  }
-  if (err instanceof Error && /timeout/i.test(err.message)) return "timeout";
-  if (!status) return "network";
-  return "unknown";
-};
-
-export const generateScreeningToken = (): string => crypto.randomBytes(32).toString("hex");
+export const generateScreeningToken = (): string =>
+  crypto.randomBytes(32).toString("hex");
 
 export const hashScreeningToken = (token: string): string =>
   crypto.createHash("sha256").update(token).digest("hex");
@@ -74,7 +23,11 @@ export interface JobForScreening {
 
 // Strip characters that could allow prompt injection from recruiter-controlled job fields
 const sanitizeForPrompt = (s: string): string =>
-  s.replace(/[\n\r]/g, ' ').replace(/[`\\]/g, '').trim().slice(0, 200);
+  s
+    .replace(/[\n\r]/g, " ")
+    .replace(/[`\\]/g, "")
+    .trim()
+    .slice(0, 200);
 
 /**
  * Fixed, human-authored questions + hard guardrails. The model conducts natural
@@ -85,9 +38,10 @@ const sanitizeForPrompt = (s: string): string =>
  */
 export const buildSystemInstruction = (job: JobForScreening): string => {
   // Sanitize recruiter-controlled fields before interpolating into the system prompt
-  const safeTitle    = sanitizeForPrompt(job.title);
+  const safeTitle = sanitizeForPrompt(job.title);
   const safeWorkMode = sanitizeForPrompt(job.work_mode);
-  const safeSkills   = job.mandatory_skills.map(sanitizeForPrompt).join(", ") || "none listed";
+  const safeSkills =
+    job.mandatory_skills.map(sanitizeForPrompt).join(", ") || "none listed";
 
   const salaryLine =
     job.salary_min && job.salary_max
@@ -165,9 +119,28 @@ export const runScreeningTurn = async (params: {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
-  const model = getModelForAgent("screening_chat");
+  const agentId = "screening_chat";
+
+  // A4: budget check before model call
+  const budgetOk = await checkBudget(agentId, tenantId);
+  if (!budgetOk) {
+    void logAiCall({
+      tenantId,
+      agentId,
+      entityType: "screening_session",
+      entityId: sessionId,
+      model: getModelForAgent(agentId),
+      promptVersion: PROMPT_VERSION,
+      success: false,
+      errorReason: "budget_exceeded",
+    });
+    return null;
+  }
+
   const startedAt = Date.now();
 
+  // Build conversation contents: system instruction is passed separately,
+  // history turns are mapped to model/user roles.
   const contents = [
     ...history.map((turn) => ({
       role: turn.role === "candidate" ? "user" : "model",
@@ -177,25 +150,21 @@ export const runScreeningTurn = async (params: {
   ];
 
   try {
-    const response = await withRetry(() =>
-      axios.post(
-        `${GEMINI_URL_BASE}/${model}:generateContent?key=${apiKey}`,
-        {
-          systemInstruction: { parts: [{ text: buildSystemInstruction(job) }] },
-          contents,
-          generationConfig: { temperature: 0.2, responseMimeType: "application/json" },
-        },
-        { timeout: 20000 },
-      ),
-    );
+    // Use the shared geminiClient. It must support `systemInstruction` and `contents`
+    // via its opts parameter (see updated geminiClient.ts).
+    const result = await generateJson(agentId, "", {
+      temperature: 0.2,
+      systemInstruction: buildSystemInstruction(job),
+      contents,
+    });
 
-    const text: string | undefined = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error("Empty Gemini response");
-    const parsed = safeJson(text);
-    if (!parsed) throw new Error("Gemini returned unparseable JSON for screening turn");
+    if (!result) throw new Error("Empty response from generateJson");
 
-    const usageMetadata = response.data?.usageMetadata;
-    const result: ScreeningTurnResult = {
+    const parsed = safeJson(result.text);
+    if (!parsed)
+      throw new Error("Gemini returned unparseable JSON for screening turn");
+
+    const screeningResult: ScreeningTurnResult = {
       reply: asString(parsed.reply, 1000) || "Could you tell me a bit more?",
       is_complete: parsed.is_complete === true,
       captured_answers: coerceCapturedAnswers(parsed.captured_answers),
@@ -203,32 +172,36 @@ export const runScreeningTurn = async (params: {
 
     void logAiCall({
       tenantId,
-      agentId: "screening_chat",
+      agentId,
       entityType: "screening_session",
       entityId: sessionId,
-      model,
+      model: result.model,
       promptVersion: PROMPT_VERSION,
-      inputTokens: usageMetadata?.promptTokenCount,
-      outputTokens: usageMetadata?.candidatesTokenCount,
-      cachedTokens: usageMetadata?.cachedContentTokenCount,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      cachedTokens: result.usage.cachedTokens,
       latencyMs: Date.now() - startedAt,
       success: true,
+      fallbackUsed: result.fallbackUsed,
     });
 
-    return result;
+    return screeningResult;
   } catch (err) {
     void logAiCall({
       tenantId,
-      agentId: "screening_chat",
+      agentId,
       entityType: "screening_session",
       entityId: sessionId,
-      model,
+      model: getModelForAgent(agentId),
       promptVersion: PROMPT_VERSION,
       latencyMs: Date.now() - startedAt,
       success: false,
       errorReason: categorizeError(err),
     });
-    console.error("[ScreeningChat] runScreeningTurn failed:", err instanceof Error ? err.message : err);
+    console.error(
+      "[ScreeningChat] runScreeningTurn failed:",
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 };

@@ -199,7 +199,7 @@ export default function JobsPage() {
   const [isBulkJdUploadOpen, setIsBulkJdUploadOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: "", client_id: "", department: "", location: "",
-    work_mode: "onsite" as const, employment_type: "full_time",
+    work_mode: "onsite" as string, employment_type: "full_time",
     experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0,
     headcount: 1, priority: "medium" as const, description: "", mandatory_skills: "",
     preferred_skills: "",

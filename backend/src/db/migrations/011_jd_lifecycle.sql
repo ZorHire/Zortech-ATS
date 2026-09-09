@@ -35,3 +35,20 @@ CREATE TABLE IF NOT EXISTS job_approvals (
 CREATE INDEX IF NOT EXISTS idx_ja_job     ON job_approvals(job_id, tenant_id);
 CREATE INDEX IF NOT EXISTS idx_ja_pending ON job_approvals(tenant_id, status)
   WHERE status = 'pending';
+
+-- Migration 011: ai_generated_artifacts
+CREATE TABLE IF NOT EXISTS ai_generated_artifacts (
+  id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id      uuid        NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  agent_id       text        NOT NULL,
+  entity_type    text        NOT NULL,
+  entity_id      uuid        NOT NULL,
+  payload        jsonb       NOT NULL,
+  model          text        NOT NULL,
+  prompt_version text        NOT NULL,
+  created_by     uuid        REFERENCES users(id) ON DELETE SET NULL,
+  created_at     timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_artifacts_entity
+  ON ai_generated_artifacts (tenant_id, entity_type, entity_id, created_at DESC);

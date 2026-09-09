@@ -21,9 +21,7 @@ import {
   useGetDashboardStatsQuery,
   useGetDashboardActivityQuery,
   useGetDashboardTasksQuery,
-  type DashboardStats,
   type ActivityItem,
-  type TaskItem,
 } from "../store/api/dashboardApi";
 import { useGetJobsQuery } from "../store/api/jobApi";
 import DashboardModal from "../components/DashboardModal";

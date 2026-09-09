@@ -141,10 +141,26 @@ initLedgerDb().catch((err) =>
   console.error("Ledger DB init failed:", err.message)
 );
 
-// Health check — registered before the v1Router so it is never shadowed by
-// route middleware. curl and Docker healthcheck both hit this path.
+// Liveness — registered before the v1Router so it is never shadowed by route
+// middleware. curl and Docker healthcheck both hit this path. Deliberately does
+// NOT touch the database: a dependency outage must not make Docker churn the
+// container, since restarting cannot fix an upstream database problem.
 app.get("/v1/health", (_req, res) => {
   res.json({ status: "ok", message: "Backend is running" });
+});
+
+// Readiness — verifies the backend can actually serve requests. Every
+// authenticated route needs the database, so a failure here means the API is up
+// but useless; this is the path monitoring should alert on.
+app.get("/v1/health/ready", async (_req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ready", database: "ok" });
+  } catch (error) {
+    const message = (error as Error).message;
+    console.error("Readiness check failed — database unreachable:", message);
+    res.status(503).json({ status: "not_ready", database: "unavailable", reason: message });
+  }
 });
 
 // Routes

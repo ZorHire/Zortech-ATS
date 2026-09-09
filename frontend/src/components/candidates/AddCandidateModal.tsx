@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import api from "../../lib/api";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../../lib/confidenceIndicator";
 import { useParseResumeMutation, useAddCandidateToJobMutation } from "../../store/api/candidateApi";
 

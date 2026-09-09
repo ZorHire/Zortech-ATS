@@ -18,6 +18,7 @@ import type { SubscriptionInfo } from "./store/slices/subscriptionSlice";
 import { useMeQuery } from "./store/api/authApi";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/layout/Layout";
+import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SubscribePage from "./pages/SubscribePage";
@@ -74,7 +75,9 @@ function SessionRestorer() {
   const dispatch = useAppDispatch();
   const hasToken = !!localStorage.getItem("jwt");
 
-  const { data, isSuccess, isError } = useMeQuery(undefined, { skip: !hasToken });
+  const { data, isSuccess, isError } = useMeQuery(undefined, {
+    skip: !hasToken,
+  });
 
   // No token → immediately resolve as unauthenticated
   useEffect(() => {
@@ -85,7 +88,12 @@ function SessionRestorer() {
   useEffect(() => {
     if (!isSuccess || !data) return;
     const { subscription, ...user } = data;
-    dispatch(setCredentials({ user: user as AuthUser, accessToken: localStorage.getItem("jwt") }));
+    dispatch(
+      setCredentials({
+        user: user as AuthUser,
+        accessToken: localStorage.getItem("jwt"),
+      }),
+    );
     dispatch(
       setSubscription(
         subscription
@@ -94,8 +102,8 @@ function SessionRestorer() {
               isPlatformOwner: subscription.isPlatformOwner ?? false,
               reason: subscription.reason ?? null,
             } satisfies SubscriptionInfo)
-          : null
-      )
+          : null,
+      ),
     );
     dispatch(setSessionStatus("active"));
   }, [isSuccess, data, dispatch]);
@@ -109,7 +117,8 @@ function SessionRestorer() {
   useEffect(() => {
     const onUnauthorized = () => dispatch(clearCredentials());
     window.addEventListener("auth:unauthorized", onUnauthorized);
-    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+    return () =>
+      window.removeEventListener("auth:unauthorized", onUnauthorized);
   }, [dispatch]);
 
   return null;
@@ -150,7 +159,7 @@ function ProtectedRoute({
   // Gate 2a: vendor_user is restricted to jobs, pipeline, and vendor portal
   if (user.role === "vendor_user" && path) {
     const allowed = VENDOR_ALLOWED_PREFIXES.some(
-      (p: string) => path === p || path.startsWith(p + "/")
+      (p: string) => path === p || path.startsWith(p + "/"),
     );
     if (!allowed) return <Navigate to="/vendor-portal/jobs" replace />;
   }
@@ -158,7 +167,7 @@ function ProtectedRoute({
   // Gate 2b: client_user is restricted to client portal only
   if (user.role === "client_user" && path) {
     const allowed = CLIENT_ALLOWED_PREFIXES.some(
-      (p: string) => path === p || path.startsWith(p + "/")
+      (p: string) => path === p || path.startsWith(p + "/"),
     );
     if (!allowed) return <Navigate to="/client-portal/jobs" replace />;
   }
@@ -174,7 +183,7 @@ function ProtectedRoute({
     isPortalPath ||
     (path
       ? SUBSCRIPTION_EXEMPT_PATHS.some(
-          (p) => path === p || path.startsWith(p + "/")
+          (p) => path === p || path.startsWith(p + "/"),
         )
       : false);
 
@@ -223,9 +232,13 @@ function AppRoutes() {
       <Route
         path="/"
         element={
-          <ProtectedRoute path="/">
-            <DashboardPage />
-          </ProtectedRoute>
+          user ? (
+            <ProtectedRoute path="/">
+              <DashboardPage />
+            </ProtectedRoute>
+          ) : (
+            <LandingPage />
+          )
         }
       />
       <Route

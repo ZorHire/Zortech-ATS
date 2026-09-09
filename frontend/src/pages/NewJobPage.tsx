@@ -3,8 +3,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, ArrowLeft, Upload, CheckCircle, AlertCircle, Loader } from "lucide-react";
 import Header from "../components/layout/Header";
-import api from "../lib/api";
-import { Client } from "../types";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import { useGetClientsQuery, useParseJdMutation, useCreateJobMutation } from "../store/api/jobApi";
 
@@ -70,13 +68,13 @@ export default function NewJobPage() {
             ? (parsed.salary_max as number)
             : current.salary_max,
         mandatory_skills:
-          parsed.mandatory_skills?.length > 0
+          parsed.mandatory_skills && parsed.mandatory_skills.length > 0
             ? parsed.mandatory_skills.join(", ")
             : Array.isArray(parsed.required_skills) && (parsed.required_skills as string[]).length > 0
               ? (parsed.required_skills as string[]).join(", ")
               : current.mandatory_skills,
         preferred_skills:
-          parsed.preferred_skills?.length > 0
+          parsed.preferred_skills && parsed.preferred_skills.length > 0
             ? parsed.preferred_skills.join(", ")
             : current.preferred_skills,
         description: (parsed.description as string) || current.description,
