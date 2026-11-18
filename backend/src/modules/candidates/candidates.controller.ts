@@ -7,6 +7,20 @@ import { AuthRequest } from "../../middleware/auth";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
 import { withCache, invalidate, invalidatePrefix } from "../../lib/cache";
 import { embedText } from "../../services/embedding";
+import { saveResume, getResumeFromR2, R2_PREFIX } from "../../services/resumeStorage";
+
+// resume_url values sent by the client (no file upload). External links and
+// local /uploads paths are kept as before; an "r2:" key is accepted only if it
+// belongs to this tenant, so one tenant can't point a candidate at another
+// tenant's stored resume.
+function sanitizeClientResumeUrl(value: unknown, tenantId: string): string | undefined {
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  const v = value.trim();
+  if (v.startsWith(R2_PREFIX)) {
+    return v.startsWith(`${R2_PREFIX}resumes/${tenantId}/`) && !v.includes("..") ? v : undefined;
+  }
+  return v;
+}
 
 const buildEmbeddingInput = (candidate: {
   current_title?: string | null;
@@ -201,10 +215,6 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
   const source = body.source || "direct";
   const gdpr_consent =
     body.gdpr_consent === "true" || body.gdpr_consent === true;
-  const resumeUrl = file
-    ? `/uploads/resumes/${path.basename(file.path)}`
-    : body.resume_url || null;
-
   try {
     if (!email && !phone) {
       return res.status(400).json({
@@ -221,6 +231,12 @@ export const createCandidate = async (req: AuthRequest, res: Response) => {
         .status(409)
         .json({ message: "Candidate with this email or phone already exists" });
     }
+
+    // Store the file only once the candidate is known to be new, so rejected
+    // duplicates don't leave orphaned resumes in storage.
+    const resumeUrl = file
+      ? await saveResume(tenantId!, file)
+      : sanitizeClientResumeUrl(body.resume_url, tenantId!) ?? null;
 
     const result = await pool.query(
       `INSERT INTO candidates (tenant_id, first_name, last_name, email, phone, current_title, current_company, experience_years, current_location, preferred_location, notice_period_days, current_ctc, expected_ctc, skills, summary, resume_url, source, gdpr_consent, created_by)
@@ -263,14 +279,26 @@ export const updateCandidate = async (req: AuthRequest, res: Response) => {
   const body = req.body || {};
   const tenantId = req.user?.tenant_id;
 
-  const resumeUrl = file
-    ? `/uploads/resumes/${path.basename(file.path)}`
-    : body.resume_url;
   const skills = normalizeSkills(body.skills);
 
   try {
+    let resumeUrl: string | undefined;
+    if (file) {
+      // Confirm the candidate exists in this tenant before storing a file for it.
+      const exists = await pool.query(
+        "SELECT 1 FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL",
+        [id, tenantId],
+      );
+      if (exists.rows.length === 0) {
+        return res.status(404).json({ message: "Candidate not found" });
+      }
+      resumeUrl = await saveResume(tenantId!, file);
+    } else {
+      resumeUrl = sanitizeClientResumeUrl(body.resume_url, tenantId!);
+    }
+
     const result = await pool.query(
-      `UPDATE candidates SET 
+      `UPDATE candidates SET
        first_name = COALESCE($1, first_name),
        last_name = COALESCE($2, last_name),
        email = COALESCE($3, email),
@@ -871,6 +899,27 @@ export const getResume = async (req: AuthRequest, res: Response) => {
 
     if (resumeUrl.startsWith("http://") || resumeUrl.startsWith("https://")) {
       return res.redirect(302, resumeUrl);
+    }
+
+    if (resumeUrl.startsWith(R2_PREFIX)) {
+      // Defence in depth: only serve objects under this tenant's prefix.
+      if (!resumeUrl.startsWith(`${R2_PREFIX}resumes/${tenantId}/`)) {
+        return res.status(404).json({ message: "Resume not available" });
+      }
+      const stored = await getResumeFromR2(resumeUrl);
+      if (!stored) {
+        return res.status(404).json({ message: "Resume file not found in storage" });
+      }
+      const fileName = resumeUrl.split("/").pop()?.replace(/^[0-9a-f]{16}-/, "") || "resume";
+      res.setHeader("Content-Type", stored.contentType || "application/octet-stream");
+      if (stored.contentLength) res.setHeader("Content-Length", String(stored.contentLength));
+      res.setHeader("Content-Disposition", `inline; filename="${fileName.replace(/"/g, "")}"`);
+      res.setHeader("Cache-Control", "private, no-store");
+      stored.stream.on("error", (err) => {
+        console.error("getResume stream error:", err.message);
+        res.destroy(err);
+      });
+      return stored.stream.pipe(res);
     }
 
     if (resumeUrl.startsWith("/uploads/")) {
