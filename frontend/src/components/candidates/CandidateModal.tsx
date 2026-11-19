@@ -256,8 +256,10 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     const load = async () => {
       setResumeLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const r = await fetch(`${RESUME_API}${localCandidate.resume_url}`, {
+        const token = localStorage.getItem('jwt');
+        // Always go through the authenticated resume endpoint: it serves files
+        // from local disk or the private R2 bucket, whichever resume_url points to.
+        const r = await fetch(`${RESUME_API}/candidates/${localCandidate.id}/resume`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (!r.ok) throw new Error();
@@ -271,7 +273,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     };
     load();
     return () => { revoked = true; };
-  }, [localCandidate.resume_url]);
+  }, [localCandidate.id, localCandidate.resume_url]);
 
   React.useEffect(() => {
     return () => { if (resumeBlobUrl) URL.revokeObjectURL(resumeBlobUrl); };
@@ -286,8 +288,8 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   };
 
   const handleFullScreen = () => {
-    if (!resumeBlobUrl) window.open(`${RESUME_API}${localCandidate.resume_url}`, '_blank');
-    else window.open(resumeBlobUrl, '_blank');
+    // The resume is only reachable with the auth header, so open the loaded blob.
+    if (resumeBlobUrl) window.open(resumeBlobUrl, '_blank');
   };
 
   const handleUploadResume = async (file: File) => {
