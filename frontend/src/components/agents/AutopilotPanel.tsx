@@ -384,6 +384,8 @@ function AutopilotForm({ jobId, settings }: { jobId: string; settings: Autopilot
   const [toggling, setToggling] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const copyId = useId();
+  // Settings fold away while autopilot is off, so the job details stay near the top.
+  const [expanded, setExpanded] = useState(settings.enabled);
 
   const saved = useMemo(() => toDraft(settings), [settings]);
   const dirty = !sameDraft({ ...draft, enabled: saved.enabled }, saved);
@@ -491,95 +493,105 @@ function AutopilotForm({ jobId, settings }: { jobId: string; settings: Autopilot
         />
       </div>
 
-      <div className="mt-5 grid grid-cols-1 gap-5 border-t border-line pt-5 lg:grid-cols-2">
-        <ThresholdField
-          label="Shortlist threshold"
-          hint="Candidates scoring at or above this are shortlisted. Below it, they go to Needs review."
-          value={draft.shortlist_threshold}
-          onChange={(n) => set("shortlist_threshold", n)}
-          error={visibleErrors.shortlist_threshold}
-          disabled={busy}
-        />
-        <ThresholdField
-          label="Screening pass score"
-          hint="Screening scores at or above this move on to scheduling. Below it, Needs review."
-          value={draft.screen_pass_threshold}
-          onChange={(n) => set("screen_pass_threshold", n)}
-          error={visibleErrors.screen_pass_threshold}
-          disabled={busy}
-        />
-        <ToggleRow
-          label="Auto screen"
-          description="Email shortlisted candidates a link to a short AI screening interview."
-          checked={draft.auto_screen}
-          onChange={(b) => set("auto_screen", b)}
-          disabled={busy}
-        />
-        <ToggleRow
-          label="Auto schedule"
-          description="Email candidates who pass screening a link to pick an interview slot."
-          checked={draft.auto_schedule}
-          onChange={(b) => set("auto_schedule", b)}
-          disabled={busy}
-        />
-        <NumberField
-          label="Interview duration"
-          value={draft.interview_duration_min}
-          onChange={(n) => set("interview_duration_min", n)}
-          min={15}
-          max={240}
-          step={5}
-          suffix="minutes"
-          error={visibleErrors.interview_duration_min}
-          disabled={busy}
-        />
-        <NumberField
-          label="Daily outreach cap"
-          hint="Most candidate emails autopilot sends per day for this job."
-          value={draft.daily_outreach_cap}
-          onChange={(n) => set("daily_outreach_cap", n)}
-          min={0}
-          max={1000}
-          suffix="emails / day"
-          error={visibleErrors.daily_outreach_cap}
-          disabled={busy}
-        />
-        <div className="lg:col-span-2">
-          <SlotsEditor
-            slots={draft.interview_slots}
-            onChange={(slots) => set("interview_slots", slots)}
-            error={visibleErrors.interview_slots}
-            disabled={busy}
-          />
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-col-reverse items-stretch gap-2 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs text-muted" aria-live="polite">
-          {dirty
-            ? "You have unsaved changes."
-            : settings.updated_at
-              ? `Last saved ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.updated_at))}`
-              : "Default settings — not saved yet."}
-        </p>
-        <div className="flex gap-2">
-          {dirty && (
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setDraft(toDraft(settings));
-                setShowErrors(false);
-              }}
-              disabled={busy}
-            >
-              Discard
-            </Button>
-          )}
-          <Button icon={<Save size={16} />} onClick={save} loading={saving} loadingText="Saving…" disabled={toggling || (!dirty && !hasPastSlots)}>
-            Save settings
+      {!(expanded || settings.enabled || dirty) ? (
+        <div className="mt-4 border-t border-line pt-4">
+          <Button variant="link" size="sm" onClick={() => setExpanded(true)} aria-expanded={false}>
+            Set up autopilot for this job
           </Button>
         </div>
-      </div>
+      ) : (
+        <>
+        <div className="mt-5 grid grid-cols-1 gap-5 border-t border-line pt-5 lg:grid-cols-2">
+          <ThresholdField
+            label="Shortlist threshold"
+            hint="Candidates scoring at or above this are shortlisted. Below it, they go to Needs review."
+            value={draft.shortlist_threshold}
+            onChange={(n) => set("shortlist_threshold", n)}
+            error={visibleErrors.shortlist_threshold}
+            disabled={busy}
+          />
+          <ThresholdField
+            label="Screening pass score"
+            hint="Screening scores at or above this move on to scheduling. Below it, Needs review."
+            value={draft.screen_pass_threshold}
+            onChange={(n) => set("screen_pass_threshold", n)}
+            error={visibleErrors.screen_pass_threshold}
+            disabled={busy}
+          />
+          <ToggleRow
+            label="Auto screen"
+            description="Email shortlisted candidates a link to a short AI screening interview."
+            checked={draft.auto_screen}
+            onChange={(b) => set("auto_screen", b)}
+            disabled={busy}
+          />
+          <ToggleRow
+            label="Auto schedule"
+            description="Email candidates who pass screening a link to pick an interview slot."
+            checked={draft.auto_schedule}
+            onChange={(b) => set("auto_schedule", b)}
+            disabled={busy}
+          />
+          <NumberField
+            label="Interview duration"
+            value={draft.interview_duration_min}
+            onChange={(n) => set("interview_duration_min", n)}
+            min={15}
+            max={240}
+            step={5}
+            suffix="minutes"
+            error={visibleErrors.interview_duration_min}
+            disabled={busy}
+          />
+          <NumberField
+            label="Daily outreach cap"
+            hint="Most candidate emails autopilot sends per day for this job."
+            value={draft.daily_outreach_cap}
+            onChange={(n) => set("daily_outreach_cap", n)}
+            min={0}
+            max={1000}
+            suffix="emails / day"
+            error={visibleErrors.daily_outreach_cap}
+            disabled={busy}
+          />
+          <div className="lg:col-span-2">
+            <SlotsEditor
+              slots={draft.interview_slots}
+              onChange={(slots) => set("interview_slots", slots)}
+              error={visibleErrors.interview_slots}
+              disabled={busy}
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col-reverse items-stretch gap-2 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted" aria-live="polite">
+            {dirty
+              ? "You have unsaved changes."
+              : settings.updated_at
+                ? `Last saved ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.updated_at))}`
+                : "Default settings — not saved yet."}
+          </p>
+          <div className="flex gap-2">
+            {dirty && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setDraft(toDraft(settings));
+                  setShowErrors(false);
+                }}
+                disabled={busy}
+              >
+                Discard
+              </Button>
+            )}
+            <Button icon={<Save size={16} />} onClick={save} loading={saving} loadingText="Saving…" disabled={toggling || (!dirty && !hasPastSlots)}>
+              Save settings
+            </Button>
+          </div>
+        </div>
+        </>
+      )}
     </>
   );
 }
