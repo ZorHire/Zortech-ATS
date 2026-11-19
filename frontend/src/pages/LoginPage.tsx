@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Briefcase,
   Eye,
@@ -483,6 +483,13 @@ export default function LoginPage() {
                   )}
                 </button>
               </form>
+
+              <p className="mt-6 text-center text-sm text-[#7d6651]">
+                New to ZorHire?{" "}
+                <Link to="/book-demo" className="font-semibold text-[#b67031] hover:text-[#9b5c27]">
+                  Book a demo
+                </Link>
+              </p>
 
               {/* Security message */}
               <div className="mt-8 pt-8 border-t border-[#e6d7c0] text-center">

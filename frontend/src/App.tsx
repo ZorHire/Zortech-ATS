@@ -21,6 +21,7 @@ import Layout from "./components/layout/Layout";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import OAuthCallbackPage from "./pages/OAuthCallbackPage";
+import BookDemoPage from "./pages/BookDemoPage";
 import { FullPageLoader, ServerUnreachableScreen } from "./components/layout/AppStatusScreens";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SubscribePage from "./pages/SubscribePage";
@@ -239,6 +240,7 @@ function AppRoutes() {
       />
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+      <Route path="/book-demo" element={<BookDemoPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/screening/:sessionId" element={<ScreeningChatPage />} />
       {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}

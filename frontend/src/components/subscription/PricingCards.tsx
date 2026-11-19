@@ -47,7 +47,8 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
 
   const handleSubscribe = async (plan: Plan) => {
     if (publicMode) {
-      navigate("/login");
+      // Prospects can't self-register; new companies start with a demo.
+      navigate("/book-demo");
       return;
     }
     if (plan.id === "enterprise") {
@@ -120,8 +121,8 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
 
   const getButtonLabel = (plan: Plan) => {
     if (subscribing === plan.id) return "Processing…";
+    if (publicMode) return "Book a demo";
     if (plan.id === "enterprise") return "Contact Sales";
-    if (publicMode) return "Get Started";
     if (isCurrentPlan(plan.id)) return "Current Plan";
     if (isDowngrade(plan.id)) return "Downgrade";
     if (currentSub?.status === "active") return "Upgrade";

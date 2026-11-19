@@ -9,6 +9,7 @@ import pool from "./db";
 import { authMiddleware } from "./middleware/auth";
 import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
+import demoRequestRoutes from "./modules/demo-requests/demo-requests.routes";
 import clientRoutes from "./modules/clients/clients.routes";
 import jobRoutes from "./modules/jobs/jobs.routes";
 import candidateRoutes from "./modules/candidates/candidates.routes";
@@ -95,6 +96,15 @@ const forgotPasswordLimiter = rateLimit({
   message: { message: "Too many requests, please try again later." },
 });
 
+// Public "Book a demo" form: each request sends an email, so keep it tight.
+const demoRequestLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+});
+
 // Per-IP limiter for the AI-backed parse endpoints (Gemini cost exposure)
 const parseLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -169,6 +179,7 @@ const v1Router = express.Router();
 // Tighter rate limit on forgot-password specifically (applies before the broader authLimiter)
 v1Router.post("/auth/forgot-password", forgotPasswordLimiter);
 v1Router.use("/auth", authLimiter, authRoutes);
+v1Router.use("/demo-requests", demoRequestLimiter, demoRequestRoutes);
 v1Router.use("/clients", clientRoutes);
 v1Router.use("/jobs", jobRoutes);
 v1Router.use("/candidates", candidateRoutes);

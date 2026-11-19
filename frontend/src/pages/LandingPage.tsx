@@ -88,6 +88,11 @@ export default function LandingPage() {
     navigate("/login");
   };
 
+  // New client companies are onboarded after a demo (no self-signup).
+  const goToDemo = () => {
+    navigate("/book-demo");
+  };
+
   return (
     <div className="min-h-screen bg-[#F8EFE3] text-[#07101C] selection:bg-[#E5B83F]/30">
       {/* =========================================================
@@ -144,20 +149,39 @@ export default function LandingPage() {
             >
               Security
             </a>
+
+            <button
+              type="button"
+              onClick={() => navigate("/pricing")}
+              className="text-sm text-[#75695F] transition hover:text-[#07101C]"
+            >
+              Pricing
+            </button>
           </nav>
 
-          {/* Login */}
-          <button
-            type="button"
-            onClick={goToLogin}
-            className="group inline-flex items-center gap-2 rounded-lg border border-[#E5B83F]/40 bg-[#E5B83F]/5 px-5 py-2.5 text-sm font-semibold text-[#E8C75B] transition-all hover:border-[#E5B83F]/70 hover:bg-[#E5B83F]/10 hover:text-[#F3D477]"
-          >
-            Login
-            <ArrowRight
-              size={15}
-              className="transition-transform group-hover:translate-x-0.5"
-            />
-          </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Existing customers */}
+            <button
+              type="button"
+              onClick={goToLogin}
+              className="whitespace-nowrap rounded-lg px-2 sm:px-3 py-2.5 text-sm font-semibold text-[#07101C]/70 transition hover:text-[#07101C]"
+            >
+              Sign in
+            </button>
+
+            {/* Prospects */}
+            <button
+              type="button"
+              onClick={goToDemo}
+              className="group inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-[#E5B83F] px-3 sm:px-5 py-2.5 text-sm font-bold text-[#080706] transition-all hover:bg-[#F0C95A]"
+            >
+              Book a demo
+              <ArrowRight
+                size={15}
+                className="hidden sm:block transition-transform group-hover:translate-x-0.5"
+              />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -210,10 +234,10 @@ export default function LandingPage() {
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <button
                   type="button"
-                  onClick={goToLogin}
+                  onClick={goToDemo}
                   className="group inline-flex min-w-[190px] items-center justify-center gap-2 rounded-xl bg-[#E5B83F] px-7 py-3.5 text-sm font-bold text-[#080706] shadow-[0_0_40px_rgba(229,184,63,0.15)] transition-all hover:bg-[#F0C95A] hover:shadow-[0_0_50px_rgba(229,184,63,0.22)]"
                 >
-                  Login to ZorHire
+                  Book a demo
                   <ArrowRight
                     size={17}
                     className="transition-transform group-hover:translate-x-1"
@@ -627,20 +651,20 @@ export default function LandingPage() {
             <div className="mx-auto mb-5 h-px w-12 bg-[#E5B83F]" />
 
             <h2 className="text-4xl font-semibold tracking-[-0.025em] text-[#07101C] sm:text-5xl">
-              Your recruitment workspace is waiting.
+              See ZorHire on your own hiring.
             </h2>
 
             <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-[#75695F]">
-              Sign in to your ZorHire workspace and continue managing your
-              recruitment operation.
+              Book a 30-minute demo. We'll walk through your roles, vendors and
+              pipeline, and set up your workspace if it's a fit.
             </p>
 
             <button
               type="button"
-              onClick={goToLogin}
+              onClick={goToDemo}
               className="group mt-9 inline-flex items-center gap-2 rounded-xl bg-[#E5B83F] px-8 py-4 text-sm font-bold text-[#080706] shadow-[0_0_40px_rgba(229,184,63,0.12)] transition-all hover:bg-[#F0C95A] hover:shadow-[0_0_50px_rgba(229,184,63,0.2)]"
             >
-              Login to ZorHire
+              Book a demo
               <ArrowRight
                 size={17}
                 className="transition-transform group-hover:translate-x-1"
@@ -648,7 +672,10 @@ export default function LandingPage() {
             </button>
 
             <p className="mt-5 text-xs text-[#75695F]">
-              ZorHire access is restricted to authorized users.
+              Already using ZorHire?{" "}
+              <button type="button" onClick={goToLogin} className="font-semibold text-[#07101C] underline-offset-2 hover:underline">
+                Sign in
+              </button>
             </p>
           </div>
         </section>
@@ -684,7 +711,7 @@ export default function LandingPage() {
               onClick={goToLogin}
               className="transition hover:text-[#07101C]/70"
             >
-              Login
+              Sign in
             </button>
           </div>
 

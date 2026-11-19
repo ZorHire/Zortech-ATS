@@ -69,34 +69,32 @@ export default function SubscribePage() {
             Start your journey
           </h2>
           <p className="text-sm text-[#7d6651] mb-8 leading-relaxed">
-            Choose a plan that fits your team and unlock the full ZorHire
-            platform. No trial — subscribe and get immediate access.
+            Book a short demo with our team. If ZorHire is a fit, we set up
+            your company workspace and send your team their logins.
           </p>
 
           {/* Primary CTA */}
           <button
-            onClick={() => navigate("/pricing")}
+            onClick={() => navigate("/book-demo")}
             className="w-full bg-[#b67031] text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#b67031]/20 hover:bg-[#9b5c27] transition-all flex items-center justify-center gap-2 group mb-4"
           >
-            View Plans &amp; Subscribe
+            Book a demo
             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
           </button>
 
-          {/* Secondary — login */}
           <button
-            onClick={() => navigate("/login")}
-            className="w-full py-3.5 rounded-xl font-bold text-sm border border-[#e5d1bb] text-[#7d6651] hover:border-[#c88a3f] hover:text-[#3a230f] transition-all"
+            onClick={() => navigate("/pricing")}
+            className="w-full py-3.5 rounded-xl font-bold text-sm border border-[#e5d1bb] text-[#7d6651] hover:border-[#c88a3f] hover:text-[#3a230f] transition-all mb-4"
           >
-            Already subscribed? Log In
+            View plans &amp; pricing
           </button>
 
-          <div className="mt-8 pt-8 border-t border-[#e6d7c0] text-center">
-            <p className="text-xs text-[#7d6651] leading-relaxed">
-              ZorHire is invite-only. Your organization credentials
-              <br />
-              are provided by your ZorTech account manager.
-            </p>
-          </div>
+          <p className="text-center text-sm text-[#7d6651]">
+            Already have a ZorHire login?{" "}
+            <button onClick={() => navigate("/login")} className="font-semibold text-[#3a230f] hover:underline">
+              Sign in
+            </button>
+          </p>
         </div>
       </div>
     </div>

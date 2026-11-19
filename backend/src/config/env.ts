@@ -19,6 +19,8 @@ export const env = {
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "",
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || "",
+  // Where "Book a demo" requests from the public site are emailed.
+  DEMO_REQUEST_TO: process.env.DEMO_REQUEST_TO || "tech@zortechs.in",
   FRONTEND_URL:
     process.env.SERVER_FRONTEND_URL || "https://zorhire.zortechs.in",
   // A5 dark-build gate — defaults false in every environment. Must be explicitly set
