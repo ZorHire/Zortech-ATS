@@ -9,6 +9,7 @@ import pool from "./db";
 import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
 import demoRequestRoutes from "./modules/demo-requests/demo-requests.routes";
+import { agentsRouter, schedulingRouter } from "./modules/agents/agents.routes";
 import clientRoutes from "./modules/clients/clients.routes";
 import jobRoutes from "./modules/jobs/jobs.routes";
 import candidateRoutes from "./modules/candidates/candidates.routes";
@@ -90,6 +91,15 @@ const authLimiter = rateLimit({
 const forgotPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later." },
+});
+
+// Public candidate scheduling links: token-guarded, but rate-limit guessing and spam.
+const schedulingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later." },
@@ -199,6 +209,8 @@ v1Router.use("/dashboard", dashboardRoutes);
 v1Router.use("/email-campaigns", campaignRoutes);
 v1Router.use("/onboarding", onboardingRoutes);
 v1Router.use("/screening", screeningRoutes);
+v1Router.use("/agents", agentsRouter);
+v1Router.use("/scheduling", schedulingLimiter, schedulingRouter);
 v1Router.use("/vendor-portal", vendorPortalRoutes);
 v1Router.use("/client-portal", clientPortalRoutes);
 v1Router.use("/jd-lifecycle", jdLifecycleRoutes);

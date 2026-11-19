@@ -2,8 +2,9 @@ import React from 'react';
 import {
   X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye,
   FileText, Send, Trash2, Loader2, Upload, Plus, TrendingUp,
-  Video, PhoneCall, Users, Link, CheckCircle2, XCircle, AlertCircle,
+  Video, PhoneCall, Users, Link, CheckCircle2, XCircle, AlertCircle, Sparkles,
 } from 'lucide-react';
+import AiInsightsTab from '../agents/AiInsightsTab';
 import { Candidate } from '../../types';
 import api, { ApiError } from '../../lib/api';
 import { Link as RouterLink } from 'react-router-dom';
@@ -60,7 +61,7 @@ const INTERVIEW_TYPE_LABELS: Record<string, string> = {
 };
 
 const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete, onUpdate, applicationId }) => {
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity' | 'ai'>('overview');
   const [localCandidate, setLocalCandidate] = React.useState<Candidate>(candidate);
   const [resumeUploading, setResumeUploading] = React.useState(false);
   const [resumeBlobUrl, setResumeBlobUrl] = React.useState<string | null>(null);
@@ -352,12 +353,19 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
         {/* Tabs */}
         <div className="sticky top-0 z-10 border-b border-line bg-white px-5 sm:px-6">
           <div role="tablist" className="flex gap-6 overflow-x-auto">
-            {(['overview', 'resume', 'activity'] as const).map((tab) => (
+            {(['overview', 'resume', 'activity', 'ai'] as const).map((tab) => (
               <button key={tab} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
-                className={`whitespace-nowrap border-b-2 py-3 text-sm font-medium capitalize transition-colors ${
+                className={`whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors ${
+                  tab === 'ai' ? '' : 'capitalize'
+                } ${
                   activeTab === tab ? 'border-navy-600 text-navy-700' : 'border-transparent text-muted hover:text-ink'
                 }`}>
-                {tab}
+                {tab === 'ai' ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Sparkles size={14} aria-hidden="true" />
+                    AI insights
+                  </span>
+                ) : tab}
                 {tab === 'activity' && interviews.length > 0 && (
                   <span className="ml-2 rounded-full bg-navy-50 px-1.5 py-0.5 text-xs font-medium text-navy-700">
                     {interviews.length}
@@ -897,6 +905,44 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                     </div>
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* ── AI insights Tab ── */}
+          {activeTab === 'ai' && (
+            <div className="space-y-5">
+              {applications.length > 1 && (
+                <div className="zh-card flex items-center gap-3 p-4">
+                  <label htmlFor="cm-ai-app" className={`${subtle} shrink-0`}>Viewing</label>
+                  <select
+                    id="cm-ai-app"
+                    value={selectedApp?.id || ""}
+                    onChange={(e) => setSelectedApp(applications.find(a => a.id === e.target.value))}
+                    className="zh-input flex-1 py-2"
+                  >
+                    {applications.map(a => (
+                      <option key={a.id} value={a.id}>{a.job?.title || "Job"}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {appLoading ? (
+                <div className="space-y-3" aria-label="Loading">
+                  <Skeleton className="h-28 w-full rounded-xl" />
+                  <Skeleton className="h-40 w-full rounded-xl" />
+                </div>
+              ) : appError ? (
+                <div className="zh-card">
+                  <ErrorState compact message={appError} onRetry={() => fetchApplications()} />
+                </div>
+              ) : (
+                <AiInsightsTab
+                  key={selectedApp?.id ?? 'none'}
+                  applicationId={selectedApp?.id ?? null}
+                  candidateName={`${candidate.first_name} ${candidate.last_name}`}
+                  onNavigate={onClose}
+                />
               )}
             </div>
           )}

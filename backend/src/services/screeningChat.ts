@@ -4,6 +4,8 @@ import { logAiCall, PROMPT_VERSION, checkBudget } from "./aiCallLog";
 import { getModelForAgent } from "./modelRouter";
 import { withRetry, safeJson, categorizeError } from "../lib/ai/helpers";
 import { generateJson } from "../lib/ai/geminiClient";
+import { isClaudeConfigured } from "../lib/ai/claudeClient";
+import { runClaudeScreeningTurn } from "./screeningInterviewClaude";
 
 export const generateScreeningToken = (): string =>
   crypto.randomBytes(32).toString("hex");
@@ -116,6 +118,13 @@ export const runScreeningTurn = async (params: {
   candidateMessage: string;
 }): Promise<ScreeningTurnResult | null> => {
   const { tenantId, sessionId, job, history, candidateMessage } = params;
+
+  // Claude runs the interview when configured; Gemini is the fallback.
+  if (isClaudeConfigured()) {
+    const claudeTurn = await runClaudeScreeningTurn(params);
+    if (claudeTurn) return claudeTurn;
+  }
+
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) return null;
 

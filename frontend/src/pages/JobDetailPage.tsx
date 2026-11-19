@@ -36,6 +36,7 @@ import {
   Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton, buttonClasses, useConfirm,
 } from '../components/ui';
 import { JobStatusBadge, PriorityBadge, Avatar } from '../components/jobs/jobBadges';
+import AutopilotPanel from '../components/agents/AutopilotPanel';
 
 const workModeLabel: Record<string, string> = {
   remote: 'Remote',
@@ -157,6 +158,10 @@ export default function JobDetailPage() {
     profile?.role === 'recruiter';
 
   // Roles that can reach the Assign-JD flow on the Vendors page (mirrors the sidebar's /vendors roles).
+  // AI autopilot: same roles as the AI agents page.
+  const canUseAgents =
+    canEditStatus || profile?.role === 'vendor_manager';
+
   const canAssignVendors =
     profile?.role === 'super_admin' ||
     profile?.role === 'accounts_manager' ||
@@ -268,6 +273,9 @@ export default function JobDetailPage() {
       />
 
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        {/* AI autopilot for this job */}
+        {canUseAgents && id && <AutopilotPanel jobId={id} />}
+
         {/* Main info card */}
         <div className="zh-card space-y-6 p-5 sm:p-6">
           {/* Client + badges */}
