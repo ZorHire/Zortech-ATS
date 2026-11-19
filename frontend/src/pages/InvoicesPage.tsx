@@ -100,7 +100,7 @@ function NewInvoiceModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-2xl shadow-xl p-7 w-full max-w-md animate-in fade-in zoom-in duration-150">
-        <h3 className="text-base font-black text-[#111111] mb-1">New Invoice</h3>
+        <h3 className="text-base font-semibold text-ink mb-1">New Invoice</h3>
         <p className="text-xs text-gray-400 mb-6">Create a draft invoice for a client placement.</p>
 
         <div className="space-y-4">
@@ -168,14 +168,14 @@ function NewInvoiceModal({ onClose }: { onClose: () => void }) {
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 bg-gray-50 text-[#111111] font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
+            className="flex-1 py-2.5 bg-gray-50 text-ink font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isLoading}
-            className="flex-1 py-2.5 bg-[#111111] text-white font-bold text-sm rounded-xl hover:bg-[#333] transition-all disabled:opacity-60"
+            className="flex-1 py-2.5 bg-navy-600 text-white font-bold text-sm rounded-xl hover:bg-navy-700 transition-all disabled:opacity-60"
           >
             {isLoading ? "Creating..." : "Create Draft"}
           </button>
@@ -220,7 +220,7 @@ function EditInvoiceModal({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
       <div className="bg-white rounded-2xl shadow-xl p-7 w-full max-w-md animate-in fade-in zoom-in duration-150">
-        <h3 className="text-base font-black text-[#111111] mb-1">
+        <h3 className="text-base font-semibold text-ink mb-1">
           Edit Invoice
         </h3>
         <p className="text-xs text-gray-400 mb-6">{invoice.invoice_number}</p>
@@ -267,14 +267,14 @@ function EditInvoiceModal({
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 py-2.5 bg-gray-50 text-[#111111] font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
+            className="flex-1 py-2.5 bg-gray-50 text-ink font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={isLoading}
-            className="flex-1 py-2.5 bg-[#111111] text-white font-bold text-sm rounded-xl hover:bg-[#333] transition-all disabled:opacity-60"
+            className="flex-1 py-2.5 bg-navy-600 text-white font-bold text-sm rounded-xl hover:bg-navy-700 transition-all disabled:opacity-60"
           >
             {isLoading ? "Saving..." : "Save"}
           </button>
@@ -350,7 +350,7 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f6f2]">
+    <div className="min-h-screen bg-surface">
       <Header title="Invoices" />
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
@@ -392,7 +392,7 @@ export default function InvoicesPage() {
                 <Icon size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <p className="text-2xl font-black text-[#111111]">{value}</p>
+                <p className="text-2xl font-semibold text-ink">{value}</p>
                 <p className="text-xs text-gray-400 font-semibold">{label}</p>
               </div>
             </div>
@@ -404,7 +404,7 @@ export default function InvoicesPage() {
           {canManage && (
             <button
               onClick={() => setShowNewModal(true)}
-              className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-[#333] transition-all shadow-sm flex-shrink-0"
+              className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all shadow-sm flex-shrink-0"
             >
               <Plus size={15} />
               New Invoice
@@ -431,7 +431,7 @@ export default function InvoicesPage() {
                   onClick={() => setStatusFilter(s)}
                   className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all capitalize ${
                     statusFilter === s
-                      ? "bg-[#111111] text-white border-[#111111]"
+                      ? "bg-navy-600 text-white border-navy-600"
                       : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
                   }`}
                 >
@@ -505,10 +505,10 @@ export default function InvoicesPage() {
                       className="hover:bg-gray-50/60 transition-colors"
                     >
                       <td className="px-5 py-4">
-                        <span className="font-black text-[#111111] text-xs">
+                        <span className="font-semibold text-ink text-xs">
                           {inv.invoice_number}
                         </span>
-                        <p className="text-[10px] text-gray-400 mt-0.5">
+                        <p className="text-xs text-gray-400 mt-0.5">
                           {fmtDate(inv.created_at)}
                         </p>
                       </td>
@@ -520,7 +520,7 @@ export default function InvoicesPage() {
                           </span>
                         </div>
                         {inv.job_title && (
-                          <p className="text-[10px] text-gray-400 mt-0.5 pl-5">
+                          <p className="text-xs text-gray-400 mt-0.5 pl-5">
                             {inv.job_title}
                           </p>
                         )}
@@ -534,7 +534,7 @@ export default function InvoicesPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-sm font-black text-[#111111]">
+                        <span className="text-sm font-semibold text-ink">
                           {fmt(inv.amount, inv.currency)}
                         </span>
                       </td>
@@ -543,7 +543,7 @@ export default function InvoicesPage() {
                       </td>
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border font-bold capitalize ${
+                          className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-bold capitalize ${
                             STATUS_STYLES[inv.status] ?? ""
                           }`}
                         >
@@ -563,7 +563,7 @@ export default function InvoicesPage() {
                             {NEXT_STATUS[inv.status] && (
                               <button
                                 onClick={() => handleAdvanceStatus(inv)}
-                                className="text-xs font-bold text-[#111111] bg-[#111111]/5 hover:bg-[#111111] hover:text-white px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
+                                className="text-xs font-bold text-ink bg-navy-600/5 hover:bg-navy-600 hover:text-white px-3 py-1.5 rounded-lg transition-all flex items-center gap-1"
                               >
                                 <ChevronDown size={11} />
                                 {NEXT_LABEL[inv.status]}
@@ -604,7 +604,7 @@ export default function InvoicesPage() {
       {toast && (
         <div
           className={`fixed bottom-6 right-6 z-[100] px-5 py-3.5 rounded-2xl text-sm font-bold shadow-xl transition-all animate-in slide-in-from-bottom-4 ${
-            toast.type === "error" ? "bg-red-500 text-white" : "bg-[#111111] text-white"
+            toast.type === "error" ? "bg-red-500 text-white" : "bg-navy-600 text-white"
           }`}
         >
           {toast.msg}

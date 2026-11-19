@@ -93,21 +93,21 @@ export default function ClientsPage() {
   const tierBadge = (tier?: string) => {
     if (tier === "priority") {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-bold">
+        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-bold">
           <Star size={9} strokeWidth={2.5} />
           Priority
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 border border-gray-200 rounded-full font-bold">
+      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-500 border border-gray-200 rounded-full font-bold">
         Standard
       </span>
     );
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f6f2]">
+    <div className="min-h-screen bg-surface">
       <Header title="Clients" />
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
@@ -124,7 +124,7 @@ export default function ClientsPage() {
                 <Icon size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <p className="text-2xl font-black text-[#111111]">{value}</p>
+                <p className="text-2xl font-semibold text-ink">{value}</p>
                 <p className="text-xs text-gray-400 font-semibold">{label}</p>
               </div>
             </div>
@@ -166,7 +166,7 @@ export default function ClientsPage() {
           {canManage && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-[#333] transition-all shadow-sm flex-shrink-0"
+              className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all shadow-sm flex-shrink-0"
             >
               <Plus size={16} />
               Add Client
@@ -217,19 +217,19 @@ export default function ClientsPage() {
                 >
                   {/* Card Header */}
                   <div className="p-5 border-b border-gray-50 flex items-start gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg flex-shrink-0">
+                    <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
                       {initial}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-black text-[#111111] leading-tight truncate">{name}</h3>
+                        <h3 className="text-sm font-semibold text-ink leading-tight truncate">{name}</h3>
                         {tierBadge(client.tier)}
                       </div>
                       {client.industry && (
                         <p className="text-xs text-gray-400 mt-0.5 font-medium truncate">{client.industry}</p>
                       )}
                       {client.client_type && (
-                        <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-bold border border-blue-100">
+                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-bold border border-blue-100">
                           {client.client_type}
                         </span>
                       )}
@@ -285,7 +285,7 @@ export default function ClientsPage() {
                   <div className="px-5 pb-4 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <span className={`w-2 h-2 rounded-full ${client.is_active !== false ? "bg-emerald-500" : "bg-gray-300"}`} />
-                      <span className="text-[10px] text-gray-400 font-semibold">
+                      <span className="text-xs text-gray-400 font-semibold">
                         {client.is_active !== false ? "Active" : "Inactive"}
                       </span>
                     </div>
@@ -340,14 +340,14 @@ export default function ClientsPage() {
             <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-5">
               <Trash2 size={20} className="text-red-500" />
             </div>
-            <h3 className="text-base font-black text-[#111111] mb-2">Delete Client?</h3>
+            <h3 className="text-base font-semibold text-ink mb-2">Delete Client?</h3>
             <p className="text-sm text-gray-500 mb-6">
               This will permanently remove the client and all related records. This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmDeleteId(null)}
-                className="flex-1 py-3 bg-gray-50 text-[#111111] font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
+                className="flex-1 py-3 bg-gray-50 text-ink font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
               >
                 Cancel
               </button>
@@ -369,7 +369,7 @@ export default function ClientsPage() {
           className={`fixed bottom-6 right-6 z-[100] px-5 py-3.5 rounded-2xl text-sm font-bold shadow-xl transition-all animate-in slide-in-from-bottom-4 ${
             toast.type === "error"
               ? "bg-red-500 text-white"
-              : "bg-[#111111] text-white"
+              : "bg-navy-600 text-white"
           }`}
         >
           {toast.msg}

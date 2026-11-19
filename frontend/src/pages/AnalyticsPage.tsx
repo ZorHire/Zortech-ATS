@@ -189,7 +189,7 @@ export default function AnalyticsPage() {
                   <stat.icon size={17} className="text-white" />
                 </div>
               </div>
-              <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+              <p className="text-2xl font-semibold text-gray-900">{stat.value}</p>
               <p className="text-xs text-gray-400 mt-0.5">{stat.label}</p>
             </div>
           ))}

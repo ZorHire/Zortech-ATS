@@ -10,7 +10,7 @@ export default function PublicPricingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-[#f9efe1] flex flex-col">
+    <div className="min-h-screen bg-surface flex flex-col">
       {/* Top navbar */}
       <nav className="flex items-center justify-between px-6 py-4 bg-[#1d170f]">
         <button

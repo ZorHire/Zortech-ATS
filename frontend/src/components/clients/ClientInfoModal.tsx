@@ -27,7 +27,7 @@ const TABS = ["Basic Info", "Stakeholders", "Business & Billing", "Contract & AI
 
 function FieldLabel({ text, required }: { text: string; required?: boolean }) {
   return (
-    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+    <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
       {text}
       {required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
@@ -126,7 +126,7 @@ function CheckboxField({
 function SectionDivider({ title }: { title: string }) {
   return (
     <div className="col-span-2 pt-3 pb-1">
-      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{title}</p>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</p>
       <div className="h-px bg-gray-100 mt-1.5" />
     </div>
   );
@@ -309,18 +309,18 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
 
         {/* ── Header ── */}
         <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
           <div>
-            <h2 className="text-xl font-black text-[#111111] tracking-tight">Client Information</h2>
+            <h2 className="text-xl font-semibold text-ink tracking-tight">Client Information</h2>
             <p className="text-xs text-gray-400 mt-0.5">Add a new client with complete details</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]"
+            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-ink"
           >
             <X size={20} />
           </button>
@@ -390,7 +390,7 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-black text-gray-700">Stakeholders</h3>
+                    <h3 className="text-sm font-semibold text-gray-700">Stakeholders</h3>
                     <p className="text-xs text-gray-400 mt-0.5">
                       Add multiple points of contact at this client
                     </p>
@@ -415,7 +415,7 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
                 {stakeholders.map((s, i) => (
                   <div key={i} className="p-5 border border-gray-100 rounded-2xl bg-gray-50/40 space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
                         Stakeholder {i + 1}
                       </span>
                       <button
@@ -586,14 +586,14 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all"
+                className="flex-1 py-4 bg-gray-50 text-ink font-semibold text-sm rounded-2xl border border-gray-100 hover:bg-gray-100 transition-all"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="flex-1 py-4 bg-navy-600 text-white font-semibold text-sm rounded-2xl hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {loading ? "Saving..." : "Save Client"}
               </button>

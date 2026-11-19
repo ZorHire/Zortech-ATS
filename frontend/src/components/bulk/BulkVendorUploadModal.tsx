@@ -202,13 +202,13 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
     };
     const { label, cls } = map[f.status];
     return (
-      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
+      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
     );
   };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
 
         {/* Header */}
         <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
@@ -222,7 +222,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
               </button>
             )}
             <div>
-              <h2 className="text-xl font-black text-gray-900 tracking-tight">
+              <h2 className="text-xl font-semibold text-gray-900 tracking-tight">
                 {view === "upload"
                   ? "Bulk Vendor Import"
                   : `Preview — ${parsedFiles.length} Vendor${parsedFiles.length !== 1 ? "s" : ""}`}
@@ -274,7 +274,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
               {/* File list */}
               {files.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">
                     {files.length} file{files.length !== 1 ? "s" : ""} selected
                   </p>
                   <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
@@ -311,7 +311,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                           Company Name *
                         </label>
                         <input
@@ -331,7 +331,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
                         ] as [string, string][]
                       ).map(([label, field]) => (
                         <div key={field}>
-                          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                             {label}
                           </label>
                           <input
@@ -343,7 +343,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
                         </div>
                       ))}
                       <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                           Tier
                         </label>
                         <div className="relative">
@@ -358,7 +358,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
                         </div>
                       </div>
                       <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                           Industry Specializations (comma separated)
                         </label>
                         <input
@@ -369,7 +369,7 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
                         />
                       </div>
                       <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">
                           Geographies (comma separated)
                         </label>
                         <input

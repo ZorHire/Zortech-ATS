@@ -1,268 +1,126 @@
 import { Link, useLocation } from "react-router-dom";
-import {
-  Briefcase,
-  Users,
-  Building2,
-  Building,
-  Mail,
-  BarChart3,
-  Settings,
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-  LayoutGrid,
-  Send,
-  CreditCard,
-  Rocket,
-  Network,
-  ClipboardList,
-  CalendarDays,
-  TrendingUp,
-  FileBarChart2,
-} from "lucide-react";
+import { ChevronsLeft, ChevronsRight, LogOut, X } from "lucide-react";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectCurrentUser, clearCredentials } from "../../store/slices/authSlice";
 import { selectSubscription } from "../../store/slices/subscriptionSlice";
+import { activePath, visibleGroups } from "./navConfig";
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  /** Phone/tablet: the sidebar is an off-canvas drawer. */
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
-const navItems = [
-  {
-    icon: LayoutGrid,
-    label: "Dashboard",
-    path: "/",
-    roles: [
-      "super_admin",
-      "accounts_manager",
-      "vendor_manager",
-      "recruiter",
-    ],
-  },
-  {
-    icon: Briefcase,
-    label: "Jobs",
-    path: "/jobs",
-    roles: [
-      "super_admin",
-      "accounts_manager",
-      "vendor_manager",
-      "recruiter",
-      "vendor_user",
-    ],
-  },
-  {
-    icon: Users,
-    label: "Candidates",
-    path: "/candidates",
-    roles: [
-      "super_admin",
-      "accounts_manager",
-      "vendor_manager",
-      "recruiter",
-    ],
-  },
-  {
-    icon: Search,
-    label: "Resume Search",
-    path: "/search",
-    roles: [
-      "super_admin",
-      "accounts_manager",
-      "vendor_manager",
-      "recruiter",
-    ],
-  },
-  {
-    icon: Building2,
-    label: "Vendors",
-    path: "/vendors",
-    roles: ["super_admin", "accounts_manager", "vendor_manager"],
-  },
-  {
-    icon: Building,
-    label: "Clients",
-    path: "/clients",
-    roles: ["super_admin", "accounts_manager", "vendor_manager", "recruiter"],
-  },
-  {
-    icon: ClipboardList,
-    label: "JD Assignments",
-    path: "/assigned-jds",
-    roles: ["super_admin", "accounts_manager", "vendor_manager"],
-  },
-  {
-    icon: CalendarDays,
-    label: "Interviews",
-    path: "/interviews",
-    roles: ["super_admin", "accounts_manager", "recruiter"],
-  },
-  {
-    icon: TrendingUp,
-    label: "Offers",
-    path: "/offers",
-    roles: ["super_admin", "accounts_manager", "recruiter"],
-  },
-  {
-    icon: BarChart3,
-    label: "Analytics",
-    path: "/analytics",
-    roles: ["super_admin", "accounts_manager", "vendor_manager"],
-  },
-  {
-    icon: FileBarChart2,
-    label: "Reports",
-    path: "/reports",
-    roles: ["super_admin", "accounts_manager"],
-  },
-  {
-    icon: Settings,
-    label: "Admin",
-    path: "/admin",
-    roles: ["super_admin", "accounts_manager"],
-  },
-  {
-    icon: Send,
-    label: "Campaigns",
-    path: "/campaigns",
-    roles: ["super_admin", "accounts_manager", "recruiter"],
-  },
-  {
-    icon: Mail,
-    label: "Email Settings",
-    path: "/settings/email",
-    roles: [
-      "super_admin",
-      "accounts_manager",
-      "recruiter",
-    ],
-  },
-  {
-    icon: CreditCard,
-    label: "Subscription",
-    path: "/subscription",
-    roles: ["super_admin", "accounts_manager"],
-  },
-  {
-    icon: Network,
-    label: "Companies",
-    path: "/companies",
-    roles: ["super_admin"],
-    platformOwnerOnly: true,
-  },
-  {
-    icon: Rocket,
-    label: "Onboarding",
-    path: "/onboarding",
-    roles: ["super_admin"],
-    hidePlatformOwner: true,
-  },
-];
-
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const dispatch = useAppDispatch();
   const profile = useAppSelector(selectCurrentUser);
   const subscription = useAppSelector(selectSubscription);
 
-  const isPlatformOwner = !!subscription?.isPlatformOwner;
-  const visibleItems = navItems.filter((item) => {
-    if (profile?.role && !item.roles.includes(profile.role)) return false;
-    if ((item as any).platformOwnerOnly && !isPlatformOwner) return false;
-    if ((item as any).hidePlatformOwner && isPlatformOwner) return false;
-    return true;
-  });
+  const groups = visibleGroups(profile?.role, !!subscription?.isPlatformOwner);
+  const active = activePath(location.pathname, groups);
+  // The drawer is always full width; "collapsed" only applies on desktop.
+  const narrow = collapsed && !mobileOpen;
 
   return (
-    <aside
-      className={`flex flex-col bg-[#24180f] text-white transition-all duration-300 ${collapsed ? "w-20" : "w-64"} h-full py-5`}
-    >
-      {/* Logo */}
-      <Link
-        to="/"
-        aria-label="ZorHire home"
-        className={`flex flex-col mb-6 ${collapsed ? "items-center" : "px-6"}`}
+    <>
+      {/* Phone backdrop */}
+      <div
+        className={`fixed inset-0 z-30 bg-navy-950/50 transition-opacity lg:hidden ${mobileOpen ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        aria-hidden="true"
+        onClick={onMobileClose}
+      />
+      <aside
+        aria-label="Sidebar"
+        className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-navy-800 text-navy-100 transition-[transform,width] duration-200
+          lg:static lg:translate-x-0
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+          ${narrow ? "lg:w-[72px]" : "w-64"}`}
       >
-        {collapsed ? (
-          <img src="/brand/zortech-icon.svg" alt="ZorTech" className="w-10 h-10 object-contain" />
-        ) : (
-          <>
-            <img src="/brand/zortech-logo-white.png" alt="ZorTech" className="w-40 h-auto object-contain" />
-            <p className="mt-2 text-[11px] font-semibold text-amber-200/80 tracking-wide">
-              ZorHire · Recruitment
-            </p>
-          </>
-        )}
-      </Link>
+        {/* Brand */}
+        <div className={`flex h-16 shrink-0 items-center border-b border-white/10 ${narrow ? "justify-center px-2" : "justify-between px-5"}`}>
+          <Link to="/" aria-label="ZorHire home" className="flex min-w-0 flex-col" onClick={onMobileClose}>
+            {narrow ? (
+              <img src="/brand/zortech-icon.svg" alt="ZorTech" className="h-9 w-9" />
+            ) : (
+              <>
+                <img src="/brand/zortech-logo-white.png" alt="ZorTech" className="h-6 w-auto self-start" />
+                <span className="mt-1 text-[11px] font-medium tracking-wide text-navy-300">ZorHire · Recruitment</span>
+              </>
+            )}
+          </Link>
+          <button
+            type="button"
+            onClick={onMobileClose}
+            aria-label="Close menu"
+            className="rounded-md p-1.5 text-navy-200 hover:bg-white/10 hover:text-white lg:hidden"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-      {/* Nav Items: scrolls on short screens so Logout and the collapse toggle stay visible */}
-      <nav aria-label="Main" className="flex-1 min-h-0 overflow-y-auto space-y-0.5 px-3">
-        {visibleItems.map(({ icon: Icon, label, path }) => {
-          const active =
-            location.pathname === path ||
-            (path !== "/" && location.pathname.startsWith(path));
-          return (
-            <Link
-              key={path}
-              to={path}
-              title={collapsed ? label : undefined}
-              aria-label={collapsed ? label : undefined}
-              aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
-                ${
-                  active
-                    ? "text-amber-100 bg-[#f7e6cd]/20"
-                    : "text-amber-200/70 hover:text-white hover:bg-[#f7e6cd]/10"
-                } ${collapsed ? "justify-center" : ""}`}
-            >
-              {active && (
-                <div className="absolute left-[-12px] w-1.5 h-8 bg-amber-200 rounded-r-full" />
+        {/* Navigation: scrolls on short screens so Sign out stays visible */}
+        <nav aria-label="Main" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          {groups.map((group) => (
+            <div key={group.label} className="mb-4 last:mb-0">
+              {narrow ? (
+                <div className="mx-auto mb-2 h-px w-6 bg-white/10" aria-hidden="true" />
+              ) : (
+                <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-navy-300/80">{group.label}</p>
               )}
-              <Icon
-                size={18}
-                className={`flex-shrink-0 transition-all ${active ? "scale-110" : "group-hover:scale-110"}`}
-                strokeWidth={active ? 2.5 : 2}
-              />
-              {!collapsed && (
-                <span
-                  className={`text-[13px] font-bold tracking-tight ${active ? "text-white" : ""}`}
-                >
-                  {label}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+              <ul className="space-y-0.5">
+                {group.items.map(({ icon: Icon, label, path }) => {
+                  const isActive = active === path;
+                  return (
+                    <li key={path}>
+                      <Link
+                        to={path}
+                        onClick={onMobileClose}
+                        title={narrow ? label : undefined}
+                        aria-label={narrow ? label : undefined}
+                        aria-current={isActive ? "page" : undefined}
+                        className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
+                          ${narrow ? "justify-center" : ""}
+                          ${isActive ? "bg-white/10 font-semibold text-white" : "text-navy-100/80 hover:bg-white/5 hover:text-white"}`}
+                      >
+                        {isActive && <span className="absolute inset-y-1.5 left-0 w-1 rounded-r bg-brand-500" aria-hidden="true" />}
+                        <Icon size={18} strokeWidth={isActive ? 2.25 : 1.9} className="shrink-0" aria-hidden="true" />
+                        {!narrow && <span className="truncate">{label}</span>}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
 
-      {/* Footer Actions */}
-      <div className="pt-3 px-3 space-y-1 border-t border-white/10">
-        <button
-          type="button"
-          onClick={() => dispatch(clearCredentials())}
-          aria-label="Sign out"
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#d7c1a5] hover:text-[#ffcda2] hover:bg-[#7f5a30]/15 transition-all ${collapsed ? "justify-center" : ""}`}
-          title={collapsed ? "Sign Out" : undefined}
-        >
-          <LogOut size={18} strokeWidth={2} />
-          {!collapsed && (
-            <span className="text-[13px] font-bold tracking-tight">Sign out</span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-amber-300 hover:text-amber-100 transition-all ${collapsed ? "justify-center" : "justify-end"}`}
-        >
-          {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-        </button>
-      </div>
-    </aside>
+        {/* Footer */}
+        <div className="shrink-0 space-y-0.5 border-t border-white/10 px-3 py-3">
+          <button
+            type="button"
+            onClick={() => dispatch(clearCredentials())}
+            title={narrow ? "Sign out" : undefined}
+            aria-label="Sign out"
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-100/80 hover:bg-white/5 hover:text-white ${narrow ? "justify-center" : ""}`}
+          >
+            <LogOut size={18} aria-hidden="true" />
+            {!narrow && <span>Sign out</span>}
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={`hidden w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-300 hover:bg-white/5 hover:text-white lg:flex ${narrow ? "justify-center" : ""}`}
+          >
+            {collapsed ? <ChevronsRight size={18} aria-hidden="true" /> : <ChevronsLeft size={18} aria-hidden="true" />}
+            {!narrow && <span>Collapse</span>}
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

@@ -80,8 +80,8 @@ const PAGE_SIZE = 12;
 function StatCard({ label, value, sub, color }: { label: string; value: number; sub?: string; color: string }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-2xl font-black ${color}`}>{value}</p>
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+      <p className={`text-2xl font-semibold ${color}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );
@@ -150,7 +150,7 @@ function ClientCard({ client, onDelete, onClick }: { client: any; onDelete: () =
           <p className="text-xs text-gray-400 truncate">{client.industry || "—"}</p>
         </div>
         {client.client_priority && (
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${
+          <span className={`text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 ${
             client.client_priority === "High" ? "bg-red-50 text-red-700" :
             client.client_priority === "Medium" ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"
           }`}>{client.client_priority}</span>
@@ -169,7 +169,7 @@ function ClientCard({ client, onDelete, onClick }: { client: any; onDelete: () =
       </div>
       <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
         {client.client_type && (
-          <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">{client.client_type}</span>
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold">{client.client_type}</span>
         )}
         <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all ml-auto">
@@ -363,7 +363,7 @@ export default function JobsPage() {
               <Upload size={15} /> Bulk Upload
             </button>
             <button onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#111111] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all">
+              className="flex items-center gap-2 px-4 py-2 bg-navy-600 text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all">
               <Plus size={15} /> Add JD
             </button>
           </div>
@@ -449,7 +449,7 @@ export default function JobsPage() {
             <div className="flex gap-2 flex-wrap">
               {["all", "active", "pending_review", "on_hold", "closed_filled"].map((s) => (
                 <button key={s} onClick={() => { setStatusFilter(s); setPage(1); }}
-                  className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all ${statusFilter === s ? "bg-[#111111] text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"}`}>
+                  className={`text-xs px-3 py-1.5 rounded-full font-bold transition-all ${statusFilter === s ? "bg-navy-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"}`}>
                   {s === "all" ? `All (${counts.all})` : `${jobStatusLabels[s]} (${jobs.filter((j) => j.status === s).length})`}
                 </button>
               ))}
@@ -473,7 +473,7 @@ export default function JobsPage() {
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
                         {["Job Title", "Client", "Location / Mode", "Priority", "Status", "Headcount", "Applications", "Actions"].map((h) => (
-                          <th key={h} className="px-4 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                          <th key={h} className="px-4 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -551,7 +551,7 @@ export default function JobsPage() {
                     <span key={p}>
                       {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 text-gray-400 text-xs">…</span>}
                       <button onClick={() => setPage(p)}
-                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${page === p ? "bg-[#111111] text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${page === p ? "bg-navy-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
                         {p}
                       </button>
                     </span>
@@ -571,7 +571,7 @@ export default function JobsPage() {
               <p className="text-gray-500 font-semibold">No clients yet</p>
               <p className="text-gray-400 text-sm mt-1">Add a client to get started</p>
               <button onClick={() => setIsClientInfoOpen(true)}
-                className="mt-4 px-4 py-2 bg-[#111111] text-white rounded-xl text-sm font-bold hover:opacity-90">
+                className="mt-4 px-4 py-2 bg-navy-600 text-white rounded-xl text-sm font-bold hover:opacity-90">
                 Add Client
               </button>
             </div>
@@ -600,22 +600,22 @@ export default function JobsPage() {
 
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <h2 className="text-xl font-black text-[#111111] tracking-tight">Create New Job Description</h2>
-              <button onClick={closeAddModal} aria-label="Close" className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-[#111111]">
+              <h2 className="text-xl font-semibold text-ink tracking-tight">Create New Job Description</h2>
+              <button onClick={closeAddModal} aria-label="Close" className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-ink">
                 <X size={20} />
               </button>
             </div>
             <form onSubmit={handleAddJD} className="p-8 max-h-[72vh] overflow-y-auto">
               <div className="grid grid-cols-2 gap-5">
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Job Title</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Job Title</label>
                   <input required type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. Senior Frontend Engineer" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Client</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Client</label>
                   <select required value={formData.client_id} onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
                     <option value="">Select Client</option>
@@ -623,7 +623,7 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                     Department
                     {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
@@ -631,7 +631,7 @@ export default function JobsPage() {
                     className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(departmentFlagged)}`} placeholder="e.g. Engineering" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                     Location
                     {jdLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
@@ -639,7 +639,7 @@ export default function JobsPage() {
                     className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(jdLocationFlagged)}`} placeholder="e.g. Bangalore, India" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                     Work Mode
                     {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
@@ -649,7 +649,7 @@ export default function JobsPage() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Experience (Min–Max yrs)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Experience (Min–Max yrs)</label>
                   <div className="flex items-center gap-2">
                     <input type="number" min={0} value={formData.experience_min} onChange={(e) => setFormData({ ...formData, experience_min: e.target.value === "" ? "" : Number(e.target.value) })}
                       aria-invalid={!!expError}
@@ -662,14 +662,14 @@ export default function JobsPage() {
                   {expError && <p className="text-xs text-red-600 ml-1">{expError}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Priority</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Priority</label>
                   <select value={formData.priority} onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
                     <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option>
                   </select>
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                     Mandatory Skills (comma-separated)
                     {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
@@ -677,7 +677,7 @@ export default function JobsPage() {
                     className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(mandatorySkillsFlagged)}`} placeholder="React, TypeScript, Node.js" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                     Preferred Skills (comma-separated)
                     {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
                   </label>
@@ -685,12 +685,12 @@ export default function JobsPage() {
                     className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(preferredSkillsFlagged)}`} placeholder="GraphQL, Kubernetes (good to have)" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Job Description</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Job Description</label>
                   <textarea rows={4} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Briefly describe the role and requirements…" />
                 </div>
                 <div className="col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Upload JD File (Auto-fill from PDF/DOC)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Upload JD File (Auto-fill from PDF/DOC)</label>
                   <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => { if (e.target.files?.[0]) { setJobFile(e.target.files[0]); parseJDFile(e.target.files[0]); } }}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none" />
                   {jobFile && <p className="text-xs text-gray-500">{jobFile.name}</p>}
@@ -701,11 +701,11 @@ export default function JobsPage() {
               </div>
               <div className="flex gap-4 mt-8">
                 <button type="button" onClick={closeAddModal} disabled={creatingJob}
-                  className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 disabled:opacity-50">
+                  className="flex-1 py-4 bg-gray-50 text-ink font-semibold text-sm rounded-2xl border border-gray-100 hover:bg-gray-100 disabled:opacity-50">
                   Cancel
                 </button>
                 <button type="submit" disabled={creatingJob || jobParsing || !!expError}
-                  className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:opacity-90 shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="flex-1 py-4 bg-navy-600 text-white font-semibold text-sm rounded-2xl hover:opacity-90 shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
                   {creatingJob ? "Saving…" : "Post Job"}
                 </button>
               </div>

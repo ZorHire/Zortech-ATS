@@ -698,7 +698,7 @@ function VendorDetailModal({
               <BarChart2 size={12} />
               Performance Metrics
               {scorecard && (
-                <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Live</span>
+                <span className="ml-1 text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Live</span>
               )}
             </h3>
             <div className="grid grid-cols-3 gap-3 mb-4">
@@ -799,7 +799,7 @@ function VendorDetailModal({
                               {stageLabel[s.pipeline_stage] ?? s.pipeline_stage}
                             </span>
                           )}
-                          <p className="text-[10px] text-gray-400 mt-0.5">
+                          <p className="text-xs text-gray-400 mt-0.5">
                             {new Date(s.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
                           </p>
                         </div>
@@ -826,7 +826,7 @@ function VendorDetailModal({
                           <button
                             onClick={() => handleSaveFeedback(s.submission_id)}
                             disabled={fb?.saving}
-                            className="ml-2 text-[10px] px-2 py-0.5 bg-blue-600 text-white rounded-full font-semibold disabled:opacity-50"
+                            className="ml-2 text-xs px-2 py-0.5 bg-blue-600 text-white rounded-full font-semibold disabled:opacity-50"
                           >
                             {fb?.saving ? "Saving…" : "Save"}
                           </button>
@@ -861,7 +861,7 @@ function VendorDetailModal({
                 <FileText size={12} />
                 Contracts
                 {contracts.length > 0 && (
-                  <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">{contracts.length}</span>
+                  <span className="ml-1 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">{contracts.length}</span>
                 )}
               </h3>
               <button
@@ -948,7 +948,7 @@ function VendorDetailModal({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <p className="text-sm font-medium text-gray-800 truncate">{c.title}</p>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${contractStatusColor[c.status] ?? "bg-gray-100 text-gray-600"}`}>
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold flex-shrink-0 ${contractStatusColor[c.status] ?? "bg-gray-100 text-gray-600"}`}>
                           {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
                         </span>
                       </div>
@@ -1425,8 +1425,8 @@ export default function VendorsPage() {
             { label: "Blocked", value: stats.blocked, color: "text-red-500" },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{s.label}</p>
-              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{s.label}</p>
+              <p className={`text-2xl font-semibold ${s.color}`}>{s.value}</p>
             </div>
           ))}
         </div>
@@ -1443,7 +1443,7 @@ export default function VendorsPage() {
             {["all", "preferred", "standard", "blocked"].map((t) => (
               <button key={t} onClick={() => setTierFilter(t)}
                 className={`text-xs px-3.5 py-2.5 rounded-xl font-bold transition-all ${
-                  tierFilter === t ? "bg-[#111111] text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
+                  tierFilter === t ? "bg-navy-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-gray-400"
                 }`}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
@@ -1497,7 +1497,7 @@ export default function VendorsPage() {
                         className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600 cursor-pointer" />
                     </th>
                     {["Vendor", "Tier", "Contact", "Submissions", "Shortlist", "Fill Rate", "Quality Score", "SLA", "Actions"].map((h) => (
-                      <th key={h} className="px-4 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-4 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>

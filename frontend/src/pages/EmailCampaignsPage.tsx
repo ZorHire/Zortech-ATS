@@ -299,7 +299,7 @@ export default function EmailCampaignsPage() {
         {/* Top header */}
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h1 className="text-lg font-black text-gray-900">Email Campaigns</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Email Campaigns</h1>
             <p className="text-[11px] text-gray-400 mt-0.5">Create and send targeted email campaigns to candidates</p>
           </div>
           <div className="flex items-center gap-2">
@@ -330,8 +330,8 @@ export default function EmailCampaignsPage() {
                 <Icon size={16} className={ic} />
               </div>
               <div>
-                <p className="text-lg font-black text-gray-900 leading-none">{value}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
+                <p className="text-lg font-semibold text-gray-900 leading-none">{value}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{label}</p>
               </div>
             </div>
           ))}
@@ -348,12 +348,12 @@ export default function EmailCampaignsPage() {
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
                     activeStep === step.n ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'hover:bg-gray-50 text-gray-600'
                   }`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0 ${
                     activeStep === step.n ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'
                   }`}>{step.n}</div>
                   <div className="min-w-0">
                     <p className={`text-xs font-bold leading-tight ${activeStep === step.n ? 'text-white' : 'text-gray-800'}`}>{step.title}</p>
-                    <p className={`text-[10px] mt-0.5 ${activeStep === step.n ? 'text-blue-100' : 'text-gray-400'}`}>{step.sub}</p>
+                    <p className={`text-xs mt-0.5 ${activeStep === step.n ? 'text-blue-100' : 'text-gray-400'}`}>{step.sub}</p>
                   </div>
                 </button>
               ))}
@@ -366,7 +366,7 @@ export default function EmailCampaignsPage() {
               </div>
               <ul className="space-y-1.5">
                 {TIPS.map(tip => (
-                  <li key={tip} className="text-[10px] text-amber-700 flex items-start gap-1.5">
+                  <li key={tip} className="text-xs text-amber-700 flex items-start gap-1.5">
                     <span className="text-amber-400 flex-shrink-0 mt-0.5">•</span>
                     {tip}
                   </li>
@@ -409,8 +409,8 @@ export default function EmailCampaignsPage() {
               {selectedCandidates.length > 0 && (
                 <div className="px-3 pt-3 pb-2 border-b border-gray-50">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Selected Candidates ({selectedCandidates.length})</p>
-                    <button onClick={() => setSelectedIds(new Set())} className="text-[10px] text-blue-600 font-semibold hover:underline">Clear</button>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Selected Candidates ({selectedCandidates.length})</p>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 font-semibold hover:underline">Clear</button>
                   </div>
                   <div className="space-y-1">
                     {selectedCandidates.map(c => (
@@ -420,7 +420,7 @@ export default function EmailCampaignsPage() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-gray-800 truncate">{c.first_name} {c.last_name}</p>
-                          <p className="text-[10px] text-gray-400 truncate">{c.email}</p>
+                          <p className="text-xs text-gray-400 truncate">{c.email}</p>
                         </div>
                         <button onClick={() => toggleCandidate(c.id)} className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"><X size={13} /></button>
                       </div>
@@ -431,14 +431,14 @@ export default function EmailCampaignsPage() {
 
               <div className="px-3 py-2.5">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">All Candidates</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">All Candidates</p>
                   <button
                     onClick={() => {
                       const allIds = new Set(filteredCandidates.map(c => c.id));
                       setSelectedIds(selectedIds.size === filteredCandidates.length && filteredCandidates.length > 0
                         ? new Set() : allIds);
                     }}
-                    className="text-[10px] text-blue-600 font-semibold hover:underline">
+                    className="text-xs text-blue-600 font-semibold hover:underline">
                     {selectedIds.size === filteredCandidates.length && filteredCandidates.length > 0 ? 'Deselect All' : 'Select All'}
                   </button>
                 </div>
@@ -456,16 +456,16 @@ export default function EmailCampaignsPage() {
                         }`}>
                         <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleCandidate(c.id)}
                           className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300" />
-                        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
                           {c.first_name[0]}{c.last_name[0]}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-gray-800 truncate">{c.first_name} {c.last_name}</p>
-                          <p className="text-[10px] text-gray-400 truncate">{c.email}</p>
+                          <p className="text-xs text-gray-400 truncate">{c.email}</p>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          {c.current_title && <p className="text-[10px] text-gray-500 font-medium truncate max-w-[80px]">{c.current_title}</p>}
-                          {c.experience_years != null && <p className="text-[10px] text-gray-400">· {c.experience_years}+ yrs</p>}
+                          {c.current_title && <p className="text-xs text-gray-500 font-medium truncate max-w-[80px]">{c.current_title}</p>}
+                          {c.experience_years != null && <p className="text-xs text-gray-400">· {c.experience_years}+ yrs</p>}
                         </div>
                       </label>
                     ))}
@@ -476,7 +476,7 @@ export default function EmailCampaignsPage() {
 
             {filteredCandidates.length > PAGE_SIZE && (
               <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-between flex-shrink-0 bg-gray-50/50">
-                <p className="text-[10px] text-gray-400">
+                <p className="text-xs text-gray-400">
                   Showing {Math.min(PAGE_SIZE, filteredCandidates.length - (candidatePage - 1) * PAGE_SIZE)} of {filteredCandidates.length} candidates
                 </p>
                 <div className="flex items-center gap-1">
@@ -520,7 +520,7 @@ export default function EmailCampaignsPage() {
                         {VARIABLES.map(v => (
                           <button key={v.value} onClick={() => insertVariable(v.value, 'subject')}
                             className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                            {v.label}<span className="text-gray-400 ml-1 text-[10px]">{v.value}</span>
+                            {v.label}<span className="text-gray-400 ml-1 text-xs">{v.value}</span>
                           </button>
                         ))}
                       </div>
@@ -572,7 +572,7 @@ export default function EmailCampaignsPage() {
                           {VARIABLES.map(v => (
                             <button key={v.value} onClick={() => insertVariable(v.value, 'body')}
                               className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                              {v.label}<span className="text-gray-400 ml-1 text-[10px]">{v.value}</span>
+                              {v.label}<span className="text-gray-400 ml-1 text-xs">{v.value}</span>
                             </button>
                           ))}
                         </div>
@@ -583,8 +583,8 @@ export default function EmailCampaignsPage() {
                     rows={8} className="w-full px-4 py-3 text-sm text-gray-700 resize-none focus:outline-none leading-relaxed"
                     placeholder="Write your email body..." />
                   <div className="px-3 py-1.5 border-t border-gray-100 bg-gray-50/30 flex items-center justify-between">
-                    <span className="text-[10px] text-gray-400 font-medium">P</span>
-                    <span className="text-[10px] text-gray-400">Words: {wordCount}</span>
+                    <span className="text-xs text-gray-400 font-medium">P</span>
+                    <span className="text-xs text-gray-400">Words: {wordCount}</span>
                   </div>
                 </div>
               </div>
@@ -619,12 +619,12 @@ export default function EmailCampaignsPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="radio" name="sendMode" value="immediate" checked={sendMode === 'immediate'}
                     onChange={() => setSendMode('immediate')} className="w-3.5 h-3.5 text-blue-600 accent-blue-600" />
-                  <div><p className="text-xs font-semibold text-gray-700">Send Immediately</p><p className="text-[10px] text-gray-400">Send emails right away</p></div>
+                  <div><p className="text-xs font-semibold text-gray-700">Send Immediately</p><p className="text-xs text-gray-400">Send emails right away</p></div>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="radio" name="sendMode" value="scheduled" checked={sendMode === 'scheduled'}
                     onChange={() => setSendMode('scheduled')} className="w-3.5 h-3.5 text-blue-600 accent-blue-600" />
-                  <div><p className="text-xs font-semibold text-gray-700">Schedule for Later</p><p className="text-[10px] text-gray-400">Choose date and time</p></div>
+                  <div><p className="text-xs font-semibold text-gray-700">Schedule for Later</p><p className="text-xs text-gray-400">Choose date and time</p></div>
                 </label>
                 <div className="flex items-center gap-1.5">
                   <Globe size={13} className="text-gray-400 flex-shrink-0" />
@@ -636,12 +636,12 @@ export default function EmailCampaignsPage() {
                 <div className="flex items-center gap-4 ml-auto">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Toggle on={trackOpens} onChange={() => setTrackOpens(v => !v)} />
-                    <div><p className="text-xs font-semibold text-gray-700">Track Opens</p><p className="text-[10px] text-gray-400">Track email opens</p></div>
+                    <div><p className="text-xs font-semibold text-gray-700">Track Opens</p><p className="text-xs text-gray-400">Track email opens</p></div>
                   </label>
                   <span className="text-gray-200 text-sm font-light">+</span>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <Toggle on={trackClicks} onChange={() => setTrackClicks(v => !v)} />
-                    <div><p className="text-xs font-semibold text-gray-700">Track Clicks</p><p className="text-[10px] text-gray-400">Track link clicks</p></div>
+                    <div><p className="text-xs font-semibold text-gray-700">Track Clicks</p><p className="text-xs text-gray-400">Track link clicks</p></div>
                   </label>
                 </div>
               </div>
@@ -675,7 +675,7 @@ export default function EmailCampaignsPage() {
     <div className="flex flex-col flex-1 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
         <div>
-          <h1 className="text-xl font-black text-gray-900">Email Campaigns</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Email Campaigns</h1>
           <p className="text-xs text-gray-400 mt-0.5">Manage outreach, interview invites, and bulk candidate communications</p>
         </div>
         <button onClick={() => { resetWizard(); setMode('create'); }}
@@ -698,7 +698,7 @@ export default function EmailCampaignsPage() {
                 <Icon size={18} className={color} />
               </div>
               <div>
-                <p className="text-2xl font-black text-gray-900">{value}</p>
+                <p className="text-2xl font-semibold text-gray-900">{value}</p>
                 <p className="text-xs text-gray-400 font-medium">{label}</p>
               </div>
             </div>
@@ -736,11 +736,11 @@ export default function EmailCampaignsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Campaign</th>
-                  <th className="text-left px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                  <th className="text-right px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recipients</th>
-                  <th className="text-right px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Delivered</th>
-                  <th className="text-right px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
+                  <th className="text-left px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wide">Campaign</th>
+                  <th className="text-left px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="text-right px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wide">Recipients</th>
+                  <th className="text-right px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wide">Delivered</th>
+                  <th className="text-right px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wide">Date</th>
                   <th className="px-6 py-4" />
                 </tr>
               </thead>
@@ -752,7 +752,7 @@ export default function EmailCampaignsPage() {
                       <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[240px]">{campaign.subject}</p>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wide ${STATUS_COLORS[campaign.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                      <span className={`px-2.5 py-1 text-xs font-bold rounded-full uppercase tracking-wide ${STATUS_COLORS[campaign.status] ?? 'bg-gray-100 text-gray-600'}`}>
                         {campaign.status}
                       </span>
                     </td>

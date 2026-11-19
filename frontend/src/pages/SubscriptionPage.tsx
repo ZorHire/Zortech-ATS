@@ -93,7 +93,7 @@ export default function SubscriptionPage() {
       {/* ── Page Header ── */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
         <div>
-          <h1 className="text-xl font-black text-gray-900">Subscription</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Subscription</h1>
           <p className="text-xs text-gray-400 mt-0.5">Your ZorHire plan, billing cycle, and renewal details</p>
         </div>
         <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ export default function SubscriptionPage() {
           )}
           <button
             onClick={() => navigate("/pricing")}
-            className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all"
+            className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all"
           >
             <ArrowRight size={14} /> View Plans
           </button>
@@ -122,10 +122,10 @@ export default function SubscriptionPage() {
         ) : sub && sub.status === "active" ? (
 
           /* ── Active Plan Card ── */
-          <div className="relative rounded-[28px] overflow-hidden shadow-lg bg-white border border-gray-100">
+          <div className="relative rounded-2xl overflow-hidden shadow-lg bg-white border border-gray-100">
             <div className="absolute top-0 left-1/2 -translate-x-1/2">
-              <div className="flex items-center gap-1.5 bg-amber-200 text-[#111111] text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
-                <Zap size={10} className="fill-[#111111]" />
+              <div className="flex items-center gap-1.5 bg-amber-200 text-ink text-xs font-semibold uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
+                <Zap size={10} className="fill-ink" />
                 Active Plan
               </div>
             </div>
@@ -136,13 +136,13 @@ export default function SubscriptionPage() {
                 {/* Plan name + price */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em] px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">
+                    <span className="text-xs font-semibold uppercase tracking-[0.25em] px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">
                       {PLAN_LABELS[sub.plan_type]}
                     </span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700">
+                    <span className="text-xs font-semibold uppercase tracking-[0.2em] px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700">
                       Active
                     </span>
-                    <span className="text-[10px] font-bold capitalize px-3 py-1.5 rounded-full bg-blue-50 text-blue-700">
+                    <span className="text-xs font-bold capitalize px-3 py-1.5 rounded-full bg-blue-50 text-blue-700">
                       {sub.billing_cycle}
                     </span>
                   </div>
@@ -150,7 +150,7 @@ export default function SubscriptionPage() {
                   {price && (
                     <div>
                       <div className="flex items-end gap-1.5">
-                        <span className="text-4xl font-black tracking-tight text-[#111111]">
+                        <span className="text-4xl font-semibold tracking-tight text-ink">
                           ₹{price.toLocaleString("en-IN")}
                         </span>
                         <span className="text-sm font-bold mb-1.5 text-gray-400">
@@ -178,7 +178,7 @@ export default function SubscriptionPage() {
                   <div className="flex items-center gap-2.5 text-sm text-gray-500">
                     <Calendar size={14} className="flex-shrink-0" />
                     <span className="font-medium w-24">Member since</span>
-                    <span className="font-bold text-right text-[#111111]">
+                    <span className="font-bold text-right text-ink">
                       {fmt(sub.start_date)}
                     </span>
                   </div>
@@ -192,12 +192,12 @@ export default function SubscriptionPage() {
                           {fmt(sub.end_date)}
                         </span>
                         {renewDays !== null && renewDays > 0 && (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
                             {renewDays}d left
                           </span>
                         )}
                         {renewDays !== null && renewDays <= 0 && (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-600">
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600">
                             Expired
                           </span>
                         )}
@@ -208,7 +208,7 @@ export default function SubscriptionPage() {
                   <div className="flex items-center gap-2.5 text-sm text-gray-500">
                     <CreditCard size={14} className="flex-shrink-0" />
                     <span className="font-medium w-24">Next charge</span>
-                    <span className="font-bold text-[#111111]">
+                    <span className="font-bold text-ink">
                       {sub.end_date ? fmt(sub.end_date) : "—"}
                     </span>
                   </div>
@@ -222,7 +222,7 @@ export default function SubscriptionPage() {
               >
                 <button
                   onClick={() => navigate("/pricing")}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-black transition-all hover:scale-[1.02] active:scale-100 bg-[#111111] text-white shadow-xl shadow-gray-200"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold transition-all hover:scale-[1.02] active:scale-100 bg-navy-600 text-white shadow-xl shadow-gray-200"
                 >
                   <ArrowRight size={14} />
                   Change Plan
@@ -243,7 +243,7 @@ export default function SubscriptionPage() {
                     <button
                       onClick={handleCancel}
                       disabled={cancelling}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-all"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-all"
                     >
                       {cancelling && (
                         <Loader2 size={11} className="animate-spin" />
@@ -252,7 +252,7 @@ export default function SubscriptionPage() {
                     </button>
                     <button
                       onClick={() => setConfirmCancel(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-black transition-all bg-gray-100 text-gray-600"
+                      className="px-4 py-2 rounded-xl text-xs font-semibold transition-all bg-gray-100 text-gray-600"
                     >
                       Keep Plan
                     </button>
@@ -264,12 +264,12 @@ export default function SubscriptionPage() {
 
         ) : sub && sub.status === "cancelled" ? (
           /* ── Cancelled state ── */
-          <div className="bg-white border border-gray-100 rounded-[28px] p-8 shadow-sm text-center space-y-4">
+          <div className="bg-white border border-gray-100 rounded-2xl p-8 shadow-sm text-center space-y-4">
             <div className="w-12 h-12 mx-auto rounded-full bg-red-50 flex items-center justify-center">
               <AlertTriangle size={20} className="text-red-500" />
             </div>
             <div>
-              <h3 className="font-black text-[#111111] text-lg">
+              <h3 className="font-semibold text-ink text-lg">
                 Subscription Cancelled
               </h3>
               <p className="text-sm text-gray-500 mt-1">
@@ -282,19 +282,19 @@ export default function SubscriptionPage() {
             </div>
             <button
               onClick={() => navigate("/pricing")}
-              className="inline-flex items-center gap-2 px-7 py-3 rounded-2xl bg-[#111111] text-white text-sm font-black hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
+              className="inline-flex items-center gap-2 px-7 py-3 rounded-2xl bg-navy-600 text-white text-sm font-semibold hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
             >
               Reactivate Plan
             </button>
           </div>
         ) : (
           /* ── No subscription ── */
-          <div className="bg-white border border-gray-100 rounded-[28px] p-10 shadow-sm text-center space-y-4">
+          <div className="bg-white border border-gray-100 rounded-2xl p-10 shadow-sm text-center space-y-4">
             <div className="w-14 h-14 mx-auto rounded-full bg-amber-50 flex items-center justify-center">
               <CreditCard size={24} className="text-amber-600" />
             </div>
             <div>
-              <h3 className="text-xl font-black text-[#111111]">
+              <h3 className="text-xl font-semibold text-ink">
                 No Active Subscription
               </h3>
               <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">
@@ -304,7 +304,7 @@ export default function SubscriptionPage() {
             </div>
             <button
               onClick={() => navigate("/pricing")}
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-[#111111] text-white text-sm font-black hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-navy-600 text-white text-sm font-semibold hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
             >
               View Plans
             </button>
@@ -324,8 +324,8 @@ export default function SubscriptionPage() {
                   <Icon size={18} className={color} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
-                  <p className="text-base font-black text-gray-900 mt-0.5">{value}</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">{label}</p>
+                  <p className="text-base font-semibold text-gray-900 mt-0.5">{value}</p>
                 </div>
               </div>
             ))}
@@ -336,7 +336,7 @@ export default function SubscriptionPage() {
         {sub && (
           <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-black text-gray-900">Current Subscription</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Current Subscription</h3>
               <p className="text-xs text-gray-400 mt-0.5">Active plan record</p>
             </div>
             <div className="overflow-x-auto">
@@ -344,7 +344,7 @@ export default function SubscriptionPage() {
                 <thead>
                   <tr className="bg-gray-50/60 border-b border-gray-100">
                     {["Plan", "Cycle", "Period", "Status"].map((h) => (
-                      <th key={h} className="px-6 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      <th key={h} className="px-6 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wide">
                         {h}
                       </th>
                     ))}
@@ -353,7 +353,7 @@ export default function SubscriptionPage() {
                 <tbody>
                   <tr>
                     <td className="px-6 py-4">
-                      <span className="font-bold text-[#111111]">{PLAN_LABELS[sub.plan_type]}</span>
+                      <span className="font-bold text-ink">{PLAN_LABELS[sub.plan_type]}</span>
                       {price && (
                         <span className="ml-2 text-xs text-gray-400 font-medium">
                           ₹{price.toLocaleString("en-IN")}/user/mo
@@ -366,7 +366,7 @@ export default function SubscriptionPage() {
                       {sub.end_date && <span className="text-gray-400"> → {fmt(sub.end_date)}</span>}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                      <span className={`text-xs font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full ${
                         sub.status === "active" ? "bg-emerald-50 text-emerald-700"
                           : sub.status === "cancelled" ? "bg-red-50 text-red-600"
                           : "bg-gray-100 text-gray-500"
@@ -385,7 +385,7 @@ export default function SubscriptionPage() {
         {transactions.length > 0 && (
           <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-black text-gray-900">Payment History</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Payment History</h3>
               <p className="text-xs text-gray-400 mt-0.5">All Razorpay transactions for your account</p>
             </div>
             <div className="overflow-x-auto">
@@ -393,7 +393,7 @@ export default function SubscriptionPage() {
                 <thead>
                   <tr className="bg-gray-50/60 border-b border-gray-100">
                     {["Date", "Plan", "Cycle", "Amount", "Payment ID", "Status"].map((h) => (
-                      <th key={h} className="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                      <th key={h} className="px-5 py-3.5 text-left text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                         {h}
                       </th>
                     ))}
@@ -406,10 +406,10 @@ export default function SubscriptionPage() {
                         {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="font-bold text-[#111111] capitalize">{txn.plan_type}</span>
+                        <span className="font-bold text-ink capitalize">{txn.plan_type}</span>
                       </td>
                       <td className="px-5 py-3.5 capitalize text-gray-600 text-[13px]">{txn.billing_cycle}</td>
-                      <td className="px-5 py-3.5 font-bold text-[#111111] whitespace-nowrap">
+                      <td className="px-5 py-3.5 font-bold text-ink whitespace-nowrap">
                         ₹{(txn.amount / 100).toLocaleString("en-IN")}
                       </td>
                       <td className="px-5 py-3.5 text-[12px] font-mono text-gray-400">
@@ -418,7 +418,7 @@ export default function SubscriptionPage() {
                           : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
+                        <span className={`text-xs font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full ${
                           txn.status === "captured" ? "bg-emerald-50 text-emerald-700"
                             : txn.status === "pending" ? "bg-amber-50 text-amber-700"
                             : txn.status === "failed" ? "bg-red-50 text-red-600"

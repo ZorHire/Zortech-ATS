@@ -544,7 +544,7 @@ export default function CandidatesPage() {
       {/* ── Add Candidate Modal ── */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="px-7 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Add New Candidate</h2>
               <button onClick={closeAddModal} aria-label="Close" className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-600">

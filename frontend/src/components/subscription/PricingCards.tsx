@@ -133,10 +133,10 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
     <div className="w-full space-y-8">
       {/* Header */}
       <div className="text-center space-y-3">
-        <p className="text-[10px] font-black text-amber-600 uppercase tracking-[0.3em]">
+        <p className="text-xs font-semibold text-amber-600 uppercase tracking-[0.3em]">
           Pricing
         </p>
-        <h2 className="text-3xl sm:text-4xl font-black text-[#111111] tracking-tight leading-tight">
+        <h2 className="text-3xl sm:text-4xl font-semibold text-ink tracking-tight leading-tight">
           Choose Your Plan
         </h2>
         <p className="text-sm text-gray-500 max-w-sm mx-auto">
@@ -147,14 +147,14 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
       {/* Billing toggle */}
       <div className="flex items-center justify-center gap-3">
         <span
-          className={`text-sm font-bold transition-colors ${billing === "monthly" ? "text-[#111111]" : "text-gray-400"}`}
+          className={`text-sm font-bold transition-colors ${billing === "monthly" ? "text-ink" : "text-gray-400"}`}
         >
           Monthly
         </span>
         <button
           onClick={() => setBilling(billing === "monthly" ? "yearly" : "monthly")}
           className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
-            billing === "yearly" ? "bg-[#111111]" : "bg-gray-200"
+            billing === "yearly" ? "bg-navy-600" : "bg-gray-200"
           }`}
           aria-label="Toggle billing cycle"
         >
@@ -166,11 +166,11 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
         </button>
         <div className="flex items-center gap-2">
           <span
-            className={`text-sm font-bold transition-colors ${billing === "yearly" ? "text-[#111111]" : "text-gray-400"}`}
+            className={`text-sm font-bold transition-colors ${billing === "yearly" ? "text-ink" : "text-gray-400"}`}
           >
             Yearly
           </span>
-          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
+          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
             Save ~15%
           </span>
         </div>
@@ -191,17 +191,17 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
               key={plan.id}
               onMouseEnter={() => setHoveredPlan(plan.id)}
               onMouseLeave={() => setHoveredPlan(null)}
-              className={`relative flex flex-col rounded-[32px] overflow-hidden transition-all duration-200 cursor-default ${
+              className={`relative flex flex-col rounded-2xl overflow-hidden transition-all duration-200 cursor-default ${
                 isDark
-                  ? "bg-[#111111] shadow-2xl shadow-black/20 scale-[1.02] border border-[#333]"
+                  ? "bg-navy-600 shadow-2xl shadow-black/20 scale-[1.02] border border-[#333]"
                   : "bg-white border border-gray-100 shadow-lg shadow-gray-100/60"
               }`}
             >
               {/* Recommended badge */}
               {isRecommended && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
-                  <div className="flex items-center gap-1.5 bg-amber-200 text-[#111111] text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
-                    <Zap size={10} className="fill-[#111111]" />
+                  <div className="flex items-center gap-1.5 bg-amber-200 text-ink text-xs font-semibold uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
+                    <Zap size={10} className="fill-ink" />
                     Most Recommended
                   </div>
                 </div>
@@ -211,7 +211,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
                 {/* Plan name & description */}
                 <div className="space-y-1 mb-6">
                   <p
-                    className={`text-[10px] font-black uppercase tracking-[0.25em] ${
+                    className={`text-xs font-semibold uppercase tracking-[0.25em] ${
                       isDark ? "text-amber-300" : "text-gray-400"
                     }`}
                   >
@@ -228,8 +228,8 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
                 <div className="mb-1">
                   <div className="flex items-end gap-1">
                     <span
-                      className={`text-4xl font-black tracking-tight ${
-                        isDark ? "text-white" : "text-[#111111]"
+                      className={`text-4xl font-semibold tracking-tight ${
+                        isDark ? "text-white" : "text-ink"
                       }`}
                     >
                       ₹{price.toLocaleString("en-IN")}
@@ -270,20 +270,20 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
                 <button
                   onClick={() => handleSubscribe(plan)}
                   disabled={isCurrent || isDowngrading || subscribing !== null}
-                  className={`w-full py-3.5 rounded-[18px] text-sm font-black transition-all duration-200 flex items-center justify-center gap-2 ${
+                  className={`w-full py-3.5 rounded-[18px] text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
                     isDark
                       ? isCurrent
                         ? "bg-white/10 text-white/50 cursor-default"
                         : isDowngrading
                           ? "bg-white/5 text-white/30 cursor-not-allowed"
-                          : "bg-[#E3F2FF] text-[#111111] hover:scale-[1.02] shadow-xl shadow-blue-500/10"
+                          : "bg-[#E3F2FF] text-ink hover:scale-[1.02] shadow-xl shadow-blue-500/10"
                       : isCurrent
                         ? "bg-gray-50 text-gray-400 border border-gray-100 cursor-default"
                         : isDowngrading
                           ? "bg-gray-50 text-gray-300 border border-gray-100 cursor-not-allowed"
                           : plan.id === "enterprise"
-                            ? "bg-gray-50 text-[#111111] border border-gray-200 hover:bg-gray-100"
-                            : "bg-[#111111] text-white hover:scale-[1.02] shadow-xl shadow-gray-200"
+                            ? "bg-gray-50 text-ink border border-gray-200 hover:bg-gray-100"
+                            : "bg-navy-600 text-white hover:scale-[1.02] shadow-xl shadow-gray-200"
                   }`}
                 >
                   {subscribing === plan.id ? (
@@ -339,7 +339,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
               {/* Current plan indicator */}
               {!loadingSub && isCurrent && (
                 <div
-                  className={`mx-7 mb-5 px-4 py-2.5 rounded-2xl text-center text-[11px] font-black uppercase tracking-wider ${
+                  className={`mx-7 mb-5 px-4 py-2.5 rounded-2xl text-center text-[11px] font-semibold uppercase tracking-wider ${
                     isDark
                       ? "bg-amber-300/10 text-amber-300"
                       : "bg-emerald-50 text-emerald-700"

@@ -38,13 +38,13 @@ function RankBadge({ rank }: { rank: number }) {
   if (rank === 2)
     return (
       <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center shadow-sm">
-        <span className="text-xs font-black text-gray-700">2</span>
+        <span className="text-xs font-semibold text-gray-700">2</span>
       </div>
     );
   if (rank === 3)
     return (
       <div className="w-8 h-8 rounded-full bg-amber-600/70 flex items-center justify-center shadow-sm">
-        <span className="text-xs font-black text-white">3</span>
+        <span className="text-xs font-semibold text-white">3</span>
       </div>
     );
   return (
@@ -103,8 +103,8 @@ export default function VendorLeaderboardPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {statCards.map((s) => (
             <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{s.label}</p>
-              <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{s.label}</p>
+              <p className={`text-2xl font-semibold ${s.color}`}>{s.value}</p>
             </div>
           ))}
         </div>
@@ -170,7 +170,7 @@ export default function VendorLeaderboardPage() {
                           ].map((m) => (
                             <div key={m.label} className="text-center p-1.5 bg-gray-50 rounded-lg">
                               <p className="text-xs font-bold text-gray-800">{m.value}%</p>
-                              <p className="text-[9px] text-gray-400">{m.label}</p>
+                              <p className="text-xs text-gray-400">{m.label}</p>
                             </div>
                           ))}
                         </div>
@@ -189,7 +189,7 @@ export default function VendorLeaderboardPage() {
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-100">
                         {["Rank", "Vendor", "Tier", "Submissions", "Shortlist", "Fill Rate", "SLA", "Quality Score"].map((h) => (
-                          <th key={h} className="px-4 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                          <th key={h} className="px-4 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                             {h}
                           </th>
                         ))}

@@ -84,7 +84,7 @@ export default function NotificationBell() {
       >
         <Bell size={18} />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none">
+          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-xs font-bold text-white flex items-center justify-center leading-none">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -98,7 +98,7 @@ export default function NotificationBell() {
               <Bell size={14} className="text-gray-500" />
               <span className="text-sm font-semibold text-gray-900">Notifications</span>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full">
+                <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
                   {unreadCount} new
                 </span>
               )}
@@ -147,7 +147,7 @@ export default function NotificationBell() {
                       {n.body && (
                         <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
                       )}
-                      <p className="text-[10px] text-gray-300 mt-1">{timeAgo(n.created_at)}</p>
+                      <p className="text-xs text-gray-300 mt-1">{timeAgo(n.created_at)}</p>
                     </div>
                     {isUnread && (
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />

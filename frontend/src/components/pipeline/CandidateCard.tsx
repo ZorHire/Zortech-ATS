@@ -58,7 +58,7 @@ export default function CandidateCard({
           {/* Avatar + Name + AI score */}
           <div className="flex items-center gap-2 mb-1">
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-[9px] font-bold">
+              <span className="text-white text-xs font-bold">
                 {candidate?.first_name?.[0] ?? "?"}
                 {candidate?.last_name?.[0] ?? ""}
               </span>
@@ -68,7 +68,7 @@ export default function CandidateCard({
             </p>
             {application.ai_score != null && (
               <span
-                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
                   application.ai_score >= 75
                     ? "bg-emerald-50 text-emerald-700"
                     : application.ai_score >= 50
@@ -112,13 +112,13 @@ export default function CandidateCard({
               {skills.slice(0, 3).map((skill) => (
                 <span
                   key={skill}
-                  className="text-[10px] bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-medium"
+                  className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-medium"
                 >
                   {skill}
                 </span>
               ))}
               {skills.length > 3 && (
-                <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md">
+                <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md">
                   +{skills.length - 3}
                 </span>
               )}
@@ -140,7 +140,7 @@ export default function CandidateCard({
                 }
               }}
               disabled={sendingInvite}
-              className="mt-2.5 flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              className="mt-2.5 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
             >
               {sendingInvite ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
               {sendingInvite ? "Sending…" : "Send Screening Invite"}

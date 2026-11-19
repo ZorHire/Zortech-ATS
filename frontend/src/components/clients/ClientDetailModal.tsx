@@ -11,7 +11,7 @@ function Field({ label, value }: { label: string; value?: string | number | bool
   const display = typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
   return (
     <div className="space-y-0.5">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">{label}</p>
       <p className="text-sm text-gray-800 font-medium">{display}</p>
     </div>
   );
@@ -21,7 +21,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{title}</p>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{title}</p>
         <div className="h-px bg-gray-100 mt-1" />
       </div>
       <div className="grid grid-cols-2 gap-x-8 gap-y-4">{children}</div>
@@ -34,7 +34,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-200">
         {/* Header */}
         <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -42,7 +42,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
               {(client.name || client.client_name || "?").charAt(0)}
             </div>
             <div>
-              <h2 className="text-xl font-black text-[#111111]">{client.name || client.client_name}</h2>
+              <h2 className="text-xl font-semibold text-ink">{client.name || client.client_name}</h2>
               <p className="text-xs text-gray-400 mt-0.5">{client.industry || "No industry specified"}</p>
             </div>
           </div>
@@ -63,7 +63,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
                 {client.client_priority} Priority
               </span>
             )}
-            <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]">
+            <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-ink">
               <X size={20} />
             </button>
           </div>
@@ -77,7 +77,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
             <Field label="Headquarters" value={client.headquarters_location} />
             {client.operating_locations?.length > 0 && (
               <div className="col-span-2 space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Operating Locations</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Operating Locations</p>
                 <div className="flex flex-wrap gap-1.5 mt-1">
                   {client.operating_locations.map((loc: string) => (
                     <span key={loc} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-lg">{loc}</span>
@@ -87,7 +87,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
             )}
             {client.website && (
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Website</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Website</p>
                 <a href={client.website} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-medium">
                   <Globe size={12} /> {client.website}
                 </a>
@@ -95,7 +95,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
             )}
             {client.linkedin && (
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">LinkedIn</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">LinkedIn</p>
                 <a href={client.linkedin} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline font-medium">{client.linkedin}</a>
               </div>
             )}
@@ -107,7 +107,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
             <Field label="Alternate Contact" value={client.alternate_contact} />
             {client.primary_contact_email && (
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Email</p>
                 <a href={`mailto:${client.primary_contact_email}`} className="text-sm text-blue-600 hover:underline flex items-center gap-1 font-medium">
                   <Mail size={12} /> {client.primary_contact_email}
                 </a>
@@ -115,7 +115,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
             )}
             {client.primary_contact_phone && (
               <div className="space-y-0.5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Phone</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Phone</p>
                 <span className="text-sm text-gray-800 font-medium flex items-center gap-1">
                   <Phone size={12} /> {client.primary_contact_phone}
                 </span>
@@ -157,7 +157,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
               <Field label="Delivery Lead" value={client.delivery_lead} />
               {client.recruiters?.length > 0 && (
                 <div className="col-span-2 space-y-0.5">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recruiters</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Recruiters</p>
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {client.recruiters.map((r: string) => (
                       <span key={r} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg font-medium">{r}</span>
@@ -172,7 +172,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
           {stakeholders.length > 0 && (
             <div className="space-y-4">
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Stakeholders</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Stakeholders</p>
                 <div className="h-px bg-gray-100 mt-1" />
               </div>
               <div className="space-y-3">
@@ -193,7 +193,7 @@ export default function ClientDetailModal({ client, onClose }: ClientDetailModal
           {(client.tags?.length > 0 || client.notes) && (
             <div className="space-y-4">
               <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tags & Notes</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Tags & Notes</p>
                 <div className="h-px bg-gray-100 mt-1" />
               </div>
               {client.tags?.length > 0 && (

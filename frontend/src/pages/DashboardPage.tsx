@@ -288,7 +288,7 @@ export default function DashboardPage() {
       case "interviews":
         return (
           <div className="text-center py-4 space-y-2">
-            <p className="text-3xl font-black text-slate-900">{fmt(stats?.upcoming_interviews)}</p>
+            <p className="text-3xl font-semibold text-slate-900">{fmt(stats?.upcoming_interviews)}</p>
             <p className="text-sm text-slate-500">
               {(stats?.upcoming_interviews ?? 0) === 0 ? "No upcoming interviews." : `${stats?.upcoming_interviews} interview${(stats?.upcoming_interviews ?? 0) > 1 ? "s" : ""} scheduled.`}
             </p>
@@ -297,7 +297,7 @@ export default function DashboardPage() {
       case "alerts":
         return (
           <div className="text-center py-4 space-y-2">
-            <p className={`text-3xl font-black ${(stats?.sla_alerts ?? 0) > 0 ? "text-amber-500" : "text-slate-900"}`}>{fmt(stats?.sla_alerts)}</p>
+            <p className={`text-3xl font-semibold ${(stats?.sla_alerts ?? 0) > 0 ? "text-amber-500" : "text-slate-900"}`}>{fmt(stats?.sla_alerts)}</p>
             <p className="text-sm text-slate-500">
               {(stats?.sla_alerts ?? 0) === 0 ? "All jobs within SLA." : `${stats?.sla_alerts} job${(stats?.sla_alerts ?? 0) > 1 ? "s have" : " has"} breached SLA deadline.`}
             </p>
@@ -375,7 +375,7 @@ export default function DashboardPage() {
               {pipelineRow.map((row) => (
                 <div key={row.key} className="text-center">
                   <p className={`text-sm font-bold ${row.color}`}>{getStageCount(row.key)}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{row.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{row.label}</p>
                 </div>
               ))}
             </div>
@@ -471,7 +471,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className="text-xs font-bold text-gray-900">{job.application_count ?? 0}</p>
-                      <p className="text-[10px] text-gray-400">Applications</p>
+                      <p className="text-xs text-gray-400">Applications</p>
                     </div>
                   </Link>
                 ))
@@ -521,12 +521,12 @@ export default function DashboardPage() {
 
           {/* AI Upgrade Banner */}
           <div className="lg:col-span-3">
-            <div className="bg-[#111111] rounded-2xl p-6 h-full flex flex-col justify-between relative overflow-hidden min-h-[180px]">
+            <div className="bg-navy-600 rounded-2xl p-6 h-full flex flex-col justify-between relative overflow-hidden min-h-[180px]">
               <div className="absolute top-[-20%] right-[-10%] w-48 h-48 border border-white/10 rounded-full" />
               <div className="absolute bottom-[-10%] left-[-10%] w-36 h-36 border border-white/5 rounded-full" />
 
               <div className="relative z-10 space-y-3">
-                <h2 className="text-lg font-black text-white leading-tight">
+                <h2 className="text-lg font-semibold text-white leading-tight">
                   Optimize{" "}
                   <span className="italic font-serif text-amber-400">Sourcing</span>
                   {" "}with ZorHire AI
@@ -539,7 +539,7 @@ export default function DashboardPage() {
               <div className="relative z-10 mt-6">
                 <Link
                   to="/pricing"
-                  className="inline-block bg-amber-400 text-gray-900 px-5 py-2.5 rounded-xl font-black text-sm hover:bg-amber-300 transition-colors"
+                  className="inline-block bg-amber-400 text-gray-900 px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-amber-300 transition-colors"
                 >
                   Upgrade Now
                 </Link>

@@ -418,7 +418,7 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     readOnly={busy}
-                    className="w-full px-4 py-3 bg-[#fff5ea] border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    className="w-full px-4 py-3 bg-surface border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     placeholder="name@company.com"
                   />
                 </div>
@@ -449,7 +449,7 @@ export default function LoginPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       readOnly={busy}
-                      className="w-full px-4 py-3 bg-[#fff5ea] border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-12 disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="w-full px-4 py-3 bg-surface border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-12 disabled:opacity-60 disabled:cursor-not-allowed"
                       placeholder="••••••••"
                     />
 
@@ -569,7 +569,7 @@ export default function LoginPage() {
                       required
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
-                      className="w-full px-4 py-3 bg-[#fff5ea] border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all"
+                      className="w-full px-4 py-3 bg-surface border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all"
                       placeholder="name@company.com"
                     />
                   </div>

@@ -285,7 +285,7 @@ export default function CompaniesPage() {
     <div className="flex flex-col flex-1 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
         <div>
-          <h1 className="text-xl font-black text-gray-900">Company Management</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Company Management</h1>
           <p className="text-xs text-gray-400 mt-0.5">Onboard and manage all client companies on ZorHire</p>
         </div>
         <div className="flex items-center gap-2">
@@ -301,7 +301,7 @@ export default function CompaniesPage() {
           )}
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all"
+            className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all"
           >
             <Plus size={16} /> Onboard Company
           </button>
@@ -324,7 +324,7 @@ export default function CompaniesPage() {
                   <s.icon size={17} className={s.color} />
                 </div>
               </div>
-              <p className="text-2xl font-black text-gray-900">{loading ? "—" : s.value}</p>
+              <p className="text-2xl font-semibold text-gray-900">{loading ? "—" : s.value}</p>
               <p className="text-sm font-medium text-gray-700 mt-0.5">{s.label}</p>
               <p className="text-xs text-gray-400 mt-0.5">{s.sub}</p>
             </div>
@@ -452,7 +452,7 @@ export default function CompaniesPage() {
                               <Globe size={9} />{t.slug}
                             </p>
                             {t.industry && (
-                              <span className="mt-0.5 inline-block text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                              <span className="mt-0.5 inline-block text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
                                 {t.industry}
                               </span>
                             )}
@@ -482,7 +482,7 @@ export default function CompaniesPage() {
                       <td className="px-4 py-4 min-w-[140px]">
                         <SubBadge status={t.subscription_status} planType={t.plan_type} />
                         {t.subscription_end_date && t.subscription_status === "active" && (
-                          <p className="text-[10px] text-gray-400 mt-1">
+                          <p className="text-xs text-gray-400 mt-1">
                             Renews on {fmtDate(t.subscription_end_date)}
                           </p>
                         )}
@@ -573,7 +573,7 @@ export default function CompaniesPage() {
       {/* ── Onboard Modal ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-blue-50/40 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">

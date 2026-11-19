@@ -149,7 +149,7 @@ function ApplicationCard({ entry }: { entry: ApplicationEntry }) {
 
       {entry.interviews.length > 0 && (
         <div className="border-t border-gray-50 pt-3 mt-3">
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
             Interviews ({entry.interviews.length})
           </p>
           {entry.interviews.map((iv) => (

@@ -121,7 +121,7 @@ export default function LandingPage() {
                 Zor<span className="text-[#E5B83F]">Hire</span>
               </div>
 
-              <div className="text-[9px] font-medium uppercase tracking-[0.22em] text-[#75695F]">
+              <div className="text-xs font-medium uppercase tracking-[0.22em] text-[#75695F]">
                 Enterprise ATS
               </div>
             </div>
@@ -268,7 +268,7 @@ export default function LandingPage() {
 
             <div className="relative mx-auto mt-20 max-w-6xl lg:mt-24">
               {/* Glow behind dashboard */}
-              <div className="pointer-events-none absolute inset-x-10 bottom-[-40px] top-10 rounded-[32px] bg-[#E5B83F]/10 blur-[80px]" />
+              <div className="pointer-events-none absolute inset-x-10 bottom-[-40px] top-10 rounded-2xl bg-[#E5B83F]/10 blur-[80px]" />
 
               <div className="relative overflow-hidden rounded-2xl border border-[#07101C]/10 bg-[#FFFFFF] shadow-2xl shadow-[#24180F]/20">
                 {/* Browser top bar */}
@@ -368,7 +368,7 @@ export default function LandingPage() {
                             {value}
                           </div>
 
-                          <div className="mt-1 text-[9px] text-[#75695F]">
+                          <div className="mt-1 text-xs text-[#75695F]">
                             {label}
                           </div>
                         </div>
@@ -589,7 +589,7 @@ export default function LandingPage() {
 
         <section id="security" className="bg-[#F8EFE3] py-28 lg:py-32">
           <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="relative overflow-hidden rounded-3xl border border-[#E5B83F]/15 bg-[#24180F] p-8 sm:p-12 lg:p-16">
+            <div className="relative overflow-hidden rounded-2xl border border-[#E5B83F]/15 bg-[#24180F] p-8 sm:p-12 lg:p-16">
               <div className="pointer-events-none absolute right-[-120px] top-[-160px] h-[400px] w-[400px] rounded-full bg-[#E5B83F]/[0.06] blur-[100px]" />
 
               <div className="relative grid gap-12 lg:grid-cols-[1fr_auto] lg:items-center">
@@ -631,7 +631,7 @@ export default function LandingPage() {
                         className="mx-auto mb-2 text-[#E5B83F]"
                       />
 
-                      <span className="text-[10px] leading-4 text-[#FFF8F1]/70">
+                      <span className="text-xs leading-4 text-[#FFF8F1]/70">
                         {item}
                       </span>
                     </div>
@@ -692,7 +692,7 @@ export default function LandingPage() {
               Zor<span className="text-[#E5B83F]">Hire</span>
             </div>
 
-            <div className="mt-1 text-[10px] uppercase tracking-[0.15em] text-[#75695F]">
+            <div className="mt-1 text-xs uppercase tracking-[0.15em] text-[#75695F]">
               Enterprise ATS Platform
             </div>
           </div>

@@ -118,10 +118,10 @@ function TopMatchCard({
       </div>
       <div className="flex flex-wrap gap-1 mt-2">
         {candidate.skills.slice(0, 3).map((s) => (
-          <span key={s} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{s}</span>
+          <span key={s} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{s}</span>
         ))}
         {candidate.skills.length > 3 && (
-          <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">+{candidate.skills.length - 3}</span>
+          <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">+{candidate.skills.length - 3}</span>
         )}
       </div>
       <button
@@ -262,7 +262,7 @@ function CandidateRow({
                 strokeLinecap="round"
               />
             </svg>
-            <span className={`absolute inset-0 flex items-center justify-center text-[9px] font-bold ${mc.text}`}>
+            <span className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${mc.text}`}>
               {score}%
             </span>
           </div>

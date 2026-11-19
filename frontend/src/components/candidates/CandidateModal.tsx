@@ -383,7 +383,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                 }`}>
                 {tab}
                 {tab === 'activity' && interviews.length > 0 && (
-                  <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">
+                  <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
                     {interviews.length}
                   </span>
                 )}
@@ -406,28 +406,28 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                       <Mail size={18} className="text-blue-500" />
                       <div className="min-w-0">
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Email</p>
+                        <p className="text-xs text-gray-400 font-bold uppercase">Email</p>
                         <p className="text-sm text-gray-700 font-medium truncate">{candidate.email}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                       <Phone size={18} className="text-emerald-500" />
                       <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Phone</p>
+                        <p className="text-xs text-gray-400 font-bold uppercase">Phone</p>
                         <p className="text-sm text-gray-700 font-medium">{candidate.phone || 'Not provided'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                       <MapPin size={18} className="text-red-500" />
                       <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Location</p>
+                        <p className="text-xs text-gray-400 font-bold uppercase">Location</p>
                         <p className="text-sm text-gray-700 font-medium">{candidate.current_location || 'Not provided'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                       <Clock size={18} className="text-amber-500" />
                       <div>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Notice Period</p>
+                        <p className="text-xs text-gray-400 font-bold uppercase">Notice Period</p>
                         <p className="text-sm text-gray-700 font-medium">
                           {candidate.notice_period_days != null ? `${candidate.notice_period_days} Days` : 'Not provided'}
                         </p>
@@ -440,7 +440,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Professional Summary</h3>
                   <p className="text-sm text-gray-600 leading-relaxed">{candidate.summary || 'No summary provided.'}</p>
                   <div className="pt-4">
-                    <h4 className="text-[10px] text-gray-400 font-bold uppercase mb-3">Core Skills</h4>
+                    <h4 className="text-xs text-gray-400 font-bold uppercase mb-3">Core Skills</h4>
                     <div className="flex flex-wrap gap-2">
                       {(candidate.skills ?? []).map(skill => (
                         <span key={skill} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100">{skill}</span>
@@ -482,7 +482,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                       <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-xs text-gray-500 font-medium">Current Stage</span>
-                          <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase ${STAGE_COLORS[selectedApp.stage] || "bg-gray-100 text-gray-600"}`}>
+                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full uppercase ${STAGE_COLORS[selectedApp.stage] || "bg-gray-100 text-gray-600"}`}>
                             {STAGE_LABELS[selectedApp.stage] || selectedApp.stage}
                           </span>
                         </div>
@@ -490,7 +490,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                           <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
                         </div>
                         {selectedApp.job?.title && (
-                          <p className="text-[10px] text-gray-400 mt-2 truncate">Job: {selectedApp.job.title}</p>
+                          <p className="text-xs text-gray-400 mt-2 truncate">Job: {selectedApp.job.title}</p>
                         )}
                       </div>
 
@@ -527,7 +527,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
                   {showScheduler && (
                     <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Interview Details</p>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Interview Details</p>
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <input
@@ -629,7 +629,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                       </div>
                       <div>
                         <p className="text-sm font-bold text-gray-900">Resume_{localCandidate.last_name}.pdf</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Uploaded resume</p>
+                        <p className="text-xs text-gray-400 font-medium">Uploaded resume</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -768,7 +768,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                                     <p className="text-sm font-bold text-gray-900">
                                       {INTERVIEW_TYPE_LABELS[iv.interview_type] || iv.interview_type}
                                     </p>
-                                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full flex items-center gap-1 ${INTERVIEW_STATUS_COLORS[iv.status] || 'bg-gray-100 text-gray-600'}`}>
+                                    <span className={`px-2 py-0.5 text-xs font-bold rounded-full flex items-center gap-1 ${INTERVIEW_STATUS_COLORS[iv.status] || 'bg-gray-100 text-gray-600'}`}>
                                       {INTERVIEW_STATUS_ICONS[iv.status]}
                                       {iv.status}
                                     </span>
@@ -848,7 +848,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                                 <div className="w-2 h-2 bg-violet-500 rounded-full" />
                               </div>
                               <div>
-                                <p className="text-[10px] text-gray-400 font-medium">
+                                <p className="text-xs text-gray-400 font-medium">
                                   {new Date(event.created_at).toLocaleString('en-IN', {
                                     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                                   })}

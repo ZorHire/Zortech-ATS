@@ -36,14 +36,14 @@ export default function PricingPage() {
       {/* Inline page header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
         <div>
-          <h1 className="text-base font-black text-[#111111] tracking-tight">
+          <h1 className="text-base font-semibold text-ink tracking-tight">
             Subscription Plans
           </h1>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mt-0.5">
             Choose the plan that fits your hiring needs
           </p>
         </div>
-        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full uppercase tracking-widest">
+        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full uppercase tracking-wide">
           No setup fees
         </span>
       </div>
@@ -56,7 +56,7 @@ export default function PricingPage() {
             <ShieldCheck size={16} className="text-amber-700" />
           </div>
           <div>
-            <p className="text-xs font-black text-[#111111]">
+            <p className="text-xs font-semibold text-ink">
               All plans include 24/7 support, regular updates, and bank-level security.
             </p>
             <p className="text-[11px] text-gray-500 mt-0.5">
@@ -78,7 +78,7 @@ export default function PricingPage() {
               <CreditCard size={18} className="text-amber-600" />
             </div>
             <div>
-              <p className="text-xs font-black text-[#111111] mb-1">Secure Payments</p>
+              <p className="text-xs font-semibold text-ink mb-1">Secure Payments</p>
               <p className="text-[11px] text-gray-500 mb-2.5">
                 All payments are securely processed by Razorpay.
               </p>
@@ -99,10 +99,10 @@ export default function PricingPage() {
 
           {/* Razorpay branding */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col items-center justify-center gap-2">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">
               Powered by
             </p>
-            <p className="text-2xl font-black text-[#072654] tracking-tight">Razorpay</p>
+            <p className="text-2xl font-semibold text-[#072654] tracking-tight">Razorpay</p>
             <p className="text-[11px] text-gray-400">India's leading payment gateway</p>
           </div>
 
@@ -112,7 +112,7 @@ export default function PricingPage() {
               <Headphones size={18} className="text-blue-600" />
             </div>
             <div className="flex-1">
-              <p className="text-xs font-black text-[#111111] mb-1">Need Help Choosing?</p>
+              <p className="text-xs font-semibold text-ink mb-1">Need Help Choosing?</p>
               <p className="text-[11px] text-gray-500 mb-3">
                 Our team is here to help you find the perfect plan.
               </p>
@@ -124,7 +124,7 @@ export default function PricingPage() {
                       "_blank",
                     )
                   }
-                  className="w-full py-2 rounded-xl bg-[#111111] text-white text-[11px] font-black hover:bg-black transition-colors"
+                  className="w-full py-2 rounded-xl bg-navy-600 text-white text-[11px] font-semibold hover:bg-navy-700 transition-colors"
                 >
                   Talk to Sales
                 </button>

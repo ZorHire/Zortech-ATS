@@ -143,13 +143,13 @@ export default function NewJobPage() {
       />
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl mx-auto overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-auto overflow-hidden">
           <div className="px-8 py-6 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
             <div className="p-3 bg-gray-100 rounded-2xl">
-              <Plus size={18} className="text-[#111111]" />
+              <Plus size={18} className="text-ink" />
             </div>
             <div>
-              <h2 className="text-2xl font-black text-[#111111] tracking-tight">
+              <h2 className="text-2xl font-semibold text-ink tracking-tight">
                 New Job Description
               </h2>
               <p className="text-sm text-gray-500">
@@ -164,7 +164,7 @@ export default function NewJobPage() {
           >
             {/* JD Upload → Auto-fill */}
             <div className="border border-dashed border-blue-200 bg-blue-50/40 rounded-2xl p-4">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-2 ml-1">
                 Upload JD to Auto-fill (PDF / DOCX / TXT)
               </label>
               <div className="flex items-center gap-3">
@@ -205,7 +205,7 @@ export default function NewJobPage() {
 
             <div className="grid sm:grid-cols-2 gap-6">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Job Title
                   {titleFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
@@ -220,7 +220,7 @@ export default function NewJobPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Client
                 </label>
                 <select
@@ -241,7 +241,7 @@ export default function NewJobPage() {
 
             <div className="grid sm:grid-cols-2 gap-6">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Location
                 </label>
                 <input
@@ -255,7 +255,7 @@ export default function NewJobPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Status
                 </label>
                 <select
@@ -274,7 +274,7 @@ export default function NewJobPage() {
 
             <div className="grid sm:grid-cols-2 gap-6">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Department
                   {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
@@ -288,7 +288,7 @@ export default function NewJobPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Work Mode
                   {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
                 </label>
@@ -308,7 +308,7 @@ export default function NewJobPage() {
 
             <div className="grid sm:grid-cols-3 gap-6">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Priority
                 </label>
                 <select
@@ -323,7 +323,7 @@ export default function NewJobPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Experience Min
                 </label>
                 <input
@@ -335,7 +335,7 @@ export default function NewJobPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Experience Max
                 </label>
                 <input
@@ -352,7 +352,7 @@ export default function NewJobPage() {
 
             <div className="grid sm:grid-cols-3 gap-6">
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Budget Min
                 </label>
                 <input
@@ -365,7 +365,7 @@ export default function NewJobPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Budget Max
                 </label>
                 <input
@@ -378,7 +378,7 @@ export default function NewJobPage() {
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                   Headcount
                 </label>
                 <input
@@ -392,7 +392,7 @@ export default function NewJobPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                 Primary Skills
                 {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -407,7 +407,7 @@ export default function NewJobPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                 Preferred Skills
                 {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -422,7 +422,7 @@ export default function NewJobPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5 ml-1">
                 Description
               </label>
               <textarea
@@ -439,14 +439,14 @@ export default function NewJobPage() {
                 type="button"
                 onClick={() => navigate("/jobs")}
                 disabled={creating}
-                className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all disabled:opacity-50"
+                className="flex-1 py-4 bg-gray-50 text-ink font-semibold text-sm rounded-2xl border border-gray-100 hover:bg-gray-100 transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={jdParsing || creating || !!expError}
-                className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 py-4 bg-navy-600 text-white font-semibold text-sm rounded-2xl hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {jdParsing ? "Parsing JD…" : creating ? "Saving…" : "Create Job"}
               </button>

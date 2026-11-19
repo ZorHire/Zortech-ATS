@@ -112,18 +112,18 @@ export default function AssignedJDsPage() {
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Assigned JDs</p>
-            <p className="text-2xl font-black text-gray-900">{totalAssigned}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Assigned JDs</p>
+            <p className="text-2xl font-semibold text-gray-900">{totalAssigned}</p>
             <p className="text-xs text-gray-400 mt-0.5">with active assignments</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recruiter Links</p>
-            <p className="text-2xl font-black text-blue-600">{totalRecruiterLinks}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Recruiter Links</p>
+            <p className="text-2xl font-semibold text-blue-600">{totalRecruiterLinks}</p>
             <p className="text-xs text-gray-400 mt-0.5">across all jobs</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Vendor Links</p>
-            <p className="text-2xl font-black text-violet-600">{totalVendorLinks}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Vendor Links</p>
+            <p className="text-2xl font-semibold text-violet-600">{totalVendorLinks}</p>
             <p className="text-xs text-gray-400 mt-0.5">across all jobs</p>
           </div>
         </div>
@@ -154,13 +154,13 @@ export default function AssignedJDsPage() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job Title</th>
-                    <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                    <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Job Title</th>
+                    <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Status</th>
                     {canManageRecruiters && (
-                      <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assigned Recruiters</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Assigned Recruiters</th>
                     )}
                     {canManageVendors && (
-                      <th className="px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assigned Vendors</th>
+                      <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Assigned Vendors</th>
                     )}
                   </tr>
                 </thead>
@@ -235,7 +235,7 @@ export default function AssignedJDsPage() {
                   </button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                     <button key={p} onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-[#111111] text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+                      className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-navy-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
                       {p}
                     </button>
                   ))}

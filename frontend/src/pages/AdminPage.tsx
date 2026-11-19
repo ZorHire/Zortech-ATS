@@ -168,7 +168,7 @@ export default function AdminPage() {
       <Header title="User Management" subtitle="Manage platform access and roles for your team"
         actions={
           <button onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#111111] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-gray-200">
+            className="flex items-center gap-2 px-4 py-2 bg-navy-600 text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-gray-200">
             <UserPlus size={15} /> Invite User
           </button>
         }
@@ -178,20 +178,20 @@ export default function AdminPage() {
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Users</p>
-            <p className="text-2xl font-black text-gray-900">{counts.total}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Total Users</p>
+            <p className="text-2xl font-semibold text-gray-900">{counts.total}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Active</p>
-            <p className="text-2xl font-black text-emerald-600">{counts.active}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Active</p>
+            <p className="text-2xl font-semibold text-emerald-600">{counts.active}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Inactive</p>
-            <p className="text-2xl font-black text-gray-400">{counts.inactive}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Inactive</p>
+            <p className="text-2xl font-semibold text-gray-400">{counts.inactive}</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pending Reset</p>
-            <p className="text-2xl font-black text-amber-600">{counts.pending}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Pending Reset</p>
+            <p className="text-2xl font-semibold text-amber-600">{counts.pending}</p>
           </div>
         </div>
 
@@ -230,7 +230,7 @@ export default function AdminPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     {["User", "Role", "Status", "Password", "Actions"].map((h) => (
-                      <th key={h} className={`px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
+                      <th key={h} className={`px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -271,9 +271,9 @@ export default function AdminPage() {
                         </td>
                         <td className="px-5 py-4">
                           {user.must_change_password ? (
-                            <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Pending Reset</span>
+                            <span className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Pending Reset</span>
                           ) : (
-                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Verified</span>
+                            <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Verified</span>
                           )}
                         </td>
                         <td className="px-5 py-4">
@@ -303,7 +303,7 @@ export default function AdminPage() {
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                   <button key={p} onClick={() => setPage(p)}
-                    className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-[#111111] text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+                    className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-navy-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
                     {p}
                   </button>
                 ))}
@@ -322,14 +322,14 @@ export default function AdminPage() {
       {/* Create User Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-7 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#111111] rounded-xl flex items-center justify-center text-white">
+                <div className="w-10 h-10 bg-navy-600 rounded-xl flex items-center justify-center text-white">
                   <UserPlus size={18} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-gray-900">Invite New User</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Invite New User</h2>
                   <p className="text-xs text-gray-400">User will be prompted to change password on first login</p>
                 </div>
               </div>
@@ -351,14 +351,14 @@ export default function AdminPage() {
                 { label: "Email Address", value: newEmail, onChange: setNewEmail, type: "email", placeholder: "name@company.com", required: true },
               ].map((f) => (
                 <div key={f.label}>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{f.label}</label>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">{f.label}</label>
                   <input type={f.type} required={f.required} value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
               ))}
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Role</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">Role</label>
                 <select value={newRole} onChange={(e) => { setNewRole(e.target.value); setNewVendorId(""); }}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
                   {Object.entries(roleLabels).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
@@ -367,18 +367,18 @@ export default function AdminPage() {
 
               {newRole === "vendor_user" && (
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Linked Vendor Company</label>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">Linked Vendor Company</label>
                   <select value={newVendorId} onChange={(e) => setNewVendorId(e.target.value)}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
                     <option value="">— Select vendor —</option>
                     {vendors.map((v) => <option key={v.id} value={v.id}>{v.company_name}</option>)}
                   </select>
-                  <p className="mt-1 text-[10px] text-gray-400">This vendor's assigned jobs will be visible to the user.</p>
+                  <p className="mt-1 text-xs text-gray-400">This vendor's assigned jobs will be visible to the user.</p>
                 </div>
               )}
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Temporary Password</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1.5">Temporary Password</label>
                 <input type="text" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Set a temporary password"
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
@@ -389,7 +389,7 @@ export default function AdminPage() {
                   Cancel
                 </button>
                 <button type="submit" disabled={formLoading}
-                  className="flex-1 py-3 bg-[#111111] text-white font-bold text-sm rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+                  className="flex-1 py-3 bg-navy-600 text-white font-bold text-sm rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
                   {formLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><SendHorizonal size={15} /> Send Invite</>}
                 </button>
               </div>

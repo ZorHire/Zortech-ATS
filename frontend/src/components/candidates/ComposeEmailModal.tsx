@@ -86,7 +86,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[70] p-4">
-      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-bottom-4 duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-bottom-4 duration-200">
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
@@ -95,7 +95,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
               <Mail size={18} className="text-blue-600" />
             </div>
             <div>
-              <h2 className="text-base font-black text-gray-900">Compose Email</h2>
+              <h2 className="text-base font-semibold text-gray-900">Compose Email</h2>
               <p className="text-xs text-gray-400 mt-0.5">to {toName} · {to}</p>
             </div>
           </div>
@@ -106,7 +106,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
 
         {/* Quick templates */}
         <div className="px-6 pt-4 pb-2 flex-shrink-0">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Quick templates</p>
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Quick templates</p>
           <div className="flex flex-wrap gap-2">
             {TEMPLATES.map((t, i) => (
               <button
@@ -129,7 +129,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
         <div className="px-6 pb-2 flex-1 overflow-y-auto space-y-4 pt-3">
           {/* Subject */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subject</label>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Subject</label>
             <input
               type="text"
               value={subject}
@@ -141,7 +141,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
 
           {/* Body */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Message</label>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Message</label>
             <textarea
               value={body}
               onChange={(e) => { setBody(e.target.value); setActiveTemplate(null); }}
@@ -157,7 +157,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-3 bg-gray-50 text-gray-700 font-black text-sm rounded-[16px] border border-gray-200 hover:bg-gray-100 transition-all"
+            className="flex-1 py-3 bg-gray-50 text-gray-700 font-semibold text-sm rounded-[16px] border border-gray-200 hover:bg-gray-100 transition-all"
           >
             Cancel
           </button>
@@ -165,7 +165,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
             type="button"
             onClick={handleSend}
             disabled={!canSend}
-            className="flex-[2] py-3 bg-blue-600 text-white font-black text-sm rounded-[16px] hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-[2] py-3 bg-blue-600 text-white font-semibold text-sm rounded-[16px] hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sending ? (
               <>

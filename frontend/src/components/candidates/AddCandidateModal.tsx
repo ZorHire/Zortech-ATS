@@ -144,13 +144,13 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-          <h2 className="text-xl font-black text-[#111111] tracking-tight">Add Candidate to Job</h2>
+          <h2 className="text-xl font-semibold text-ink tracking-tight">Add Candidate to Job</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]"
+            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-ink"
           >
             <X size={20} />
           </button>
@@ -158,7 +158,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
         <form onSubmit={handleSubmit} className="p-8 overflow-y-auto max-h-[75vh]">
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 First Name
                 {nameFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -172,7 +172,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Last Name
                 {nameFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -186,7 +186,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Email Address
                 {emailFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -199,7 +199,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Phone Number
                 {phoneFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -212,7 +212,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Current Title
                 {currentTitleFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -225,7 +225,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Current Company
                 {currentCompanyFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -238,7 +238,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Experience (years)</label>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Experience (years)</label>
               <input
                 type="number"
                 min={0}
@@ -248,7 +248,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Location
                 {currentLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -261,7 +261,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Preferred Location
                 {preferredLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -274,7 +274,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Notice Period (days)
                 {noticePeriodFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -287,7 +287,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Current CTC (annual)
                 {currentCtcFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -301,7 +301,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Expected CTC (annual)
                 {expectedCtcFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -315,7 +315,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">
                 Skills (comma separated)
                 {skillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
               </label>
@@ -328,7 +328,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Source</label>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Source</label>
               <div className="relative">
                 <select
                   value={formData.source}
@@ -347,7 +347,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
               </div>
             </div>
             <div className="col-span-2 space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Upload Resume</label>
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wide ml-1">Upload Resume</label>
               <input
                 type="file"
                 accept=".pdf,.doc,.docx"
@@ -370,14 +370,14 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all"
+              className="flex-1 py-4 bg-gray-50 text-ink font-semibold text-sm rounded-2xl border border-gray-100 hover:bg-gray-100 transition-all"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={resumeParsing || submitting}
-              className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-4 bg-navy-600 text-white font-semibold text-sm rounded-2xl hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {resumeParsing ? "Parsing..." : submitting ? "Adding..." : "Add to Job"}
             </button>

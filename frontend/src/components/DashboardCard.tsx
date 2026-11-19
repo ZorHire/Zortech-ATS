@@ -25,7 +25,7 @@ export default function DashboardCard({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left ${bgColor} rounded-[20px] sm:rounded-[28px] lg:rounded-[32px] p-3 sm:p-4 lg:p-6 flex flex-col justify-between min-h-[120px] sm:min-h-[140px] lg:min-h-[160px] transition-all duration-200 ${
+      className={`w-full text-left ${bgColor} rounded-2xl sm:rounded-2xl lg:rounded-2xl p-3 sm:p-4 lg:p-6 flex flex-col justify-between min-h-[120px] sm:min-h-[140px] lg:min-h-[160px] transition-all duration-200 ${
         isInteractive
           ? "cursor-pointer hover:-translate-y-0.5 hover:shadow-xl"
           : ""
@@ -34,10 +34,10 @@ export default function DashboardCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1 sm:space-y-2 min-w-0">
-          <p className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+          <p className="text-base sm:text-lg font-semibold text-slate-900 tracking-tight truncate">
             {value}
           </p>
-          <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-500">
+          <p className="text-xs sm:text-xs font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-500">
             {label}
           </p>
         </div>
@@ -49,7 +49,7 @@ export default function DashboardCard({
       </div>
 
       {description ? (
-        <p className="text-[10px] sm:text-[11px] text-slate-500 mt-2 sm:mt-4 leading-snug">
+        <p className="text-xs sm:text-[11px] text-slate-500 mt-2 sm:mt-4 leading-snug">
           {description}
         </p>
       ) : null}

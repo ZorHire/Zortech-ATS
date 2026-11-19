@@ -48,8 +48,8 @@ export default function ChangePasswordPage() {
   if (success) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-        <div className="bg-white p-10 rounded-3xl shadow-xl shadow-blue-100/50 max-w-md w-full text-center space-y-6">
-          <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto">
+        <div className="bg-white p-10 rounded-2xl shadow-xl shadow-blue-100/50 max-w-md w-full text-center space-y-6">
+          <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto">
             <ShieldCheck size={40} />
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Password Changed!</h2>
@@ -64,7 +64,7 @@ export default function ChangePasswordPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white p-8 rounded-3xl shadow-xl shadow-blue-100/50 max-w-md w-full space-y-8">
+      <div className="bg-white p-8 rounded-2xl shadow-xl shadow-blue-100/50 max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <KeyRound size={32} />

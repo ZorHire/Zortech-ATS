@@ -104,7 +104,7 @@ export default function EmailSettingsPage() {
               <Settings size={15} className="text-blue-600" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-gray-900">Email Settings</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Email Settings</h1>
               <p className="text-xs text-gray-400 mt-0.5">Connect your SMTP to send emails directly from ZorHire</p>
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function EmailSettingsPage() {
                     : <Mail size={20} className="text-amber-600" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-black ${isCorrupted ? "text-red-700" : "text-gray-900"}`}>
+                <p className={`text-sm font-semibold ${isCorrupted ? "text-red-700" : "text-gray-900"}`}>
                   {isCorrupted ? "Credentials Corrupt — Reconnect Required" : isConnected ? "SMTP Connected" : "No Email Connected"}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5 truncate">
@@ -198,7 +198,7 @@ export default function EmailSettingsPage() {
 
             {/* Provider selector */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Email Provider</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Email Provider</p>
               <div className="grid grid-cols-2 gap-3">
                 {(
                   [
@@ -284,7 +284,7 @@ export default function EmailSettingsPage() {
 
             {/* Connect / Update form */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">
                 {isConnected ? "Update Configuration" : "Connect Email"}
               </p>
               <form onSubmit={handleSave} className="space-y-4">
@@ -318,7 +318,7 @@ export default function EmailSettingsPage() {
 
                 <div className="flex items-center gap-3 pt-2 flex-wrap">
                   <button type="submit" disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#111111] hover:bg-black disabled:opacity-60 text-white text-sm font-bold rounded-xl transition-colors">
+                    className="flex items-center gap-2 px-5 py-2.5 bg-navy-600 hover:bg-navy-700 disabled:opacity-60 text-white text-sm font-bold rounded-xl transition-colors">
                     {saving ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : <><CheckCircle2 size={14} /> {isConnected ? "Update Email" : "Connect Email"}</>}
                   </button>
 
