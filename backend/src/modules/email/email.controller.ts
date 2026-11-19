@@ -167,16 +167,20 @@ export async function getTenantTransporter(tenantId: string): Promise<{
   fromEmail: string;
 } | null> {
   const result = await pool.query(
-    `SELECT email, encrypted_password, provider
+    `SELECT email, encrypted_password, provider, display_name
      FROM tenant_email_config
      WHERE tenant_id = $1 AND is_active = true LIMIT 1`,
     [tenantId],
   );
   if (result.rows.length === 0) return null;
-  const { email, encrypted_password, provider } = result.rows[0];
+  const { email, encrypted_password, provider, display_name } = result.rows[0];
   try {
     const password = decrypt(encrypted_password);
-    return { transporter: buildTransporter(email, password, provider), fromEmail: email };
+    const safeName = typeof display_name === "string" ? display_name.replace(/["<>\r\n]/g, "").trim() : "";
+    return {
+      transporter: buildTransporter(email, password, provider),
+      fromEmail: safeName ? `"${safeName}" <${email}>` : email,
+    };
   } catch (err: any) {
     console.error("getTenantTransporter decrypt error:", err.message);
     return null;
@@ -311,6 +315,109 @@ export const testEmailConfig = async (req: AuthRequest, res: Response) => {
     res.json({ ok: true, message: `Connected successfully as ${email}` });
   } catch (error: any) {
     console.error("Test email config error:", error);
+    const { message } = classifySmtpError(error);
+    res.status(400).json({ ok: false, message });
+  }
+};
+
+// ─── Company mailbox (tenant_email_config) ────────────────────────────────────
+// Used for system and AI-agent emails (screening invites, scheduling links,
+// password resets, demo requests). Admins only. Verified against the mail
+// server before saving, so a wrong app password is caught immediately.
+
+const PROVIDERS = ["zoho", "zoho_in", "zoho_eu", "google_workspace"];
+
+export const getCompanyEmailConfig = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  try {
+    const r = await pool.query(
+      `SELECT email, provider, display_name, encrypted_password, is_active, updated_at
+         FROM tenant_email_config WHERE tenant_id = $1`,
+      [tenantId],
+    );
+    const row = r.rows[0];
+    if (!row) return res.json({ configured: false });
+    let is_corrupted = false;
+    try { decrypt(row.encrypted_password); } catch { is_corrupted = true; }
+    res.json({ configured: true, email: row.email, provider: row.provider, display_name: row.display_name,
+               is_active: row.is_active, updated_at: row.updated_at, is_corrupted });
+  } catch (error) {
+    console.error("Get company email config error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const saveCompanyEmailConfig = async (req: AuthRequest, res: Response) => {
+  const tenantId = req.user!.tenant_id;
+  const email = typeof req.body?.email === "string" ? req.body.email.trim() : "";
+  const appPassword = typeof req.body?.appPassword === "string" ? req.body.appPassword.replace(/\s+/g, "") : "";
+  const provider = typeof req.body?.provider === "string" ? req.body.provider : "zoho_in";
+  const displayName = typeof req.body?.displayName === "string" ? req.body.displayName.trim().slice(0, 80) : "";
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || !appPassword) {
+    return res.status(400).json({ message: "A valid email address and app password are required." });
+  }
+  if (!PROVIDERS.includes(provider)) return res.status(400).json({ message: "Unsupported provider." });
+
+  // Verify the credentials with the mail server before storing them.
+  try {
+    await buildTransporter(email, appPassword, provider).verify();
+  } catch (error: any) {
+    const { message } = classifySmtpError(error);
+    return res.status(400).json({ message });
+  }
+
+  let encryptedPassword: string;
+  try {
+    encryptedPassword = encrypt(appPassword);
+  } catch (err: any) {
+    console.error("Encryption key error:", err.message);
+    return res.status(500).json({ message: "Encryption not configured on server. Contact admin." });
+  }
+
+  try {
+    await pool.query(
+      `INSERT INTO tenant_email_config (tenant_id, email, encrypted_password, provider, display_name, is_active)
+       VALUES ($1, $2, $3, $4, $5, true)
+       ON CONFLICT (tenant_id) DO UPDATE SET
+         email = EXCLUDED.email, encrypted_password = EXCLUDED.encrypted_password,
+         provider = EXCLUDED.provider, display_name = EXCLUDED.display_name,
+         is_active = true, updated_at = now()`,
+      [tenantId, email, encryptedPassword, provider, displayName || null],
+    );
+    res.json({ configured: true, email, provider, display_name: displayName || null, is_active: true, updated_at: new Date().toISOString(), is_corrupted: false });
+  } catch (error) {
+    console.error("Save company email config error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const removeCompanyEmailConfig = async (req: AuthRequest, res: Response) => {
+  try {
+    await pool.query(`DELETE FROM tenant_email_config WHERE tenant_id = $1`, [req.user!.tenant_id]);
+    res.json({ configured: false });
+  } catch (error) {
+    console.error("Remove company email config error:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/** Sends a real test email to the signed-in admin from the company mailbox. */
+export const testCompanyEmailConfig = async (req: AuthRequest, res: Response) => {
+  try {
+    const mail = await getTenantTransporter(req.user!.tenant_id);
+    if (!mail) return res.status(400).json({ ok: false, message: "No company mailbox configured." });
+    const to = req.user!.email;
+    if (!to) return res.status(400).json({ ok: false, message: "Your account has no email address to send the test to." });
+    await mail.transporter.sendMail({
+      from: mail.fromEmail,
+      to,
+      subject: "ZorHire company mailbox test",
+      text: "This is a test email from your ZorHire company mailbox. Screening invites, scheduling links and other system emails will be sent from this address.",
+    });
+    res.json({ ok: true, message: `Test email sent to ${to}` });
+  } catch (error: any) {
+    console.error("Test company email config error:", error);
     const { message } = classifySmtpError(error);
     res.status(400).json({ ok: false, message });
   }

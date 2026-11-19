@@ -43,6 +43,17 @@ export interface EmailConfig {
   is_corrupted?: boolean;
 }
 
+/** Company-wide mailbox (one per company) used for system and AI-agent emails. */
+export interface CompanyEmailConfig {
+  configured: boolean;
+  email?: string;
+  provider?: string;
+  display_name?: string | null;
+  is_active?: boolean;
+  updated_at?: string;
+  is_corrupted?: boolean;
+}
+
 export interface SendSingleEmailPayload {
   to: string;
   subject?: string;
@@ -73,6 +84,28 @@ export const emailApi = baseApi.injectEndpoints({
 
     testEmailConfig: builder.mutation<{ success: boolean; message?: string }, void>({
       query: () => ({ url: "/email/config/test", method: "POST", body: {} }),
+    }),
+
+    getCompanyEmailConfig: builder.query<CompanyEmailConfig, void>({
+      query: () => "/email/company-config",
+      providesTags: [{ type: "EmailConfig", id: "COMPANY" }],
+    }),
+
+    saveCompanyEmailConfig: builder.mutation<
+      CompanyEmailConfig,
+      { email: string; appPassword: string; provider: string; displayName?: string }
+    >({
+      query: (body) => ({ url: "/email/company-config", method: "PUT", body }),
+      invalidatesTags: [{ type: "EmailConfig", id: "COMPANY" }],
+    }),
+
+    deleteCompanyEmailConfig: builder.mutation<CompanyEmailConfig, void>({
+      query: () => ({ url: "/email/company-config", method: "DELETE" }),
+      invalidatesTags: [{ type: "EmailConfig", id: "COMPANY" }],
+    }),
+
+    testCompanyEmailConfig: builder.mutation<{ ok: boolean; message: string }, void>({
+      query: () => ({ url: "/email/company-config/test", method: "POST", body: {} }),
     }),
 
     getCampaigns: builder.query<EmailCampaign[], void>({
@@ -143,6 +176,10 @@ export const emailApi = baseApi.injectEndpoints({
 });
 
 export const {
+  useGetCompanyEmailConfigQuery,
+  useSaveCompanyEmailConfigMutation,
+  useDeleteCompanyEmailConfigMutation,
+  useTestCompanyEmailConfigMutation,
   useGetEmailConfigQuery,
   useSaveEmailConfigMutation,
   useDeleteEmailConfigMutation,

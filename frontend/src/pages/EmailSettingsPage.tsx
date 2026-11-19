@@ -12,6 +12,9 @@ import {
 import { Badge, Button, ErrorState, PageHeader, Skeleton, useConfirm } from "../components/ui";
 import { useNotify } from "../hooks/useNotify";
 import { getErrorMessage } from "../lib/format";
+import { useAppSelector } from "../hooks/useAppSelector";
+import { selectCurrentUser } from "../store/slices/authSlice";
+import CompanyMailboxCard from "../components/email/CompanyMailboxCard";
 
 type Provider = "zoho" | "zoho_in" | "zoho_eu" | "google_workspace";
 
@@ -41,6 +44,9 @@ function ExtLink({ href, children }: { href: string; children: React.ReactNode }
 }
 
 export default function EmailSettingsPage() {
+  // Company admins also manage the company-wide mailbox used for system emails.
+  const role = useAppSelector(selectCurrentUser)?.role;
+  const isCompanyAdmin = role === "super_admin" || role === "accounts_manager";
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const returnTo = searchParams.get("returnTo");
@@ -137,7 +143,7 @@ export default function EmailSettingsPage() {
     <>
       <PageHeader
         title="Email settings"
-        subtitle="Connect your SMTP to send emails directly from ZorHire"
+        subtitle={isCompanyAdmin ? "Your own mailbox for emails you send, and the company mailbox for system and AI-agent emails" : "Connect your mailbox to send emails directly from ZorHire"}
         actions={
           <>
             {statusBadge}
@@ -344,6 +350,7 @@ export default function EmailSettingsPage() {
             </section>
           </div>
         )}
+        {isCompanyAdmin && <CompanyMailboxCard />}
       </div>
     </>
   );

@@ -60,6 +60,13 @@ router.post(
   emailController.testEmailConfig,
 );
 
+// ─── Company mailbox (admins) ─────────────────────────────────────────────────
+const COMPANY_MAIL_ROLES = ["super_admin", "accounts_manager"];
+router.get("/company-config", authMiddleware, tenantIsolation, authorize(COMPANY_MAIL_ROLES), emailController.getCompanyEmailConfig);
+router.put("/company-config", authMiddleware, tenantIsolation, authorize(COMPANY_MAIL_ROLES), emailController.saveCompanyEmailConfig);
+router.delete("/company-config", authMiddleware, tenantIsolation, authorize(COMPANY_MAIL_ROLES), emailController.removeCompanyEmailConfig);
+router.post("/company-config/test", authMiddleware, tenantIsolation, authorize(COMPANY_MAIL_ROLES), emailController.testCompanyEmailConfig);
+
 // ─── Email sending ────────────────────────────────────────────────────────────
 
 router.get(
