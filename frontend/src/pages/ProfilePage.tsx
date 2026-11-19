@@ -14,6 +14,8 @@ import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { setCredentials, selectCurrentUser, selectAccessToken } from "../store/slices/authSlice";
 import { useNotify } from "../hooks/useNotify";
+import { useAvatarSrc } from "../hooks/useAvatarSrc";
+import { useUploadAvatarMutation } from "../store/api/avatarApi";
 import { describeApiError } from "../store/api/baseApi";
 import { Badge, Button, ErrorState, PageHeader, Skeleton } from "../components/ui";
 
@@ -47,8 +49,34 @@ export default function ProfilePage() {
   const currentUser = useAppSelector(selectCurrentUser);
   const accessToken = useAppSelector(selectAccessToken);
   const notify = useNotify();
+  const [uploadAvatar, { isLoading: uploadingAvatar }] = useUploadAvatarMutation();
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data: profile, isLoading, isError, error, refetch, isFetching } = useGetProfileQuery();
+  // Uploaded photos are only served through the authenticated API.
+  const avatarSrc = useAvatarSrc("me", profile?.avatar_url);
+
+  const handleAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      notify.error("Please choose a JPEG, PNG or WebP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      notify.error("Image is too large. The limit is 5 MB.");
+      return;
+    }
+    const form = new FormData();
+    form.append("avatar", file);
+    try {
+      await uploadAvatar(form).unwrap();
+      notify.success("Profile photo updated.");
+    } catch (err) {
+      notify.error(describeApiError(err, "Could not upload the photo. Please try again."));
+    }
+  };
   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
 
   const [form, setForm] = React.useState({
@@ -129,14 +157,33 @@ export default function ProfilePage() {
               {/* Avatar + identity card */}
               <div className="zh-card p-5 sm:p-6">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+                  <div className="flex shrink-0 flex-col items-center gap-2">
                   <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-line">
-                    {profile.avatar_url ? (
-                      <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
                     ) : (
                       <div className="flex h-full w-full items-center justify-center bg-navy-600">
                         <span className="text-3xl font-semibold text-white">{avatarLetter}</span>
                       </div>
                     )}
+                  </div>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    aria-label="Choose a profile photo"
+                    onChange={handleAvatarFile}
+                  />
+                  <Button
+                    variant="link"
+                    size="sm"
+                    loading={uploadingAvatar}
+                    loadingText="Uploading…"
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    {profile.avatar_url ? "Change photo" : "Add photo"}
+                  </Button>
                   </div>
                   <div className="min-w-0">
                     <h2 className="truncate text-xl font-semibold text-ink">{profile.full_name || "—"}</h2>

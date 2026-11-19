@@ -6,7 +6,6 @@ import path from "path";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import pool from "./db";
-import { authMiddleware } from "./middleware/auth";
 import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
 import demoRequestRoutes from "./modules/demo-requests/demo-requests.routes";
@@ -134,8 +133,16 @@ app.use("/v1/screening", screeningLimiter);
 app.use(express.json());
 app.use(morgan("dev"));
 
-// Serve uploaded files only to authenticated users
-app.use("/uploads", authMiddleware as express.RequestHandler, express.static(uploadsPath));
+// Uploaded files are NOT served statically. The old route here only checked that
+// the caller was signed in, so any user of any company could download another
+// company's resumes or vendor documents by file name. Each file type now has its
+// own tenant-checked endpoint:
+//   resumes          GET /v1/candidates/:id/resume
+//   vendor documents GET /v1/vendors/:vendorId/documents/:docId/file
+//   avatars          GET /v1/profile/avatar/:userId
+app.use("/uploads", (_req: express.Request, res: express.Response) => {
+  res.status(404).json({ message: "Files are only available through the app." });
+});
 
 // Test DB Connection
 pool.connect((err, client, release) => {

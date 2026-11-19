@@ -974,7 +974,8 @@ export const getResume = async (req: AuthRequest, res: Response) => {
       const relativePart = resumeUrl.replace(/^\/uploads\//, "");
       const filePath = path.resolve(uploadRoot, relativePart);
 
-      if (!filePath.startsWith(uploadRoot)) {
+      // Require a path separator so a sibling folder like "uploads-old" can't match.
+      if (filePath !== uploadRoot && !filePath.startsWith(uploadRoot + path.sep)) {
         return res.status(400).json({ message: "Invalid file path" });
       }
 
