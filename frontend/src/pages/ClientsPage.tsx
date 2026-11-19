@@ -10,12 +10,20 @@ import {
   Users,
   Trash2,
   Eye,
-  Loader2,
-  AlertTriangle,
 } from "lucide-react";
-import Header from "../components/layout/Header";
 import ClientInfoModal from "../components/clients/ClientInfoModal";
 import ClientDetailModal from "../components/clients/ClientDetailModal";
+import {
+  Badge,
+  Button,
+  CardGridSkeleton,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  StatCard,
+  useConfirm,
+} from "../components/ui";
+import { useNotify } from "../hooks/useNotify";
 import { useGetClientsQuery, useDeleteClientMutation } from "../store/api/jobApi";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { selectCurrentUser } from "../store/slices/authSlice";
@@ -42,9 +50,11 @@ const TIER_OPTIONS = [
 export default function ClientsPage() {
   const user = useAppSelector(selectCurrentUser);
   const canManage = user?.role === "super_admin" || user?.role === "accounts_manager";
+  const notify = useNotify();
+  const confirm = useConfirm();
 
-  const { data: clients = [], isLoading, isError, refetch } = useGetClientsQuery();
-  const [deleteClient, { isLoading: isDeleting }] = useDeleteClientMutation();
+  const { data: clients = [], isLoading, isError, error, isFetching, refetch } = useGetClientsQuery();
+  const [deleteClient] = useDeleteClientMutation();
 
   const [search, setSearch] = useState("");
   const [industryFilter, setIndustryFilter] = useState("All Industries");
@@ -52,13 +62,7 @@ export default function ClientsPage() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [detailClient, setDetailClient] = useState<any | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
-
-  const showToast = (msg: string, type: "success" | "error" = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = clients.filter((c: any) => {
     const q = search.toLowerCase();
@@ -80,176 +84,169 @@ export default function ClientsPage() {
     industries: new Set(clients.map((c: any) => c.industry).filter(Boolean)).size,
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (client: { id: string }) => {
+    const ok = await confirm({
+      title: "Delete client?",
+      message: "This will permanently remove the client and all related records. This action cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(client.id);
     try {
-      await deleteClient(id).unwrap();
-      setConfirmDeleteId(null);
-      showToast("Client deleted successfully");
+      await deleteClient(client.id).unwrap();
+      notify.success("Client deleted successfully");
     } catch {
-      showToast("Failed to delete client", "error");
+      notify.error("Failed to delete client");
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  const tierBadge = (tier?: string) => {
-    if (tier === "priority") {
-      return (
-        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full font-bold">
-          <Star size={9} strokeWidth={2.5} />
-          Priority
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-500 border border-gray-200 rounded-full font-bold">
-        Standard
-      </span>
+  const tierBadge = (tier?: string) =>
+    tier === "priority" ? (
+      <Badge tone="brand" icon={<Star size={10} aria-hidden="true" />}>
+        Priority
+      </Badge>
+    ) : (
+      <Badge>Standard</Badge>
     );
-  };
 
   return (
-    <div className="min-h-screen bg-surface">
-      <Header title="Clients" />
+    <>
+      <PageHeader
+        title="Clients"
+        subtitle="Companies you hire for, with contacts and engagement details"
+        actions={
+          canManage && (
+            <Button icon={<Plus size={16} />} onClick={() => setShowAddModal(true)}>
+              Add client
+            </Button>
+          )
+        }
+      />
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Total Clients", value: stats.total, icon: Building, color: "text-blue-600 bg-blue-50" },
-            { label: "Active", value: stats.active, icon: Users, color: "text-emerald-600 bg-emerald-50" },
-            { label: "Priority", value: stats.priority, icon: Star, color: "text-amber-600 bg-amber-50" },
-            { label: "Industries", value: stats.industries, icon: Globe, color: "text-purple-600 bg-purple-50" },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div key={label} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-                <Icon size={18} strokeWidth={2.5} />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-ink">{value}</p>
-                <p className="text-xs text-gray-400 font-semibold">{label}</p>
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <StatCard label="Total clients" value={stats.total} icon={<Building size={18} />} loading={isLoading} />
+          <StatCard label="Active" value={stats.active} icon={<Users size={18} />} tone="success" loading={isLoading} />
+          <StatCard label="Priority" value={stats.priority} icon={<Star size={18} />} tone="brand" loading={isLoading} />
+          <StatCard label="Industries" value={stats.industries} icon={<Globe size={18} />} tone="neutral" loading={isLoading} />
         </div>
 
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full sm:w-auto">
-            <div className="relative flex-1 max-w-sm">
-              <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search clients..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              />
-            </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative w-full sm:max-w-sm sm:flex-1">
+            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Search clients"
+              placeholder="Search clients..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="zh-input pl-9"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:flex">
             <select
+              aria-label="Filter by industry"
               value={industryFilter}
               onChange={(e) => setIndustryFilter(e.target.value)}
-              className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="zh-input sm:w-auto"
             >
               {INDUSTRY_OPTIONS.map((o) => (
                 <option key={o} value={o}>{o}</option>
               ))}
             </select>
             <select
+              aria-label="Filter by tier"
               value={tierFilter}
               onChange={(e) => setTierFilter(e.target.value)}
-              className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="zh-input sm:w-auto"
             >
               {TIER_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
-          {canManage && (
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all shadow-sm flex-shrink-0"
-            >
-              <Plus size={16} />
-              Add Client
-            </button>
-          )}
         </div>
 
         {/* Content */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={32} className="animate-spin text-gray-300" />
-          </div>
+          <CardGridSkeleton count={6} />
         ) : isError ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-gray-400">
-            <AlertTriangle size={32} />
-            <p className="text-sm font-medium">Failed to load clients</p>
-            <button
-              onClick={() => refetch()}
-              className="text-xs text-blue-600 hover:underline font-semibold"
-            >
-              Try again
-            </button>
+          <div className="zh-card">
+            <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-gray-400">
-            <Building size={40} strokeWidth={1.5} />
-            <p className="text-sm font-medium">
-              {clients.length === 0 ? "No clients yet" : "No clients match your search"}
-            </p>
-            {canManage && clients.length === 0 && (
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="text-xs text-blue-600 hover:underline font-semibold"
-              >
-                Add your first client
-              </button>
-            )}
+          <div className="zh-card">
+            <EmptyState
+              icon={<Building size={22} aria-hidden="true" />}
+              title={clients.length === 0 ? "No clients yet" : "No clients match your search"}
+              description={
+                clients.length === 0
+                  ? "Add a client to start attaching jobs and contacts to it."
+                  : "Try a different search term or clear the filters."
+              }
+              action={
+                canManage && clients.length === 0 ? (
+                  <Button icon={<Plus size={16} />} onClick={() => setShowAddModal(true)}>
+                    Add your first client
+                  </Button>
+                ) : undefined
+              }
+            />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((client: any) => {
               const name = client.name || client.client_name || "—";
               const initial = name.charAt(0).toUpperCase();
+              const active = client.is_active !== false;
               return (
                 <div
                   key={client.id}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden"
+                  className="zh-card flex flex-col overflow-hidden transition hover:border-line-strong hover:shadow-md"
                 >
                   {/* Card Header */}
-                  <div className="p-5 border-b border-gray-50 flex items-start gap-4">
-                    <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
+                  <div className="flex items-start gap-3 border-b border-line p-4 sm:p-5">
+                    <div
+                      aria-hidden="true"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-navy-600 text-lg font-semibold text-white"
+                    >
                       {initial}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-ink leading-tight truncate">{name}</h3>
+                        <h3 className="truncate text-sm font-semibold leading-tight text-ink">{name}</h3>
                         {tierBadge(client.tier)}
                       </div>
                       {client.industry && (
-                        <p className="text-xs text-gray-400 mt-0.5 font-medium truncate">{client.industry}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted">{client.industry}</p>
                       )}
                       {client.client_type && (
-                        <span className="inline-block mt-1.5 text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-bold border border-blue-100">
+                        <Badge tone="navy" className="mt-1.5">
                           {client.client_type}
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   </div>
 
                   {/* Contact Info */}
-                  <div className="px-5 py-4 space-y-2">
+                  <div className="flex-1 space-y-2 px-4 py-4 sm:px-5">
                     {(client.primary_contact_name || client.contact_name) && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Users size={12} className="text-gray-400 flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-sm text-ink-soft">
+                        <Users size={13} className="shrink-0 text-muted" aria-hidden="true" />
                         <span className="truncate">{client.primary_contact_name || client.contact_name}</span>
                       </div>
                     )}
                     {client.primary_contact_email && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Mail size={12} className="text-gray-400 flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail size={13} className="shrink-0 text-muted" aria-hidden="true" />
                         <a
                           href={`mailto:${client.primary_contact_email}`}
-                          className="text-blue-600 hover:underline truncate"
+                          className="truncate text-navy-600 hover:underline"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {client.primary_contact_email}
@@ -257,19 +254,19 @@ export default function ClientsPage() {
                       </div>
                     )}
                     {client.primary_contact_phone && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Phone size={12} className="text-gray-400 flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-sm text-ink-soft">
+                        <Phone size={13} className="shrink-0 text-muted" aria-hidden="true" />
                         <span>{client.primary_contact_phone}</span>
                       </div>
                     )}
                     {client.website && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Globe size={12} className="text-gray-400 flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-sm">
+                        <Globe size={13} className="shrink-0 text-muted" aria-hidden="true" />
                         <a
                           href={client.website}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:underline truncate"
+                          className="truncate text-navy-600 hover:underline"
                           onClick={(e) => e.stopPropagation()}
                         >
                           {client.website.replace(/^https?:\/\//, "")}
@@ -277,33 +274,34 @@ export default function ClientsPage() {
                       </div>
                     )}
                     {!client.primary_contact_name && !client.contact_name && !client.primary_contact_email && !client.website && (
-                      <p className="text-xs text-gray-300 italic">No contact details added</p>
+                      <p className="text-sm italic text-muted">No contact details added</p>
                     )}
                   </div>
 
                   {/* Footer */}
-                  <div className="px-5 pb-4 flex items-center justify-between">
+                  <div className="flex items-center justify-between border-t border-line px-4 py-3 sm:px-5">
                     <div className="flex items-center gap-1.5">
-                      <span className={`w-2 h-2 rounded-full ${client.is_active !== false ? "bg-emerald-500" : "bg-gray-300"}`} />
-                      <span className="text-xs text-gray-400 font-semibold">
-                        {client.is_active !== false ? "Active" : "Inactive"}
-                      </span>
+                      <span
+                        aria-hidden="true"
+                        className={`h-2 w-2 rounded-full ${active ? "bg-success-600" : "bg-line-strong"}`}
+                      />
+                      <span className="text-xs font-medium text-muted">{active ? "Active" : "Inactive"}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setDetailClient(client)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                      >
-                        <Eye size={13} />
+                      <Button variant="ghost" size="sm" icon={<Eye size={14} />} onClick={() => setDetailClient(client)}>
                         View
-                      </button>
+                      </Button>
                       {canManage && (
-                        <button
-                          onClick={() => setConfirmDeleteId(client.id)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Delete ${name}`}
+                          className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
+                          loading={deletingId === client.id}
+                          onClick={() => handleDelete(client)}
                         >
-                          <Trash2 size={13} />
-                        </button>
+                          {deletingId === client.id ? null : <Trash2 size={14} aria-hidden="true" />}
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -320,7 +318,7 @@ export default function ClientsPage() {
           onClose={() => setShowAddModal(false)}
           onSuccess={() => {
             refetch();
-            showToast("Client added successfully");
+            notify.success("Client added successfully");
           }}
         />
       )}
@@ -332,49 +330,6 @@ export default function ClientsPage() {
           onClose={() => setDetailClient(null)}
         />
       )}
-
-      {/* Delete Confirmation */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm animate-in fade-in zoom-in duration-150">
-            <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-5">
-              <Trash2 size={20} className="text-red-500" />
-            </div>
-            <h3 className="text-base font-semibold text-ink mb-2">Delete Client?</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              This will permanently remove the client and all related records. This action cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="flex-1 py-3 bg-gray-50 text-ink font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDeleteId)}
-                disabled={isDeleting}
-                className="flex-1 py-3 bg-red-500 text-white font-bold text-sm rounded-xl hover:bg-red-600 transition-all disabled:opacity-60"
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-[100] px-5 py-3.5 rounded-2xl text-sm font-bold shadow-xl transition-all animate-in slide-in-from-bottom-4 ${
-            toast.type === "error"
-              ? "bg-red-500 text-white"
-              : "bg-navy-600 text-white"
-          }`}
-        >
-          {toast.msg}
-        </div>
-      )}
-    </div>
+    </>
   );
 }

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Globe, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Globe, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useListBoardsQuery, usePublishJobMutation } from '../../store/api/jobBoardsApi';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { Button, EmptyState, Modal, Skeleton, buttonClasses } from '../ui';
 
 interface Props {
   jobId: string;
@@ -12,8 +13,6 @@ interface Props {
 export default function JobBoardPublishModal({ jobId, onClose, onSuccess }: Props) {
   const { data, isLoading: loadingBoards } = useListBoardsQuery();
   const [publishJob, { isLoading: publishing }] = usePublishJobMutation();
-  // Esc closes (not mid-publish). No backdrop-close, consistent with other selection/form modals.
-  useEscapeKey(onClose, !publishing);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Array<{ board_key: string; board_name: string; success: boolean; error?: string }> | null>(null);
@@ -21,7 +20,8 @@ export default function JobBoardPublishModal({ jobId, onClose, onSuccess }: Prop
   const toggle = (key: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -47,135 +47,128 @@ export default function JobBoardPublishModal({ jobId, onClose, onSuccess }: Prop
   const unconnectedBoards = data?.boards.filter((b) => !b.connected) ?? [];
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <Globe size={18} className="text-blue-600" />
-            <h2 className="text-base font-semibold text-gray-900">Publish to Job Boards</h2>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
-          {loadingBoards ? (
-            <div className="flex justify-center py-6">
-              <Loader2 size={22} className="animate-spin text-blue-500" />
-            </div>
-          ) : results ? (
-            // Show results after publishing
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700 mb-3">Publishing results:</p>
-              {results.map((r) => (
-                <div
-                  key={r.board_key}
-                  className={`flex items-start gap-3 p-3 rounded-lg border ${
-                    r.success ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'
-                  }`}
-                >
-                  {r.success ? (
-                    <CheckCircle2 size={16} className="text-emerald-600 mt-0.5 flex-shrink-0" />
-                  ) : (
-                    <AlertCircle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
-                  )}
-                  <div>
-                    <p className={`text-sm font-medium ${r.success ? 'text-emerald-800' : 'text-red-700'}`}>
-                      {r.board_name}
-                    </p>
-                    {r.error && <p className="text-xs text-red-600 mt-0.5">{r.error}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              {connectedBoards.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Connected boards</p>
-                  <div className="space-y-2">
-                    {connectedBoards.map((board) => (
-                      <label
-                        key={board.key}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          selected.has(board.key)
-                            ? 'border-blue-300 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selected.has(board.key)}
-                          onChange={() => toggle(board.key)}
-                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        />
-                        <span className={`w-2 h-2 rounded-full ${board.color}`} />
-                        <span className="text-sm font-medium text-gray-800">{board.name}</span>
-                        {board.connected_at && (
-                          <span className="ml-auto text-xs text-gray-400">Connected</span>
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {unconnectedBoards.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Not connected</p>
-                  <div className="space-y-1.5">
-                    {unconnectedBoards.map((board) => (
-                      <div
-                        key={board.key}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-gray-200 opacity-50"
-                      >
-                        <span className={`w-2 h-2 rounded-full ${board.color}`} />
-                        <span className="text-sm text-gray-500">{board.name}</span>
-                        <a
-                          href="/settings/job-boards"
-                          className="ml-auto text-xs text-blue-600 hover:underline"
-                        >
-                          Connect
-                        </a>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {connectedBoards.length === 0 && !loadingBoards && (
-                <div className="text-center py-6">
-                  <Globe size={32} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-sm text-gray-500">No job boards connected yet.</p>
-                  <a href="/settings/job-boards" className="text-sm text-blue-600 hover:underline mt-1 block">
-                    Connect boards in Settings
-                  </a>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-100">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium transition-colors"
-          >
+    <Modal
+      open
+      onClose={onClose}
+      preventClose={publishing}
+      size="md"
+      title={
+        <span className="flex items-center gap-2">
+          <Globe size={18} className="text-navy-600" />
+          Publish to job boards
+        </span>
+      }
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={publishing}>
             {results ? 'Close' : 'Cancel'}
-          </button>
+          </Button>
           {!results && (
-            <button
-              onClick={handlePublish}
-              disabled={selected.size === 0 || publishing}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {publishing && <Loader2 size={14} className="animate-spin" />}
+            <Button onClick={handlePublish} disabled={selected.size === 0} loading={publishing}>
               Publish to {selected.size > 0 ? `${selected.size} board${selected.size > 1 ? 's' : ''}` : 'selected boards'}
-            </button>
+            </Button>
           )}
-        </div>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        {loadingBoards ? (
+          <div className="space-y-2" role="status" aria-label="Loading job boards">
+            <Skeleton className="h-11 w-full" />
+            <Skeleton className="h-11 w-full" />
+            <Skeleton className="h-11 w-full" />
+          </div>
+        ) : results ? (
+          // Show results after publishing
+          <div className="space-y-2">
+            <p className="mb-3 text-sm font-medium text-ink">Publishing results</p>
+            {results.map((r) => (
+              <div
+                key={r.board_key}
+                className={`flex items-start gap-3 rounded-lg border p-3 ${
+                  r.success ? 'border-emerald-100 bg-success-50' : 'border-red-100 bg-danger-50'
+                }`}
+              >
+                {r.success ? (
+                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-success-600" />
+                ) : (
+                  <AlertCircle size={16} className="mt-0.5 shrink-0 text-danger-600" />
+                )}
+                <div>
+                  <p className={`text-sm font-medium ${r.success ? 'text-success-700' : 'text-danger-700'}`}>
+                    {r.board_name}
+                  </p>
+                  {r.error && <p className="mt-0.5 text-xs text-danger-600">{r.error}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <>
+            {connectedBoards.length > 0 && (
+              <fieldset>
+                <legend className="mb-2 text-xs font-medium text-muted">Connected boards</legend>
+                <div className="space-y-2">
+                  {connectedBoards.map((board) => (
+                    <label
+                      key={board.key}
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
+                        selected.has(board.key)
+                          ? 'border-navy-300 bg-navy-50'
+                          : 'border-line hover:border-line-strong hover:bg-surface'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected.has(board.key)}
+                        onChange={() => toggle(board.key)}
+                        className="h-4 w-4 rounded border-line-strong text-navy-600 focus:ring-navy-500"
+                      />
+                      <span className={`h-2 w-2 rounded-full ${board.color}`} aria-hidden="true" />
+                      <span className="text-sm font-medium text-ink">{board.name}</span>
+                      {board.connected_at && <span className="ml-auto text-xs text-muted">Connected</span>}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+
+            {unconnectedBoards.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted">Not connected</p>
+                <div className="space-y-1.5">
+                  {unconnectedBoards.map((board) => (
+                    <div
+                      key={board.key}
+                      className="flex items-center gap-3 rounded-lg border border-dashed border-line p-3"
+                    >
+                      <span className={`h-2 w-2 rounded-full opacity-50 ${board.color}`} aria-hidden="true" />
+                      <span className="text-sm text-muted">{board.name}</span>
+                      <Link to="/settings/job-boards" className="ml-auto text-xs font-medium text-navy-600 hover:underline">
+                        Connect
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {connectedBoards.length === 0 && (
+              <EmptyState
+                compact
+                icon={<Globe size={22} />}
+                title="No job boards connected yet"
+                description="Connect a job board in Settings to publish this job."
+                action={
+                  <Link to="/settings/job-boards" className={buttonClasses('secondary', 'sm')}>
+                    Connect boards in Settings
+                  </Link>
+                }
+              />
+            )}
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

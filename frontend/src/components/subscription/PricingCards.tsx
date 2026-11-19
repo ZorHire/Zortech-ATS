@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, X, Zap, Loader2 } from "lucide-react";
+import { Check, X, Zap } from "lucide-react";
+import { Button } from "../ui";
 import { useNotify } from "../../hooks/useNotify";
 import {
   PLANS,
@@ -35,7 +36,6 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
   const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
   const [loadingSub, setLoadingSub] = useState(!publicMode);
   const [subscribing, setSubscribing] = useState<PlanType | null>(null);
-  const [hoveredPlan, setHoveredPlan] = useState<PlanType | null>(null);
 
   useEffect(() => {
     if (publicMode) return;
@@ -73,7 +73,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
         order_id: order.order_id,
         name: "ZorHire",
         description: `${plan.name} – ${billing} billing`,
-        theme: { color: "#b47b3b" },
+        theme: { color: "#1A4277" }, // ZorTech navy (Razorpay needs a hex value)
         handler: async (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
@@ -129,222 +129,167 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
     return "Get Started";
   };
 
+  // Yearly savings come from the plan data, so the badge never over-promises.
+  const yearlySavings = PLANS.map((p) =>
+    p.price_monthly > 0 ? Math.round(((p.price_monthly - p.price_yearly) / p.price_monthly) * 100) : 0,
+  ).filter((s) => s > 0);
+  const maxSaving = yearlySavings.length ? Math.max(...yearlySavings) : 0;
+  const minSaving = yearlySavings.length ? Math.min(...yearlySavings) : 0;
+  const savingsLabel =
+    maxSaving === 0
+      ? null
+      : minSaving === maxSaving
+        ? `Save ${maxSaving}%`
+        : `Save up to ${maxSaving}%`;
+
   return (
-    <div className="w-full space-y-8">
+    <div className="mx-auto w-full max-w-6xl space-y-8">
       {/* Header */}
-      <div className="text-center space-y-3">
-        <p className="text-xs font-semibold text-amber-600 uppercase tracking-[0.3em]">
-          Pricing
-        </p>
-        <h2 className="text-3xl sm:text-4xl font-semibold text-ink tracking-tight leading-tight">
+      <div className="space-y-3 text-center">
+        <p className="text-sm font-semibold text-brand-700">Pricing</p>
+        <h2 className="text-3xl font-semibold leading-tight tracking-tight text-navy-800 sm:text-4xl">
           Choose Your Plan
         </h2>
-        <p className="text-sm text-gray-500 max-w-sm mx-auto">
+        <p className="mx-auto max-w-sm text-sm text-muted">
           Scale your recruitment operations with transparent, per-user pricing.
         </p>
       </div>
 
       {/* Billing toggle */}
-      <div className="flex items-center justify-center gap-3">
-        <span
-          className={`text-sm font-bold transition-colors ${billing === "monthly" ? "text-ink" : "text-gray-400"}`}
-        >
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <span className={`text-sm font-semibold transition-colors ${billing === "monthly" ? "text-ink" : "text-muted"}`}>
           Monthly
         </span>
         <button
+          type="button"
+          role="switch"
+          aria-checked={billing === "yearly"}
           onClick={() => setBilling(billing === "monthly" ? "yearly" : "monthly")}
-          className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
-            billing === "yearly" ? "bg-navy-600" : "bg-gray-200"
+          className={`relative h-6 w-12 rounded-full transition-colors duration-200 ${
+            billing === "yearly" ? "bg-navy-600" : "bg-line-strong"
           }`}
-          aria-label="Toggle billing cycle"
+          aria-label="Bill yearly"
         >
           <span
-            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
               billing === "yearly" ? "translate-x-6" : "translate-x-0"
             }`}
           />
         </button>
         <div className="flex items-center gap-2">
-          <span
-            className={`text-sm font-bold transition-colors ${billing === "yearly" ? "text-ink" : "text-gray-400"}`}
-          >
+          <span className={`text-sm font-semibold transition-colors ${billing === "yearly" ? "text-ink" : "text-muted"}`}>
             Yearly
           </span>
-          <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full uppercase tracking-wider">
-            Save ~15%
+          <span className="rounded-full border border-success-600/20 bg-success-50 px-2 py-0.5 text-xs font-semibold text-success-700">
+            {savingsLabel ?? "Save with yearly billing"}
           </span>
         </div>
       </div>
 
       {/* Plan cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+      <div className="grid grid-cols-1 items-stretch gap-5 md:grid-cols-3">
         {PLANS.map((plan) => {
           const price =
             billing === "monthly" ? plan.price_monthly : plan.price_yearly;
           const isCurrent = isCurrentPlan(plan.id);
           const isDowngrading = isDowngrade(plan.id);
           const isRecommended = plan.recommended;
-          const isDark = hoveredPlan === plan.id;
+          const saving =
+            plan.price_monthly > 0
+              ? Math.round(((plan.price_monthly - plan.price_yearly) / plan.price_monthly) * 100)
+              : 0;
+
+          const variant = isCurrent || isDowngrading || plan.id === "enterprise" ? "secondary" : isRecommended ? "primary" : "secondary";
 
           return (
             <div
               key={plan.id}
-              onMouseEnter={() => setHoveredPlan(plan.id)}
-              onMouseLeave={() => setHoveredPlan(null)}
-              className={`relative flex flex-col rounded-2xl overflow-hidden transition-all duration-200 cursor-default ${
-                isDark
-                  ? "bg-navy-600 shadow-2xl shadow-black/20 scale-[1.02] border border-[#333]"
-                  : "bg-white border border-gray-100 shadow-lg shadow-gray-100/60"
+              className={`relative flex flex-col overflow-hidden rounded-xl bg-white transition-shadow hover:shadow-pop ${
+                isRecommended ? "border-2 border-navy-600 shadow-pop" : "border border-line shadow-card"
               }`}
             >
-              {/* Recommended badge */}
               {isRecommended && (
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 z-10">
-                  <div className="flex items-center gap-1.5 bg-amber-200 text-ink text-xs font-semibold uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
-                    <Zap size={10} className="fill-ink" />
-                    Most Recommended
-                  </div>
+                <div className="flex items-center justify-center gap-1.5 bg-navy-600 px-4 py-1.5 text-xs font-semibold text-white">
+                  <Zap size={12} aria-hidden="true" className="fill-brand-400 text-brand-400" />
+                  Most Recommended
                 </div>
               )}
 
-              <div className={`p-7 ${isRecommended ? "pt-10" : ""}`}>
+              <div className="p-6 sm:p-7">
                 {/* Plan name & description */}
-                <div className="space-y-1 mb-6">
-                  <p
-                    className={`text-xs font-semibold uppercase tracking-[0.25em] ${
-                      isDark ? "text-amber-300" : "text-gray-400"
-                    }`}
-                  >
-                    {plan.name}
-                  </p>
-                  <p
-                    className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}
-                  >
-                    {plan.description}
-                  </p>
+                <div className="mb-6 space-y-1">
+                  <h3 className="text-lg font-semibold text-navy-800">{plan.name}</h3>
+                  <p className="text-sm text-muted">{plan.description}</p>
                 </div>
 
                 {/* Price */}
                 <div className="mb-1">
-                  <div className="flex items-end gap-1">
-                    <span
-                      className={`text-4xl font-semibold tracking-tight ${
-                        isDark ? "text-white" : "text-ink"
-                      }`}
-                    >
+                  <div className="flex flex-wrap items-end gap-1">
+                    <span className="text-4xl font-semibold tracking-tight text-ink">
                       ₹{price.toLocaleString("en-IN")}
                     </span>
-                    <span className="text-sm font-bold mb-1.5 text-gray-400">
-                      /user/mo
-                    </span>
+                    <span className="mb-1.5 text-sm font-medium text-muted">/user/mo</span>
                   </div>
                   {billing === "yearly" && (
-                    <p
-                      className={`text-[11px] font-bold ${
-                        isDark ? "text-amber-300" : "text-emerald-600"
-                      }`}
-                    >
-                      billed yearly · saves{" "}
-                      {Math.round(
-                        ((plan.price_monthly - plan.price_yearly) /
-                          plan.price_monthly) *
-                          100,
-                      )}
-                      %
+                    <p className="text-xs font-semibold text-success-700">
+                      billed yearly{saving > 0 ? ` · saves ${saving}%` : ""}
                     </p>
                   )}
                 </div>
 
                 {/* User range */}
-                <p
-                  className={`text-[11px] font-bold mt-1 mb-6 ${
-                    isDark ? "text-gray-500" : "text-gray-400"
-                  }`}
-                >
+                <p className="mb-6 mt-1 text-xs font-medium text-muted">
                   {plan.user_max
                     ? `${plan.user_min}–${plan.user_max} users`
                     : `${plan.user_min}+ users`}
                 </p>
 
                 {/* CTA button */}
-                <button
+                <Button
+                  variant={variant}
+                  size="lg"
+                  fullWidth
                   onClick={() => handleSubscribe(plan)}
                   disabled={isCurrent || isDowngrading || subscribing !== null}
-                  className={`w-full py-3.5 rounded-[18px] text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-                    isDark
-                      ? isCurrent
-                        ? "bg-white/10 text-white/50 cursor-default"
-                        : isDowngrading
-                          ? "bg-white/5 text-white/30 cursor-not-allowed"
-                          : "bg-[#E3F2FF] text-ink hover:scale-[1.02] shadow-xl shadow-blue-500/10"
-                      : isCurrent
-                        ? "bg-gray-50 text-gray-400 border border-gray-100 cursor-default"
-                        : isDowngrading
-                          ? "bg-gray-50 text-gray-300 border border-gray-100 cursor-not-allowed"
-                          : plan.id === "enterprise"
-                            ? "bg-gray-50 text-ink border border-gray-200 hover:bg-gray-100"
-                            : "bg-navy-600 text-white hover:scale-[1.02] shadow-xl shadow-gray-200"
-                  }`}
+                  loading={subscribing === plan.id}
+                  loadingText="Processing…"
                 >
-                  {subscribing === plan.id ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : null}
                   {getButtonLabel(plan)}
-                </button>
+                </Button>
               </div>
 
-              {/* Divider */}
-              <div
-                className={`mx-7 h-px ${isDark ? "bg-white/10" : "bg-gray-100"}`}
-              />
+              <div className="mx-6 h-px bg-line sm:mx-7" />
 
               {/* Features list */}
-              <div className="p-7 pt-5 space-y-3 flex-1">
+              <ul className="flex-1 space-y-3 p-6 pt-5 sm:p-7 sm:pt-5">
                 {plan.features.map((feature) => (
-                  <div key={feature.label} className="flex items-start gap-3">
-                    <div
-                      className={`mt-0.5 flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center ${
-                        feature.included
-                          ? isDark
-                            ? "bg-amber-300/20 text-amber-300"
-                            : "bg-emerald-50 text-emerald-600"
-                          : isDark
-                            ? "bg-white/5 text-white/20"
-                            : "bg-gray-50 text-gray-300"
+                  <li key={feature.label} className="flex items-start gap-3">
+                    <span
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
+                        feature.included ? "bg-success-50 text-success-600" : "bg-surface-sunken text-muted"
                       }`}
                     >
                       {feature.included ? (
-                        <Check size={9} strokeWidth={3} />
+                        <Check size={10} strokeWidth={3} aria-hidden="true" />
                       ) : (
-                        <X size={9} strokeWidth={3} />
+                        <X size={10} strokeWidth={3} aria-hidden="true" />
                       )}
-                    </div>
+                    </span>
                     <span
-                      className={`text-xs font-medium leading-relaxed ${
-                        feature.included
-                          ? isDark
-                            ? "text-gray-300"
-                            : "text-gray-700"
-                          : isDark
-                            ? "text-white/25 line-through"
-                            : "text-gray-300 line-through"
+                      className={`text-sm leading-relaxed ${
+                        feature.included ? "text-ink-soft" : "text-muted line-through"
                       }`}
                     >
+                      <span className="sr-only">{feature.included ? "Included: " : "Not included: "}</span>
                       {feature.label}
                     </span>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
 
               {/* Current plan indicator */}
               {!loadingSub && isCurrent && (
-                <div
-                  className={`mx-7 mb-5 px-4 py-2.5 rounded-2xl text-center text-[11px] font-semibold uppercase tracking-wider ${
-                    isDark
-                      ? "bg-amber-300/10 text-amber-300"
-                      : "bg-emerald-50 text-emerald-700"
-                  }`}
-                >
+                <div className="mx-6 mb-5 rounded-lg bg-success-50 px-4 py-2.5 text-center text-sm font-semibold text-success-700 sm:mx-7">
                   Your current plan
                 </div>
               )}
@@ -354,9 +299,9 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
       </div>
 
       {/* Footer note */}
-      <p className="text-center text-xs text-gray-400 font-medium">
+      <p className="text-center text-sm text-muted">
         All prices in INR · Billed per user per month · Minimum{" "}
-        <span className="font-bold text-gray-500">5 users</span> for Starter ·
+        <span className="font-semibold text-ink-soft">5 users</span> for Starter ·
         Annual billing discounts applied upfront
       </p>
     </div>

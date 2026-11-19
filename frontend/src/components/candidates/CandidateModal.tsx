@@ -8,7 +8,10 @@ import { Candidate } from '../../types';
 import api, { ApiError } from '../../lib/api';
 import ComposeEmailModal from './ComposeEmailModal';
 import { useNotify } from '../../hooks/useNotify';
-import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { Badge, Button, EmptyState, ErrorState, Modal, Skeleton, StageBadge, buttonClasses } from '../ui';
+import type { BadgeTone } from '../ui';
+import { Avatar } from '../jobs/jobBadges';
+import { getStage } from '../../lib/stages';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { baseApi } from '../../store/api/baseApi';
 import { formatINR, getErrorMessage } from '../../lib/format';
@@ -28,41 +31,11 @@ const FORWARD_STAGES = [
   "offer_extended", "offer_accepted", "joined",
 ] as const;
 
-const STAGE_LABELS: Record<string, string> = {
-  new: "New",
-  sourced: "Sourced",
-  screened: "Screening",
-  shortlisted: "Shortlisted",
-  submitted_to_client: "Submitted to Client",
-  client_interview_scheduled: "Interview Scheduled",
-  interview_completed: "Interview Completed",
-  selected: "Selected",
-  offer_extended: "Offer Extended",
-  offer_accepted: "Offer Accepted",
-  joined: "Joined",
-  disqualified: "Disqualified",
-};
-
-const STAGE_COLORS: Record<string, string> = {
-  new: "bg-gray-100 text-gray-600",
-  sourced: "bg-blue-50 text-blue-700",
-  screened: "bg-amber-100 text-amber-700",
-  shortlisted: "bg-violet-100 text-violet-700",
-  submitted_to_client: "bg-indigo-100 text-indigo-700",
-  client_interview_scheduled: "bg-cyan-100 text-cyan-700",
-  interview_completed: "bg-teal-100 text-teal-700",
-  selected: "bg-emerald-100 text-emerald-700",
-  offer_extended: "bg-orange-100 text-orange-700",
-  offer_accepted: "bg-green-100 text-green-700",
-  joined: "bg-green-200 text-green-800",
-  disqualified: "bg-red-100 text-red-600",
-};
-
-const INTERVIEW_STATUS_COLORS: Record<string, string> = {
-  scheduled: "bg-blue-50 text-blue-700",
-  completed: "bg-emerald-50 text-emerald-700",
-  cancelled: "bg-gray-100 text-gray-500",
-  no_show: "bg-red-50 text-red-600",
+const INTERVIEW_STATUS_TONES: Record<string, BadgeTone> = {
+  scheduled: "navy",
+  completed: "success",
+  cancelled: "neutral",
+  no_show: "danger",
 };
 
 const INTERVIEW_STATUS_ICONS: Record<string, React.ReactNode> = {
@@ -120,9 +93,6 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   const [updatingInterview, setUpdatingInterview] = React.useState<string | null>(null);
   const [activityError, setActivityError] = React.useState<string | null>(null);
   const [appError, setAppError] = React.useState<string | null>(null);
-
-  // Esc closes the modal (unless the compose window on top handles it)
-  useEscapeKey(onClose, !showCompose);
 
   React.useEffect(() => {
     fetchApplications();
@@ -189,7 +159,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       setSelectedApp({ ...selectedApp, stage: updated.stage });
       setApplications(prev => prev.map(a => a.id === updated.id ? { ...a, stage: updated.stage } : a));
       invalidateCaches();
-      notify.success(`Moved to ${STAGE_LABELS[updated.stage] || updated.stage}`);
+      notify.success(`Moved to ${getStage(updated.stage).label}`);
     } catch (err) {
       notify.error(getErrorMessage(err, "Failed to move stage"));
     } finally {
@@ -337,53 +307,60 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     }
   };
 
+  const sectionTitle = "text-sm font-semibold text-ink";
+  const subtle = "text-xs font-medium text-muted";
+
   return (
     <>
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      hideHeader
+      closeOnBackdrop
+      // The compose window on top handles Esc while it is open.
+      preventClose={showCompose}
+      bodyClassName="!p-0 bg-surface"
     >
-      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 flex items-start justify-between bg-gradient-to-r from-white to-blue-50/30">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-blue-200">
-              {candidate.first_name.charAt(0)}{candidate.last_name.charAt(0)}
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-gray-900">{candidate.first_name} {candidate.last_name}</h2>
-                <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full border border-blue-100 uppercase tracking-wider">
-                  {candidate.source}
-                </span>
+        <div className="flex items-start justify-between gap-4 border-b border-line bg-white px-5 py-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-4">
+            <Avatar name={`${candidate.first_name} ${candidate.last_name}`} size="lg" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-lg font-semibold text-ink sm:text-xl">{candidate.first_name} {candidate.last_name}</h2>
+                {candidate.source && <Badge tone="navy" className="capitalize">{candidate.source}</Badge>}
               </div>
               {(candidate.current_title || candidate.current_company) && (
-                <p className="text-gray-500 font-medium mt-1">
+                <p className="mt-0.5 truncate text-sm text-muted">
                   {candidate.current_title}
                   {candidate.current_title && candidate.current_company && " at "}
-                  {candidate.current_company && <span className="text-gray-900">{candidate.current_company}</span>}
+                  {candidate.current_company && <span className="text-ink-soft">{candidate.current_company}</span>}
                 </p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onClose} aria-label="Close" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
-              <X size={24} />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="-mr-2 rounded-lg p-2 text-muted hover:bg-surface-sunken hover:text-ink"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         {/* Tabs */}
-        <div className="px-6 border-b border-gray-100 bg-white">
-          <div className="flex gap-8">
+        <div className="sticky top-0 z-10 border-b border-line bg-white px-5 sm:px-6">
+          <div role="tablist" className="flex gap-6 overflow-x-auto">
             {(['overview', 'resume', 'activity'] as const).map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`py-4 text-sm font-semibold border-b-2 transition-all capitalize ${
-                  activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              <button key={tab} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
+                className={`whitespace-nowrap border-b-2 py-3 text-sm font-medium capitalize transition-colors ${
+                  activeTab === tab ? 'border-navy-600 text-navy-700' : 'border-transparent text-muted hover:text-ink'
                 }`}>
                 {tab}
                 {tab === 'activity' && interviews.length > 0 && (
-                  <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                  <span className="ml-2 rounded-full bg-navy-50 px-1.5 py-0.5 text-xs font-medium text-navy-700">
                     {interviews.length}
                   </span>
                 )}
@@ -393,57 +370,46 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+        <div className="p-5 sm:p-6">
 
           {/* ── Overview Tab ── */}
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
               {/* Left Column */}
-              <div className="md:col-span-2 space-y-6">
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Contact Information</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <Mail size={18} className="text-blue-500" />
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-400 font-bold uppercase">Email</p>
-                        <p className="text-sm text-gray-700 font-medium truncate">{candidate.email}</p>
+              <div className="space-y-5 md:col-span-2">
+                <div className="zh-card space-y-4 p-5">
+                  <h3 className={sectionTitle}>Contact information</h3>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {[
+                      { icon: <Mail size={16} />, label: 'Email', value: candidate.email || 'Not provided', truncate: true },
+                      { icon: <Phone size={16} />, label: 'Phone', value: candidate.phone || 'Not provided' },
+                      { icon: <MapPin size={16} />, label: 'Location', value: candidate.current_location || 'Not provided' },
+                      {
+                        icon: <Clock size={16} />,
+                        label: 'Notice period',
+                        value: candidate.notice_period_days != null ? `${candidate.notice_period_days} days` : 'Not provided',
+                      },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center gap-3 rounded-lg bg-surface p-3">
+                        <span className="text-navy-600">{row.icon}</span>
+                        <div className="min-w-0">
+                          <p className={subtle}>{row.label}</p>
+                          <p className={`text-sm font-medium text-ink ${row.truncate ? 'truncate' : ''}`}>{row.value}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <Phone size={18} className="text-emerald-500" />
-                      <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase">Phone</p>
-                        <p className="text-sm text-gray-700 font-medium">{candidate.phone || 'Not provided'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <MapPin size={18} className="text-red-500" />
-                      <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase">Location</p>
-                        <p className="text-sm text-gray-700 font-medium">{candidate.current_location || 'Not provided'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-                      <Clock size={18} className="text-amber-500" />
-                      <div>
-                        <p className="text-xs text-gray-400 font-bold uppercase">Notice Period</p>
-                        <p className="text-sm text-gray-700 font-medium">
-                          {candidate.notice_period_days != null ? `${candidate.notice_period_days} Days` : 'Not provided'}
-                        </p>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Professional Summary</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{candidate.summary || 'No summary provided.'}</p>
-                  <div className="pt-4">
-                    <h4 className="text-xs text-gray-400 font-bold uppercase mb-3">Core Skills</h4>
-                    <div className="flex flex-wrap gap-2">
+                <div className="zh-card space-y-4 p-5">
+                  <h3 className={sectionTitle}>Professional summary</h3>
+                  <p className="text-sm leading-relaxed text-ink-soft">{candidate.summary || 'No summary provided.'}</p>
+                  <div className="pt-2">
+                    <h4 className={`${subtle} mb-2`}>Core skills</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(candidate.skills ?? []).length === 0 && <span className="text-sm text-muted">No skills listed.</span>}
                       {(candidate.skills ?? []).map(skill => (
-                        <span key={skill} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100">{skill}</span>
+                        <Badge key={skill} tone="navy">{skill}</Badge>
                       ))}
                     </div>
                   </div>
@@ -451,15 +417,16 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
               </div>
 
               {/* Right Column — Application Status */}
-              <div className="space-y-6">
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Application Status</h3>
+              <div className="space-y-5">
+                <div className="zh-card space-y-3 p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className={sectionTitle}>Application status</h3>
                     {applications.length > 1 && (
                       <select
+                        aria-label="Application"
                         value={selectedApp?.id || ""}
                         onChange={(e) => setSelectedApp(applications.find(a => a.id === e.target.value))}
-                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="zh-input w-auto max-w-[10rem] px-2 py-1 text-xs"
                       >
                         {applications.map(a => (
                           <option key={a.id} value={a.id}>{a.job?.title || "Job"}</option>
@@ -469,95 +436,103 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   </div>
 
                   {appLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 size={18} className="animate-spin text-blue-500" />
+                    <div className="space-y-2" aria-label="Loading">
+                      <Skeleton className="h-16 w-full" />
+                      <Skeleton className="h-10 w-full" />
                     </div>
                   ) : appError ? (
-                    <div className="p-4 bg-red-50 rounded-2xl text-center space-y-2">
-                      <p className="text-xs text-red-600 font-medium">{appError}</p>
-                      <button onClick={fetchApplications} className="text-xs text-blue-600 font-bold hover:underline">Retry</button>
+                    <div className="space-y-2 rounded-lg bg-danger-50 p-4 text-center" role="alert">
+                      <p className="text-xs font-medium text-danger-700">{appError}</p>
+                      <Button variant="link" size="sm" onClick={fetchApplications}>Try again</Button>
                     </div>
                   ) : selectedApp ? (
                     <>
-                      <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs text-gray-500 font-medium">Current Stage</span>
-                          <span className={`px-2.5 py-1 text-xs font-bold rounded-full uppercase ${STAGE_COLORS[selectedApp.stage] || "bg-gray-100 text-gray-600"}`}>
-                            {STAGE_LABELS[selectedApp.stage] || selectedApp.stage}
-                          </span>
+                      <div className="rounded-lg border border-line bg-surface p-4">
+                        <div className="mb-3 flex items-center justify-between gap-2">
+                          <span className="text-xs text-muted">Current stage</span>
+                          <StageBadge stage={selectedApp.stage} />
                         </div>
-                        <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-line">
+                          <div className="h-full rounded-full bg-navy-600 transition-all duration-500" style={{ width: `${progressPct}%` }} />
                         </div>
                         {selectedApp.job?.title && (
-                          <p className="text-xs text-gray-400 mt-2 truncate">Job: {selectedApp.job.title}</p>
+                          <p className="mt-2 truncate text-xs text-muted">Job: {selectedApp.job.title}</p>
                         )}
                       </div>
 
-                      <button
+                      <Button
+                        fullWidth
                         onClick={handleMoveToNextStage}
-                        disabled={stageSaving || !nextStage}
-                        className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!nextStage}
+                        loading={stageSaving}
+                        icon={<ChevronRight size={16} />}
                       >
-                        {stageSaving ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
-                        {nextStage ? `Move to ${STAGE_LABELS[nextStage]}` : "Final Stage"}
-                      </button>
+                        {nextStage ? `Move to ${getStage(nextStage).label}` : "Final stage"}
+                      </Button>
                     </>
                   ) : (
-                    <div className="p-4 bg-gray-50 rounded-2xl text-center">
-                      <p className="text-xs text-gray-400 font-medium">Not in any pipeline yet</p>
+                    <div className="rounded-lg bg-surface p-4 text-center">
+                      <p className="text-xs text-muted">Not in any pipeline yet</p>
                     </div>
                   )}
 
-                  <button
-                    onClick={() => setShowCompose(true)}
-                    className="w-full py-3 bg-blue-50 text-blue-700 border border-blue-100 rounded-xl font-bold text-sm hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Mail size={16} />
-                    Send Email
-                  </button>
+                  <Button fullWidth variant="secondary" onClick={() => setShowCompose(true)} icon={<Mail size={16} />}>
+                    Send email
+                  </Button>
 
-                  <button
+                  <Button
+                    fullWidth
+                    variant="secondary"
                     onClick={() => setShowScheduler(!showScheduler)}
-                    className="w-full py-3 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                    aria-expanded={showScheduler}
+                    icon={<Calendar size={16} />}
                   >
-                    <Calendar size={16} />
-                    Schedule Interview
-                  </button>
+                    Schedule interview
+                  </Button>
 
                   {showScheduler && (
-                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 space-y-3">
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Interview Details</p>
+                    <div className="space-y-3 rounded-lg border border-line bg-surface p-4">
+                      <p className={subtle}>Interview details</p>
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            type="date"
-                            value={interviewDate}
-                            min={new Date().toISOString().split("T")[0]}
-                            onChange={(e) => setInterviewDate(e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                          />
-                          <input
-                            type="time"
-                            value={interviewTime}
-                            onChange={(e) => setInterviewTime(e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                          />
+                          <div>
+                            <label htmlFor="cm-iv-date" className="sr-only">Date</label>
+                            <input
+                              id="cm-iv-date"
+                              type="date"
+                              value={interviewDate}
+                              min={new Date().toISOString().split("T")[0]}
+                              onChange={(e) => setInterviewDate(e.target.value)}
+                              className="zh-input px-3 py-2"
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="cm-iv-time" className="sr-only">Time</label>
+                            <input
+                              id="cm-iv-time"
+                              type="time"
+                              value={interviewTime}
+                              onChange={(e) => setInterviewTime(e.target.value)}
+                              className="zh-input px-3 py-2"
+                            />
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <select
+                            aria-label="Interview type"
                             value={interviewType}
                             onChange={(e) => setInterviewType(e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="zh-input px-3 py-2"
                           >
                             <option value="video">Video Call</option>
                             <option value="phone">Phone</option>
                             <option value="in_person">In-Person</option>
                           </select>
                           <select
+                            aria-label="Duration"
                             value={interviewDuration}
                             onChange={(e) => setInterviewDuration(e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="zh-input px-3 py-2"
                           >
                             <option value="30">30 min</option>
                             <option value="45">45 min</option>
@@ -567,117 +542,122 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                         </div>
                         <input
                           type="text"
+                          aria-label="Interviewer name"
                           value={interviewerName}
                           onChange={(e) => setInterviewerName(e.target.value)}
                           placeholder="Interviewer name (optional)"
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          className="zh-input px-3 py-2"
                         />
                         <input
                           type="url"
+                          aria-label="Meeting link"
                           value={meetingLink}
                           onChange={(e) => setMeetingLink(e.target.value)}
                           placeholder="Meeting link (optional)"
-                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          className="zh-input px-3 py-2"
                         />
                       </div>
-                      <button
+                      <Button
+                        fullWidth
                         onClick={handleScheduleInterview}
-                        disabled={scheduleSending}
-                        className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        loading={scheduleSending}
+                        loadingText="Sending…"
+                        icon={<Send size={14} />}
                       >
-                        {scheduleSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                        {scheduleSending ? 'Sending…' : 'Send Invite & Save'}
-                      </button>
+                        Send invite &amp; save
+                      </Button>
                     </div>
                   )}
 
                 </div>
 
-                <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-                  <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Financials</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500">Current CTC</span>
-                      <span className="text-sm font-bold text-gray-900">{formatINR(candidate.current_ctc, 'N/A')}</span>
+                <div className="zh-card space-y-3 p-5">
+                  <h3 className={sectionTitle}>Financials</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted">Current CTC</span>
+                      <span className="text-sm font-semibold text-ink">{formatINR(candidate.current_ctc, 'N/A')}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500">Expected CTC</span>
-                      <span className="text-sm font-bold text-gray-900">{formatINR(candidate.expected_ctc, 'N/A')}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted">Expected CTC</span>
+                      <span className="text-sm font-semibold text-ink">{formatINR(candidate.expected_ctc, 'N/A')}</span>
                     </div>
                   </div>
                 </div>
 
-                <button
+                <Button
+                  fullWidth
+                  variant="ghost"
+                  size="sm"
                   onClick={() => onDelete(candidate.id)}
-                  className="w-full py-2 text-xs font-semibold text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2"
+                  icon={<Trash2 size={14} />}
+                  className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
                 >
-                  <Trash2 size={14} /> Delete candidate
-                </button>
+                  Delete candidate
+                </Button>
               </div>
             </div>
           )}
 
           {/* ── Resume Tab ── */}
           {activeTab === 'resume' && (
-            <div className="h-full flex flex-col space-y-4">
+            <div className="flex h-full flex-col space-y-4">
               {localCandidate.resume_url ? (
                 <>
-                  <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-gray-100">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
+                  <div className="zh-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-600">
                         <FileText size={20} />
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-900">Resume_{localCandidate.last_name}.pdf</p>
-                        <p className="text-xs text-gray-400 font-medium">Uploaded resume</p>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">Resume_{localCandidate.last_name}.pdf</p>
+                        <p className="text-xs text-muted">Uploaded resume</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={handleDownload}
                         disabled={!resumeBlobUrl || resumeLoading}
-                        className="px-4 py-2 bg-gray-50 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-100 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        icon={<Download size={14} />}
                       >
-                        <Download size={14} /> Download
-                      </button>
-                      <button
-                        onClick={handleFullScreen}
-                        disabled={resumeLoading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Eye size={14} /> Full Screen
-                      </button>
+                        Download
+                      </Button>
+                      <Button size="sm" onClick={handleFullScreen} disabled={resumeLoading} icon={<Eye size={14} />}>
+                        Full screen
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex-1 rounded-2xl overflow-hidden border border-gray-200 bg-gray-100 flex items-center justify-center" style={{ minHeight: '420px' }}>
+                  <div className="flex flex-1 items-center justify-center overflow-hidden rounded-xl border border-line bg-surface-sunken" style={{ minHeight: '420px' }}>
                     {resumeLoading ? (
-                      <Loader2 size={28} className="animate-spin text-blue-400" />
+                      <Loader2 size={28} className="animate-spin text-navy-400" aria-label="Loading resume" />
                     ) : resumeBlobUrl ? (
-                      <iframe src={resumeBlobUrl} className="w-full h-full" style={{ minHeight: '420px' }} title="Resume Preview" />
+                      <iframe src={resumeBlobUrl} className="h-full w-full" style={{ minHeight: '420px' }} title="Resume Preview" />
                     ) : (
-                      <div className="text-center space-y-2">
-                        <FileText size={36} className="mx-auto text-gray-300" />
-                        <p className="text-sm text-gray-400">Preview unavailable</p>
+                      <div className="space-y-2 text-center">
+                        <FileText size={36} className="mx-auto text-line-strong" />
+                        <p className="text-sm text-muted">Preview unavailable</p>
                       </div>
                     )}
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center gap-5 bg-white rounded-2xl border-2 border-dashed border-gray-200 py-16 px-8">
-                  <div className="w-16 h-16 bg-blue-50 text-blue-400 rounded-2xl flex items-center justify-center">
-                    <Upload size={28} />
+                <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-line-strong bg-white px-8 py-16">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-600">
+                    <Upload size={22} />
                   </div>
                   <div className="text-center">
-                    <p className="text-base font-semibold text-gray-700">No resume uploaded</p>
-                    <p className="text-sm text-gray-400 mt-1">Upload a PDF, DOCX, or DOC file (max 8 MB)</p>
+                    <p className="text-base font-semibold text-ink">No resume uploaded</p>
+                    <p className="mt-1 text-sm text-muted">Upload a PDF, DOCX, or DOC file (max 8 MB)</p>
                   </div>
-                  <label className={`cursor-pointer px-6 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all flex items-center gap-2 ${resumeUploading ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <label className={buttonClasses('primary', 'md', `cursor-pointer ${resumeUploading ? 'pointer-events-none opacity-60' : ''}`)}>
                     {resumeUploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                    {resumeUploading ? 'Uploading…' : 'Choose File'}
+                    {resumeUploading ? 'Uploading…' : 'Choose file'}
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx"
-                      className="hidden"
+                      className="sr-only"
                       disabled={resumeUploading}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -695,15 +675,16 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
             <div className="space-y-5">
               {/* Application selector when multiple */}
               {applications.length > 1 && (
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-3">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">Viewing</span>
+                <div className="zh-card flex items-center gap-3 p-4">
+                  <label htmlFor="cm-activity-app" className={`${subtle} shrink-0`}>Viewing</label>
                   <select
+                    id="cm-activity-app"
                     value={selectedApp?.id || ""}
                     onChange={(e) => {
                       const app = applications.find(a => a.id === e.target.value);
                       setSelectedApp(app);
                     }}
-                    className="flex-1 text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="zh-input flex-1 py-2"
                   >
                     {applications.map(a => (
                       <option key={a.id} value={a.id}>{a.job?.title || "Job"}</option>
@@ -713,67 +694,65 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
               )}
 
               {activityLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 size={24} className="animate-spin text-blue-500" />
+                <div className="space-y-3" aria-label="Loading">
+                  <Skeleton className="h-28 w-full rounded-xl" />
+                  <Skeleton className="h-40 w-full rounded-xl" />
                 </div>
               ) : activityError ? (
-                <div className="bg-white rounded-2xl border border-red-100 p-10 text-center space-y-2">
-                  <p className="text-sm text-red-600">{activityError}</p>
-                  {selectedApp && (
-                    <button onClick={() => fetchActivity(selectedApp.id)} className="text-xs text-blue-600 font-bold hover:underline">Retry</button>
-                  )}
+                <div className="zh-card">
+                  <ErrorState
+                    compact
+                    message={activityError}
+                    onRetry={selectedApp ? () => fetchActivity(selectedApp.id) : undefined}
+                  />
                 </div>
               ) : !selectedApp ? (
-                <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-                  <p className="text-sm text-gray-400">Candidate is not in any pipeline yet</p>
+                <div className="zh-card">
+                  <EmptyState compact title="Not in any pipeline yet" description="Add this candidate to a job to track stages and interviews." />
                 </div>
               ) : (
                 <>
                   {/* Interviews section */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                        <Calendar size={14} className="text-blue-500" /> Interviews
+                  <div className="zh-card overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+                      <h3 className={`${sectionTitle} flex items-center gap-2`}>
+                        <Calendar size={14} className="text-navy-600" /> Interviews
                       </h3>
-                      <span className="text-xs text-gray-400 font-medium">{interviews.length} total</span>
+                      <span className="text-xs text-muted">{interviews.length} total</span>
                     </div>
 
                     {interviews.length === 0 ? (
-                      <div className="px-5 py-8 text-center">
-                        <Video size={24} className="mx-auto text-gray-300 mb-2" />
-                        <p className="text-xs text-gray-400">No interviews scheduled yet</p>
-                        <button
-                          onClick={() => { setActiveTab('overview'); setShowScheduler(true); }}
-                          className="mt-3 text-xs text-blue-600 font-bold hover:underline"
-                        >
-                          Schedule one →
-                        </button>
-                      </div>
+                      <EmptyState
+                        compact
+                        icon={<Video size={20} />}
+                        title="No interviews scheduled yet"
+                        action={
+                          <Button size="sm" variant="secondary" onClick={() => { setActiveTab('overview'); setShowScheduler(true); }}>
+                            Schedule interview
+                          </Button>
+                        }
+                      />
                     ) : (
-                      <div className="divide-y divide-gray-50">
+                      <div className="divide-y divide-line">
                         {interviews.map(iv => (
-                          <div key={iv.id} className="px-5 py-4 hover:bg-gray-50/50 transition-colors">
+                          <div key={iv.id} className="px-5 py-4 transition-colors hover:bg-surface">
                             <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-3 min-w-0">
-                                <div className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                                  iv.interview_type === 'video' ? 'bg-blue-50' :
-                                  iv.interview_type === 'phone' ? 'bg-emerald-50' : 'bg-violet-50'
-                                }`}>
-                                  {iv.interview_type === 'video' ? <Video size={14} className="text-blue-600" /> :
-                                   iv.interview_type === 'phone' ? <PhoneCall size={14} className="text-emerald-600" /> :
-                                   <Users size={14} className="text-violet-600" />}
+                              <div className="flex min-w-0 items-start gap-3">
+                                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-600">
+                                  {iv.interview_type === 'video' ? <Video size={14} /> :
+                                   iv.interview_type === 'phone' ? <PhoneCall size={14} /> :
+                                   <Users size={14} />}
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <p className="text-sm font-bold text-gray-900">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-sm font-semibold text-ink">
                                       {INTERVIEW_TYPE_LABELS[iv.interview_type] || iv.interview_type}
                                     </p>
-                                    <span className={`px-2 py-0.5 text-xs font-bold rounded-full flex items-center gap-1 ${INTERVIEW_STATUS_COLORS[iv.status] || 'bg-gray-100 text-gray-600'}`}>
-                                      {INTERVIEW_STATUS_ICONS[iv.status]}
-                                      {iv.status}
-                                    </span>
+                                    <Badge tone={INTERVIEW_STATUS_TONES[iv.status] ?? 'neutral'} icon={INTERVIEW_STATUS_ICONS[iv.status]} className="capitalize">
+                                      {String(iv.status ?? '').replace(/_/g, ' ')}
+                                    </Badge>
                                   </div>
-                                  <p className="text-xs text-gray-500 mt-0.5">
+                                  <p className="mt-0.5 text-xs text-muted">
                                     {new Date(iv.scheduled_at).toLocaleString('en-IN', {
                                       weekday: 'short', day: 'numeric', month: 'short',
                                       hour: '2-digit', minute: '2-digit',
@@ -781,44 +760,47 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                                     {iv.duration_minutes ? ` · ${iv.duration_minutes} min` : ''}
                                   </p>
                                   {iv.interviewer_name && (
-                                    <p className="text-xs text-gray-400 mt-0.5">
+                                    <p className="mt-0.5 text-xs text-muted">
                                       Interviewer: {iv.interviewer_name}
                                     </p>
                                   )}
                                   {iv.meeting_link && (
                                     <a href={iv.meeting_link} target="_blank" rel="noopener noreferrer"
-                                      className="text-xs text-blue-600 hover:underline mt-0.5 flex items-center gap-1">
-                                      <Link size={10} /> Join Meeting
+                                      className="mt-0.5 flex items-center gap-1 text-xs text-navy-600 hover:underline">
+                                      <Link size={10} /> Join meeting
                                     </a>
                                   )}
                                 </div>
                               </div>
                               {/* Status quick-update */}
                               {iv.status === 'scheduled' && (
-                                <div className="flex gap-1.5 flex-shrink-0">
+                                <div className="flex shrink-0 gap-1">
                                   <button
                                     onClick={() => handleUpdateInterviewStatus(iv.id, 'completed')}
                                     disabled={updatingInterview === iv.id}
                                     title="Mark completed"
-                                    className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all disabled:opacity-50"
+                                    aria-label="Mark completed"
+                                    className="rounded-lg p-1.5 text-success-700 hover:bg-success-50 disabled:opacity-50"
                                   >
-                                    {updatingInterview === iv.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                                    {updatingInterview === iv.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
                                   </button>
                                   <button
                                     onClick={() => handleUpdateInterviewStatus(iv.id, 'cancelled')}
                                     disabled={updatingInterview === iv.id}
                                     title="Cancel"
-                                    className="p-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 transition-all disabled:opacity-50"
+                                    aria-label="Cancel interview"
+                                    className="rounded-lg p-1.5 text-muted hover:bg-surface-sunken disabled:opacity-50"
                                   >
-                                    <XCircle size={12} />
+                                    <XCircle size={14} />
                                   </button>
                                   <button
                                     onClick={() => handleUpdateInterviewStatus(iv.id, 'no_show')}
                                     disabled={updatingInterview === iv.id}
                                     title="No show"
-                                    className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all disabled:opacity-50"
+                                    aria-label="Mark no show"
+                                    className="rounded-lg p-1.5 text-warning-700 hover:bg-warning-50 disabled:opacity-50"
                                   >
-                                    <AlertCircle size={12} />
+                                    <AlertCircle size={14} />
                                   </button>
                                 </div>
                               )}
@@ -830,54 +812,51 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   </div>
 
                   {/* Pipeline history timeline */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                        <Clock size={14} className="text-violet-500" /> Pipeline Timeline
+                  <div className="zh-card overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+                      <h3 className={`${sectionTitle} flex items-center gap-2`}>
+                        <Clock size={14} className="text-navy-600" /> Pipeline timeline
                       </h3>
-                      <span className="text-xs text-gray-400 font-medium">{pipelineHistory.length} events</span>
+                      <span className="text-xs text-muted">{pipelineHistory.length} events</span>
                     </div>
                     <div className="p-5">
                       {pipelineHistory.length === 0 ? (
-                        <p className="text-sm text-gray-400 text-center py-4">No stage changes recorded yet</p>
+                        <p className="py-4 text-center text-sm text-muted">No stage changes recorded yet</p>
                       ) : (
-                        <div className="space-y-4">
+                        <ol className="space-y-4">
                           {pipelineHistory.map((event) => (
-                            <div key={event.id} className="relative pl-8 before:absolute before:left-[11px] before:top-5 before:bottom-[-16px] before:w-[2px] before:bg-gray-100 last:before:hidden">
-                              <div className="absolute left-0 top-1.5 w-6 h-6 bg-white border-2 border-violet-200 rounded-full flex items-center justify-center">
-                                <div className="w-2 h-2 bg-violet-500 rounded-full" />
+                            <li key={event.id} className="relative pl-8 before:absolute before:bottom-[-16px] before:left-[11px] before:top-5 before:w-0.5 before:bg-line last:before:hidden">
+                              <div className="absolute left-0 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-navy-100 bg-white">
+                                <div className={`h-2 w-2 rounded-full ${getStage(event.to_stage).dot}`} />
                               </div>
                               <div>
-                                <p className="text-xs text-gray-400 font-medium">
+                                <p className="text-xs text-muted">
                                   {new Date(event.created_at).toLocaleString('en-IN', {
                                     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                                   })}
                                   {event.changed_by_email ? ` · ${event.changed_by_email}` : ''}
                                 </p>
-                                <p className="text-sm text-gray-700 mt-0.5">
+                                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-ink-soft">
                                   {event.from_stage ? (
                                     <>
-                                      <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[event.from_stage] || 'text-gray-600'}`}>
-                                        {STAGE_LABELS[event.from_stage] || event.from_stage}
-                                      </span>
-                                      <span className="text-gray-400 mx-1.5">→</span>
-                                      <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[event.to_stage] || 'text-gray-600'}`}>
-                                        {STAGE_LABELS[event.to_stage] || event.to_stage}
-                                      </span>
+                                      <StageBadge stage={event.from_stage} />
+                                      <span className="text-muted" aria-label="to">→</span>
+                                      <StageBadge stage={event.to_stage} />
                                     </>
                                   ) : (
-                                    <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${STAGE_COLORS[event.to_stage] || 'text-gray-600'}`}>
-                                      Added to pipeline: {STAGE_LABELS[event.to_stage] || event.to_stage}
-                                    </span>
+                                    <>
+                                      <span className="text-xs text-muted">Added to pipeline:</span>
+                                      <StageBadge stage={event.to_stage} />
+                                    </>
                                   )}
-                                </p>
+                                </div>
                                 {event.note && (
-                                  <p className="text-xs text-gray-400 mt-1 italic">"{event.note}"</p>
+                                  <p className="mt-1 text-xs italic text-muted">"{event.note}"</p>
                                 )}
                               </div>
-                            </div>
+                            </li>
                           ))}
-                        </div>
+                        </ol>
                       )}
                     </div>
                   </div>
@@ -886,8 +865,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
 
     {showCompose && (
       <ComposeEmailModal

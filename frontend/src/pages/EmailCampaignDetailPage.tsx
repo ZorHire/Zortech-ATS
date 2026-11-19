@@ -11,10 +11,8 @@ import {
   XCircle,
   Clock,
   ExternalLink,
-  Loader2,
   BarChart3,
 } from 'lucide-react';
-import Header from '../components/layout/Header';
 import {
   useGetCampaignAnalyticsQuery,
   useGetCampaignRecipientsQuery,
@@ -22,397 +20,403 @@ import {
   useRemoveUnsubscribeMutation,
 } from '../store/api/emailApi';
 import type { CampaignRecipient } from '../store/api/emailApi';
+import {
+  Badge,
+  CardGridSkeleton,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  Skeleton,
+  StatCard,
+  buttonClasses,
+} from '../components/ui';
+import type { BadgeTone, Column } from '../components/ui';
+import { useNotify } from '../hooks/useNotify';
+import { getErrorMessage, getErrorStatus } from '../lib/format';
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
+// ─── Status mappings (one per status type) ───────────────────────────────────
 
-function StatCard({
-  label,
-  value,
-  sub,
-  icon,
-  color,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-5">
-      <div className={`w-9 h-9 rounded-lg ${color} flex items-center justify-center mb-3`}>
-        {icon}
-      </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
-      <p className="text-xs font-medium text-gray-400 mt-1 uppercase tracking-wide">{label}</p>
-    </div>
-  );
-}
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
-  pending:   { label: 'Pending',   icon: <Clock size={11} />,        className: 'bg-amber-100 text-amber-700' },
-  delivered: { label: 'Delivered', icon: <CheckCircle2 size={11} />, className: 'bg-emerald-100 text-emerald-700' },
-  bounced:   { label: 'Bounced',   icon: <XCircle size={11} />,      className: 'bg-orange-100 text-orange-600' },
-  failed:    { label: 'Failed',    icon: <AlertCircle size={11} />,   className: 'bg-red-100 text-red-600' },
+/** Per-recipient delivery status. */
+const RECIPIENT_STATUS: Record<string, { label: string; icon: React.ReactNode; tone: BadgeTone }> = {
+  pending:   { label: 'Pending',   icon: <Clock size={11} aria-hidden="true" />,        tone: 'neutral' },
+  delivered: { label: 'Delivered', icon: <CheckCircle2 size={11} aria-hidden="true" />, tone: 'success' },
+  bounced:   { label: 'Bounced',   icon: <XCircle size={11} aria-hidden="true" />,      tone: 'warning' },
+  failed:    { label: 'Failed',    icon: <AlertCircle size={11} aria-hidden="true" />,  tone: 'danger' },
 };
 
-function RecipientRow({ r }: { r: CampaignRecipient }) {
-  const cfg = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.pending;
-  return (
-    <tr className="hover:bg-gray-50">
-      <td className="px-4 py-3">
-        <p className="text-sm font-medium text-gray-900">{r.name || '—'}</p>
-        <p className="text-xs text-gray-500">{r.email}</p>
-      </td>
-      <td className="px-4 py-3">
-        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cfg.className}`}>
-          {cfg.icon}
-          {cfg.label}
-        </span>
-        {r.bounce_reason && (
-          <p className="text-xs text-red-500 mt-0.5 max-w-[200px] truncate" title={r.bounce_reason}>
-            {r.bounce_reason}
-          </p>
-        )}
-      </td>
-      <td className="px-4 py-3 text-center">
-        {r.open_count > 0 ? (
-          <div>
-            <span className="text-sm font-semibold text-emerald-700">{r.open_count}</span>
-            {r.last_opened_at && (
-              <p className="text-xs text-gray-400">
-                {new Date(r.last_opened_at).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-        ) : (
-          <span className="text-sm text-gray-300">—</span>
-        )}
-      </td>
-      <td className="px-4 py-3 text-center">
-        {r.click_count > 0 ? (
-          <div>
-            <span className="text-sm font-semibold text-blue-700">{r.click_count}</span>
-            {r.last_clicked_at && (
-              <p className="text-xs text-gray-400">
-                {new Date(r.last_clicked_at).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-        ) : (
-          <span className="text-sm text-gray-300">—</span>
-        )}
-      </td>
-      <td className="px-4 py-3 text-center">
-        {r.unsubscribed ? (
-          <span className="text-xs text-red-500 font-medium">Unsubscribed</span>
-        ) : (
-          <span className="text-xs text-gray-300">—</span>
-        )}
-      </td>
-    </tr>
-  );
-}
+/** Campaign status. */
+const CAMPAIGN_STATUS_TONES: Record<string, BadgeTone> = {
+  draft: 'neutral',
+  scheduled: 'warning',
+  sending: 'info',
+  sent: 'success',
+  failed: 'danger',
+};
+
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const RECIPIENT_COLUMNS: Column<CampaignRecipient>[] = [
+  {
+    key: 'recipient',
+    header: 'Recipient',
+    cell: (r) => (
+      <div className="min-w-0">
+        <p className="font-medium text-ink">{r.name || '—'}</p>
+        <p className="truncate text-xs text-muted">{r.email}</p>
+      </div>
+    ),
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    cell: (r) => {
+      const cfg = RECIPIENT_STATUS[r.status] ?? RECIPIENT_STATUS.pending;
+      return (
+        <div>
+          <Badge tone={cfg.tone} icon={cfg.icon}>{cfg.label}</Badge>
+          {r.bounce_reason && (
+            <p className="mt-0.5 max-w-[200px] truncate text-xs text-danger-600" title={r.bounce_reason}>
+              {r.bounce_reason}
+            </p>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    key: 'opens',
+    header: 'Opens',
+    className: 'text-center',
+    cell: (r) =>
+      r.open_count > 0 ? (
+        <div>
+          <span className="font-semibold text-ink">{r.open_count}</span>
+          {r.last_opened_at && <p className="text-xs text-muted">{fmtDate(r.last_opened_at)}</p>}
+        </div>
+      ) : (
+        <span className="text-muted">—</span>
+      ),
+  },
+  {
+    key: 'clicks',
+    header: 'Clicks',
+    className: 'text-center',
+    cell: (r) =>
+      r.click_count > 0 ? (
+        <div>
+          <span className="font-semibold text-navy-600">{r.click_count}</span>
+          {r.last_clicked_at && <p className="text-xs text-muted">{fmtDate(r.last_clicked_at)}</p>}
+        </div>
+      ) : (
+        <span className="text-muted">—</span>
+      ),
+  },
+  {
+    key: 'unsub',
+    header: 'Unsubscribed',
+    className: 'text-center',
+    cell: (r) => (r.unsubscribed ? <Badge tone="danger">Unsubscribed</Badge> : <span className="text-muted">—</span>),
+  },
+];
 
 // ─── Unsubscribe management tab ───────────────────────────────────────────────
 
 function UnsubscribesTab() {
-  const { data, isLoading } = useListUnsubscribesQuery();
+  const notify = useNotify();
+  const { data, isLoading, isError, error, refetch } = useListUnsubscribesQuery();
   const [removeUnsubscribe, { isLoading: removing }] = useRemoveUnsubscribeMutation();
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-10">
-        <Loader2 size={22} className="animate-spin text-gray-400" />
-      </div>
-    );
-  }
+  const handleResubscribe = async (email: string) => {
+    try {
+      await removeUnsubscribe(email).unwrap();
+      notify.success(`${email} re-subscribed`);
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Failed to re-subscribe'));
+    }
+  };
 
-  const list = data?.unsubscribes ?? [];
-
-  if (list.length === 0) {
-    return (
-      <div className="text-center py-10 text-gray-400">
-        <UserMinus size={32} className="mx-auto mb-2 opacity-40" />
-        <p className="text-sm">No unsubscribes yet</p>
-      </div>
-    );
-  }
+  type Unsub = NonNullable<typeof data>['unsubscribes'][number];
+  const columns: Column<Unsub>[] = [
+    { key: 'email', header: 'Email', cell: (u) => <span className="text-ink">{u.email}</span> },
+    { key: 'campaign', header: 'Campaign', cell: (u) => <span className="text-ink-soft">{u.campaign_name ?? '—'}</span> },
+    { key: 'date', header: 'Date', className: 'whitespace-nowrap', cell: (u) => <span className="text-xs text-muted">{fmtDate(u.unsubscribed_at)}</span> },
+    {
+      key: 'action',
+      header: <span className="sr-only">Actions</span>,
+      className: 'text-right whitespace-nowrap',
+      cell: (u) => (
+        <button
+          type="button"
+          onClick={() => handleResubscribe(u.email)}
+          disabled={removing}
+          className="text-xs font-medium text-navy-600 hover:underline disabled:opacity-50"
+        >
+          Re-subscribe
+        </button>
+      ),
+    },
+  ];
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <thead>
-          <tr className="border-b border-gray-100">
-            <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Email</th>
-            <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Campaign</th>
-            <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Date</th>
-            <th className="px-4 py-3 w-20" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-50">
-          {list.map((u) => (
-            <tr key={u.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-sm text-gray-800">{u.email}</td>
-              <td className="px-4 py-3 text-sm text-gray-500">{u.campaign_name ?? '—'}</td>
-              <td className="px-4 py-3 text-xs text-gray-400">
-                {new Date(u.unsubscribed_at).toLocaleDateString()}
-              </td>
-              <td className="px-4 py-3 text-right">
-                <button
-                  onClick={() => removeUnsubscribe(u.email)}
-                  disabled={removing}
-                  className="text-xs text-red-500 hover:text-red-700 font-medium disabled:opacity-50"
-                >
-                  Re-subscribe
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      caption="Unsubscribed addresses"
+      columns={columns}
+      rows={isError ? undefined : data?.unsubscribes}
+      rowKey={(u) => u.id}
+      loading={isLoading}
+      error={isError ? error : undefined}
+      onRetry={refetch}
+      empty={
+        <EmptyState
+          compact
+          icon={<UserMinus size={22} aria-hidden="true" />}
+          title="No unsubscribes yet"
+          description="People who unsubscribe from any campaign are listed here."
+        />
+      }
+    />
   );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+type Tab = 'overview' | 'recipients' | 'unsubscribes';
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'recipients', label: 'Recipients' },
+  { key: 'unsubscribes', label: 'Unsubscribes' },
+];
+
+const BACK_LINK = (
+  <Link to="/campaigns" className={buttonClasses('secondary')}>
+    <ArrowLeft size={16} aria-hidden="true" /> All campaigns
+  </Link>
+);
+
 export default function EmailCampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState<'overview' | 'recipients' | 'unsubscribes'>('overview');
+  const [tab, setTab] = useState<Tab>('overview');
 
-  const { data: analyticsData, isLoading: loadingAnalytics } = useGetCampaignAnalyticsQuery(id!, { skip: !id });
-  const { data: recipientsData, isLoading: loadingRecipients } = useGetCampaignRecipientsQuery(id!, {
+  const {
+    data: analyticsData,
+    isLoading: loadingAnalytics,
+    isFetching: fetchingAnalytics,
+    isError: analyticsIsError,
+    error: analyticsError,
+    refetch: refetchAnalytics,
+  } = useGetCampaignAnalyticsQuery(id!, { skip: !id });
+  const {
+    data: recipientsData,
+    isLoading: loadingRecipients,
+    isError: recipientsIsError,
+    error: recipientsError,
+    refetch: refetchRecipients,
+  } = useGetCampaignRecipientsQuery(id!, {
     skip: !id || tab !== 'recipients',
   });
 
+  const crumbsBase = [{ label: 'Campaigns', to: '/campaigns' }];
+
   if (loadingAnalytics) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Campaign Analytics" subtitle="Loading..." />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 size={24} className="animate-spin text-gray-400" />
+      <>
+        <PageHeader breadcrumbs={[...crumbsBase, { label: 'Loading…' }]} title={<Skeleton className="h-7 w-56" />} />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <CardGridSkeleton />
+          <Skeleton className="h-64 w-full rounded-xl" />
         </div>
-      </div>
+      </>
     );
   }
 
+  const notFound = !analyticsData && (!analyticsIsError || getErrorStatus(analyticsError) === 404);
+
   if (!analyticsData) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Campaign Analytics" subtitle="Not found" />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-500 text-sm">Campaign not found.</p>
+      <>
+        <PageHeader breadcrumbs={[...crumbsBase, { label: notFound ? 'Not found' : 'Error' }]} title="Campaign analytics" />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <div className="zh-card">
+            {notFound ? (
+              <EmptyState
+                icon={<Mail size={22} aria-hidden="true" />}
+                title="Campaign not found"
+                description="It may have been deleted, or the link is wrong."
+                action={BACK_LINK}
+              />
+            ) : (
+              <ErrorState error={analyticsError} onRetry={refetchAnalytics} retrying={fetchingAnalytics} />
+            )}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   const { campaign, analytics, top_links } = analyticsData;
 
-  const statusColor: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-600',
-    scheduled: 'bg-amber-100 text-amber-700',
-    sending: 'bg-blue-100 text-blue-700',
-    sent: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-600',
-  };
+  const funnel = [
+    { label: 'Sent', value: campaign.recipient_count ?? 0, color: 'bg-navy-600', pct: 100 },
+    { label: 'Delivered', value: analytics.delivered, color: 'bg-navy-400', pct: campaign.recipient_count ? Math.round((analytics.delivered / campaign.recipient_count) * 100) : 0 },
+    { label: 'Opened', value: analytics.unique_opens, color: 'bg-brand-500', pct: analytics.delivered ? Math.round((analytics.unique_opens / analytics.delivered) * 100) : 0 },
+    { label: 'Clicked', value: analytics.unique_clicks, color: 'bg-brand-300', pct: analytics.unique_opens ? Math.round((analytics.unique_clicks / analytics.unique_opens) * 100) : 0 },
+  ];
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
-        title={campaign.name}
-        subtitle={campaign.subject}
-      />
-
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Link to="/campaigns" className="hover:text-blue-600 flex items-center gap-1 transition-colors">
-            <ArrowLeft size={14} />
-            Campaigns
-          </Link>
-          <span>/</span>
-          <span className="text-gray-900 font-medium truncate">{campaign.name}</span>
-          <span className={`ml-2 px-2 py-0.5 text-xs rounded-full font-medium ${statusColor[campaign.status] ?? 'bg-gray-100 text-gray-600'}`}>
-            {campaign.status}
+    <>
+      <PageHeader
+        breadcrumbs={[...crumbsBase, { label: campaign.name }]}
+        title={
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate">{campaign.name}</span>
+            <Badge tone={CAMPAIGN_STATUS_TONES[campaign.status] ?? 'neutral'} className="shrink-0">
+              {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+            </Badge>
           </span>
+        }
+        subtitle={campaign.subject}
+        actions={BACK_LINK}
+      >
+        <div role="tablist" aria-label="Campaign sections" className="-mb-4 flex gap-1 overflow-x-auto">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => setTab(t.key)}
+              className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                tab === t.key ? 'border-navy-600 text-navy-700' : 'border-transparent text-muted hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
+      </PageHeader>
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Delivered"
             value={analytics.delivered}
-            sub={`of ${campaign.recipient_count ?? 0} sent`}
-            icon={<Mail size={16} className="text-white" />}
-            color="bg-blue-500"
+            hint={`of ${campaign.recipient_count ?? 0} sent`}
+            icon={<Mail size={18} />}
+            tone="navy"
           />
           <StatCard
             label="Open rate"
             value={`${analytics.open_rate}%`}
-            sub={`${analytics.unique_opens} unique opens`}
-            icon={<BarChart3 size={16} className="text-white" />}
-            color="bg-emerald-500"
+            hint={`${analytics.unique_opens} unique opens`}
+            icon={<BarChart3 size={18} />}
+            tone="success"
           />
           <StatCard
             label="Click rate"
             value={`${analytics.click_rate}%`}
-            sub={`${analytics.unique_clicks} unique clicks`}
-            icon={<MousePointerClick size={16} className="text-white" />}
-            color="bg-violet-500"
+            hint={`${analytics.unique_clicks} unique clicks`}
+            icon={<MousePointerClick size={18} />}
+            tone="brand"
           />
           <StatCard
             label="Unsubscribes"
             value={analytics.unsubscribes}
-            sub={analytics.bounced > 0 ? `${analytics.bounced} bounced` : undefined}
-            icon={<UserMinus size={16} className="text-white" />}
-            color="bg-rose-500"
+            hint={analytics.bounced > 0 ? `${analytics.bounced} bounced` : undefined}
+            icon={<UserMinus size={18} />}
+            tone="danger"
           />
         </div>
 
-        {/* Tab bar */}
-        <div className="flex gap-1 border-b border-gray-200">
-          {(['overview', 'recipients', 'unsubscribes'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-                tab === t
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-
-        {/* Overview tab */}
         {tab === 'overview' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Funnel */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Engagement funnel</h3>
-              {[
-                { label: 'Sent', value: campaign.recipient_count ?? 0, color: 'bg-blue-500', pct: 100 },
-                { label: 'Delivered', value: analytics.delivered, color: 'bg-emerald-500', pct: campaign.recipient_count ? Math.round((analytics.delivered / campaign.recipient_count) * 100) : 0 },
-                { label: 'Opened', value: analytics.unique_opens, color: 'bg-violet-500', pct: analytics.delivered ? Math.round((analytics.unique_opens / analytics.delivered) * 100) : 0 },
-                { label: 'Clicked', value: analytics.unique_clicks, color: 'bg-amber-500', pct: analytics.unique_opens ? Math.round((analytics.unique_clicks / analytics.unique_opens) * 100) : 0 },
-              ].map((row) => (
-                <div key={row.label} className="mb-3 last:mb-0">
-                  <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>{row.label}</span>
-                    <span className="font-medium text-gray-800">{row.value} <span className="text-gray-400">({row.pct}%)</span></span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${row.color} rounded-full transition-all`}
-                      style={{ width: `${row.pct}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Top clicked links */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Top clicked links</h3>
-              {top_links.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">No clicks tracked yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {top_links.map((link, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-gray-400 w-4">{i + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <a
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:underline truncate flex items-center gap-1"
-                        >
-                          <span className="truncate">{link.url}</span>
-                          <ExternalLink size={10} className="flex-shrink-0" />
-                        </a>
-                      </div>
-                      <span className="text-xs font-semibold text-gray-700 flex-shrink-0">
-                        {link.clicks} click{link.clicks !== 1 ? 's' : ''}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <section className="zh-card min-w-0 p-4 sm:p-5">
+              <h2 className="mb-4 text-sm font-semibold text-ink">Engagement funnel</h2>
+              <ul className="space-y-3">
+                {funnel.map((row) => (
+                  <li key={row.label}>
+                    <div className="mb-1 flex justify-between text-xs text-ink-soft">
+                      <span>{row.label}</span>
+                      <span className="font-medium text-ink">
+                        {row.value} <span className="font-normal text-muted">({row.pct}%)</span>
                       </span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-surface-sunken">
+                      <div className={`h-full rounded-full transition-all ${row.color}`} style={{ width: `${row.pct}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
 
-            {/* Delivery breakdown */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5 sm:col-span-2">
-              <h3 className="text-sm font-semibold text-gray-900 mb-4">Delivery breakdown</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <section className="zh-card min-w-0 p-4 sm:p-5">
+              <h2 className="mb-4 text-sm font-semibold text-ink">Top clicked links</h2>
+              {top_links.length === 0 ? (
+                <EmptyState compact icon={<MousePointerClick size={20} aria-hidden="true" />} title="No clicks tracked yet" />
+              ) : (
+                <ol className="space-y-3">
+                  {top_links.map((link, i) => (
+                    <li key={i} className="flex items-center gap-3">
+                      <span className="w-4 text-xs font-semibold text-muted">{i + 1}</span>
+                      <a
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex min-w-0 flex-1 items-center gap-1 text-xs text-navy-600 hover:underline"
+                      >
+                        <span className="truncate">{link.url}</span>
+                        <ExternalLink size={10} className="flex-shrink-0" aria-hidden="true" />
+                      </a>
+                      <span className="flex-shrink-0 text-xs font-semibold text-ink">
+                        {link.clicks} click{link.clicks !== 1 ? 's' : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+
+            <section className="zh-card p-4 sm:p-5 md:col-span-2">
+              <h2 className="mb-4 text-sm font-semibold text-ink">Delivery breakdown</h2>
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {[
-                  { label: 'Delivered', value: analytics.delivered, color: 'text-emerald-700' },
-                  { label: 'Bounced',   value: analytics.bounced,   color: 'text-orange-600' },
-                  { label: 'Failed',    value: analytics.failed,    color: 'text-red-600' },
-                  { label: 'Unsubscribed', value: analytics.unsubscribes, color: 'text-rose-600' },
+                  { label: 'Delivered', value: analytics.delivered, color: 'text-success-700' },
+                  { label: 'Bounced', value: analytics.bounced, color: 'text-warning-700' },
+                  { label: 'Failed', value: analytics.failed, color: 'text-danger-600' },
+                  { label: 'Unsubscribed', value: analytics.unsubscribes, color: 'text-danger-700' },
                 ].map((item) => (
                   <div key={item.label} className="text-center">
-                    <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
+                    <dd className={`font-display text-2xl font-semibold ${item.color}`}>{item.value}</dd>
+                    <dt className="mt-0.5 text-xs text-muted">{item.label}</dt>
                   </div>
                 ))}
-              </div>
-            </div>
+              </dl>
+            </section>
           </div>
         )}
 
-        {/* Recipients tab */}
         {tab === 'recipients' && (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            {loadingRecipients ? (
-              <div className="flex justify-center py-10">
-                <Loader2 size={22} className="animate-spin text-gray-400" />
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50">
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Recipient</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Opens</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Clicks</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide text-center">Unsub</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {recipientsData?.recipients.map((r) => (
-                      <RecipientRow key={r.id} r={r} />
-                    ))}
-                    {!recipientsData?.recipients.length && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
-                          <Users size={28} className="mx-auto mb-2 opacity-30" />
-                          No recipient data yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <DataTable
+            caption="Campaign recipients"
+            columns={RECIPIENT_COLUMNS}
+            rows={recipientsIsError ? undefined : recipientsData?.recipients}
+            rowKey={(r) => r.id}
+            loading={loadingRecipients}
+            error={recipientsIsError ? recipientsError : undefined}
+            onRetry={refetchRecipients}
+            empty={
+              <EmptyState
+                compact
+                icon={<Users size={22} aria-hidden="true" />}
+                title="No recipient data yet"
+                description="Delivery details appear here once the campaign has been sent."
+              />
+            }
+          />
         )}
 
-        {/* Unsubscribes tab */}
-        {tab === 'unsubscribes' && (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <UnsubscribesTab />
-          </div>
-        )}
+        {tab === 'unsubscribes' && <UnsubscribesTab />}
       </div>
-    </div>
+    </>
   );
 }

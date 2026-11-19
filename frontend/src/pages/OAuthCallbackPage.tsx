@@ -4,6 +4,8 @@ import { useAppDispatch } from "../hooks/useAppDispatch";
 import { setCredentials, setSessionStatus } from "../store/slices/authSlice";
 import type { AuthUser } from "../store/slices/authSlice";
 import { setSubscription } from "../store/slices/subscriptionSlice";
+import { AlertTriangle } from "lucide-react";
+import { Button, Spinner } from "../components/ui";
 
 export default function OAuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -95,35 +97,38 @@ export default function OAuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#f7efe4] flex items-center justify-center px-6">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 text-center">
-          <h1 className="text-xl font-bold text-[#3a230f] mb-3">
-            Sign in failed
-          </h1>
+      <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-10 sm:px-6">
+        <div className="zh-card w-full max-w-md p-6 text-center sm:p-8" role="alert">
+          <img src="/brand/zortech-logo.png" alt="ZorTech" className="mx-auto mb-6 h-6 w-auto" />
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-50 text-danger-600">
+            <AlertTriangle size={22} aria-hidden="true" />
+          </div>
+          <h1 className="mb-3 text-xl font-semibold text-navy-800">Sign in failed</h1>
 
-          <p className="text-sm text-[#7d6651] mb-6">{error}</p>
+          <p className="mb-6 text-sm text-muted">{error}</p>
 
-          <button
+          <Button
+            size="lg"
+            fullWidth
             onClick={() =>
               navigate("/login", {
                 replace: true,
               })
             }
-            className="w-full bg-[#b67031] text-white py-3 rounded-xl font-bold"
           >
             Back to Sign In
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f7efe4] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-8 h-8 border-2 border-[#b67031]/30 border-t-[#b67031] rounded-full animate-spin mx-auto mb-4" />
-
-        <p className="text-sm text-[#7d6651]">Signing you in securely...</p>
+    <div className="flex min-h-screen items-center justify-center bg-surface px-4">
+      <div className="flex flex-col items-center gap-4 text-center" role="status">
+        <img src="/brand/zortech-icon.svg" alt="" className="h-12 w-12" />
+        <Spinner size={28} tone="brand" />
+        <p className="text-sm text-muted">Signing you in securely...</p>
       </div>
     </div>
   );

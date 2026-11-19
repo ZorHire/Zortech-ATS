@@ -76,6 +76,13 @@
   .zh-card {
     @apply rounded-xl border border-line bg-white shadow-card;
   }
+
+  /* Absolutely positioned children of a horizontal scroller (e.g. sr-only
+     checkbox labels in wide tables) must be contained by it; otherwise they
+     escape and make the whole page scroll sideways. */
+  .overflow-x-auto {
+    position: relative;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,7 +15,6 @@ import {
   Users,
   Tag,
 } from "lucide-react";
-import Header from "../components/layout/Header";
 import { useLazySearchCandidatesQuery, buildSearchQueryString } from "../store/api/candidateApi";
 import type { SearchParams, SearchSort } from "../store/api/candidateApi";
 import { Candidate } from "../types";
@@ -25,21 +24,23 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import EmailToast from "../components/ui/EmailToast";
 import AddToPipelineModal from "../components/resume-search/AddToPipelineModal";
 import BulkEmailModal from "../components/resume-search/BulkEmailModal";
+import { Badge, Button, EmptyState, ErrorState, PageHeader, TableSkeleton } from "../components/ui";
+import type { BadgeTone } from "../components/ui";
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20;
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/v1";
 
-const SOURCE_BADGE: Record<string, string> = {
-  linkedin: "bg-blue-50 text-blue-700",
-  indeed: "bg-blue-50 text-blue-600",
-  naukri: "bg-orange-50 text-orange-700",
-  vendor: "bg-teal-50 text-teal-700",
-  referral: "bg-green-50 text-green-700",
-  direct: "bg-gray-100 text-gray-600",
-  other: "bg-gray-100 text-gray-600",
-  monster: "bg-purple-50 text-purple-700",
+const SOURCE_TONE: Record<string, BadgeTone> = {
+  linkedin: "navy",
+  indeed: "navy",
+  naukri: "brand",
+  vendor: "info",
+  referral: "success",
+  direct: "neutral",
+  other: "neutral",
+  monster: "info",
 };
 
 // Option labels must match the keys handled by the backend search filters.
@@ -58,20 +59,25 @@ const SORT_OPTIONS: { value: SearchSort; label: string }[] = [
   { value: "experience", label: "Sort by: Experience" },
 ];
 
-function matchColor(score: number) {
-  if (score >= 88) return { ring: "ring-emerald-500", bg: "bg-emerald-500", text: "text-emerald-700", badge: "bg-emerald-50 text-emerald-700" };
-  if (score >= 75) return { ring: "ring-blue-500", bg: "bg-blue-500", text: "text-blue-700", badge: "bg-blue-50 text-blue-700" };
-  if (score >= 60) return { ring: "ring-amber-500", bg: "bg-amber-500", text: "text-amber-700", badge: "bg-amber-50 text-amber-700" };
-  return { ring: "ring-red-400", bg: "bg-red-400", text: "text-red-600", badge: "bg-red-50 text-red-600" };
+function matchTone(score: number): BadgeTone {
+  if (score >= 88) return "success";
+  if (score >= 75) return "navy";
+  if (score >= 60) return "warning";
+  return "danger";
 }
 
 function initials(c: Candidate) {
   return `${c.first_name.charAt(0)}${c.last_name.charAt(0)}`.toUpperCase();
 }
 
+// Brand-palette avatar tints (text colour chosen for contrast on each).
 const AVATAR_COLORS = [
-  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500",
-  "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500",
+  "bg-navy-600 text-white",
+  "bg-navy-100 text-navy-800",
+  "bg-brand-100 text-brand-800",
+  "bg-navy-800 text-white",
+  "bg-success-50 text-success-700",
+  "bg-brand-500 text-ink",
 ];
 function avatarColor(name: string) {
   let h = 0;
@@ -82,6 +88,21 @@ function avatarColor(name: string) {
 function errorMessage(err: unknown, fallback: string): string {
   const e = err as { data?: { message?: string }; error?: string; message?: string } | undefined;
   return e?.data?.message ?? e?.error ?? e?.message ?? fallback;
+}
+
+function SkillChips({ skills }: { skills: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {skills.slice(0, 3).map((s) => (
+        <span key={s} className="rounded-md bg-surface-sunken px-1.5 py-0.5 text-xs text-ink-soft">
+          {s}
+        </span>
+      ))}
+      {skills.length > 3 && (
+        <span className="rounded-md bg-surface-sunken px-1.5 py-0.5 text-xs text-muted">+{skills.length - 3}</span>
+      )}
+    </div>
+  );
 }
 
 // ─── Top Match Card ───────────────────────────────────────────────────────────
@@ -95,73 +116,48 @@ function TopMatchCard({
   score: number;
   onAddToPipeline: (c: Candidate) => void;
 }) {
-  const mc = matchColor(score);
   const color = avatarColor(candidate.first_name + candidate.last_name);
 
   return (
-    <div className="flex-shrink-0 w-56 bg-white border border-gray-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-blue-100 transition-all cursor-pointer group">
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
-          <span className="text-xs font-bold text-white">{initials(candidate)}</span>
+    <div className="zh-card group flex w-56 flex-shrink-0 flex-col p-4 transition hover:border-line-strong hover:shadow-md">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${color}`}>
+          <span className="text-xs font-semibold">{initials(candidate)}</span>
         </div>
-        <span className={`text-xs font-bold px-2 py-1 rounded-full ${mc.badge}`}>{score}% Match</span>
+        <Badge tone={matchTone(score)}>{score}% match</Badge>
       </div>
-      <p className="font-semibold text-gray-900 text-sm leading-tight truncate">
+      <p className="truncate text-sm font-semibold leading-tight text-ink">
         {candidate.first_name} {candidate.last_name}
       </p>
-      <p className="text-xs text-gray-500 truncate mt-0.5">{candidate.current_title}</p>
-      <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-        <span className="flex items-center gap-0.5"><Clock size={10} />{candidate.experience_years} Yrs</span>
+      <p className="mt-0.5 truncate text-xs text-muted">{candidate.current_title}</p>
+      <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+        <span className="flex items-center gap-1">
+          <Clock size={12} aria-hidden="true" />
+          {candidate.experience_years} yrs
+        </span>
         {candidate.current_location && (
-          <span className="flex items-center gap-0.5"><MapPin size={10} />{candidate.current_location}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            <MapPin size={12} aria-hidden="true" />
+            <span className="truncate">{candidate.current_location}</span>
+          </span>
         )}
       </div>
-      <div className="flex flex-wrap gap-1 mt-2">
-        {candidate.skills.slice(0, 3).map((s) => (
-          <span key={s} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{s}</span>
-        ))}
-        {candidate.skills.length > 3 && (
-          <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">+{candidate.skills.length - 3}</span>
-        )}
+      <div className="mt-2">
+        <SkillChips skills={candidate.skills} />
       </div>
-      <button
-        onClick={() => onAddToPipeline(candidate)}
-        className="w-full mt-3 text-xs py-1.5 bg-blue-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-medium hover:bg-blue-700"
-      >
-        Add to Pipeline
-      </button>
+      <div className="mt-auto pt-3">
+        <Button
+          size="sm"
+          variant="secondary"
+          fullWidth
+          className="lg:opacity-0 lg:transition-opacity lg:group-focus-within:opacity-100 lg:group-hover:opacity-100"
+          icon={<BookmarkPlus size={14} />}
+          onClick={() => onAddToPipeline(candidate)}
+        >
+          Add to pipeline
+        </Button>
+      </div>
     </div>
-  );
-}
-
-// ─── Skeleton rows ────────────────────────────────────────────────────────────
-
-function SkeletonRow() {
-  return (
-    <tr className="animate-pulse border-b border-gray-50">
-      <td className="px-4 py-3.5 w-10"><div className="w-4 h-4 bg-gray-200 rounded" /></td>
-      <td className="px-4 py-3.5">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gray-200 rounded-full" />
-          <div>
-            <div className="h-3.5 bg-gray-200 rounded w-28 mb-1.5" />
-            <div className="h-2.5 bg-gray-200 rounded w-20" />
-          </div>
-        </div>
-      </td>
-      <td className="px-4 py-3.5"><div className="h-3 bg-gray-200 rounded w-14" /></td>
-      <td className="px-4 py-3.5"><div className="h-3 bg-gray-200 rounded w-28" /></td>
-      <td className="px-4 py-3.5">
-        <div className="flex gap-1">
-          <div className="h-5 bg-gray-200 rounded w-12" />
-          <div className="h-5 bg-gray-200 rounded w-16" />
-        </div>
-      </td>
-      <td className="px-4 py-3.5"><div className="h-3 bg-gray-200 rounded w-16" /></td>
-      <td className="px-4 py-3.5"><div className="h-5 bg-gray-200 rounded w-12" /></td>
-      <td className="px-4 py-3.5"><div className="h-3 bg-gray-200 rounded w-16" /></td>
-      <td className="px-4 py-3.5 w-20"><div className="h-6 bg-gray-200 rounded w-16" /></td>
-    </tr>
   );
 }
 
@@ -186,107 +182,87 @@ function CandidateRow({
   emailSending: boolean;
   updatedAt?: string;
 }) {
-  const mc = matchColor(score);
   const color = avatarColor(candidate.first_name + candidate.last_name);
+  const name = `${candidate.first_name} ${candidate.last_name}`;
   const dateStr = updatedAt
     ? new Date(updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : "—";
 
   return (
-    <tr className={`border-b border-gray-50 transition-colors hover:bg-gray-50/60 ${isSelected ? "bg-blue-50/40" : ""}`}>
-      <td className="px-4 py-3.5 w-10">
+    <tr className={`border-b border-line transition-colors last:border-0 hover:bg-surface ${isSelected ? "bg-navy-50/60" : ""}`}>
+      <td className="w-10 px-4 py-3">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggle}
-          className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+          aria-label={`Select ${name}`}
+          className="h-4 w-4 cursor-pointer rounded border-line-strong text-navy-600"
         />
       </td>
 
-      <td className="px-4 py-3.5 min-w-[200px]">
+      <td className="min-w-[200px] px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
-            <span className="text-xs font-bold text-white">{initials(candidate)}</span>
+          <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${color}`}>
+            <span className="text-xs font-semibold">{initials(candidate)}</span>
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">
-              {candidate.first_name} {candidate.last_name}
-            </p>
-            <p className="text-xs text-gray-400 truncate">{candidate.email}</p>
+            <p className="truncate text-sm font-semibold text-ink">{name}</p>
+            <p className="truncate text-xs text-muted">{candidate.email}</p>
           </div>
         </div>
       </td>
 
-      <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">
-        {candidate.experience_years ? `${candidate.experience_years} Years` : "—"}
+      <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-soft">
+        {candidate.experience_years ? `${candidate.experience_years} years` : "—"}
       </td>
 
-      <td className="px-4 py-3.5 min-w-[160px]">
-        <p className="text-sm text-gray-700 font-medium truncate">{candidate.current_title || "—"}</p>
-        {candidate.current_company && (
-          <p className="text-xs text-gray-400 truncate">{candidate.current_company}</p>
+      <td className="min-w-[160px] px-4 py-3">
+        <p className="truncate text-sm font-medium text-ink">{candidate.current_title || "—"}</p>
+        {candidate.current_company && <p className="truncate text-xs text-muted">{candidate.current_company}</p>}
+      </td>
+
+      <td className="min-w-[180px] px-4 py-3">
+        <SkillChips skills={candidate.skills} />
+      </td>
+
+      <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-soft">{candidate.current_location || "—"}</td>
+
+      <td className="px-4 py-3">
+        {candidate.source ? (
+          <Badge tone={SOURCE_TONE[candidate.source] ?? "neutral"}>
+            {candidate.source.charAt(0).toUpperCase() + candidate.source.slice(1)}
+          </Badge>
+        ) : (
+          <span className="text-sm text-muted">—</span>
         )}
       </td>
 
-      <td className="px-4 py-3.5 min-w-[180px]">
-        <div className="flex flex-wrap gap-1">
-          {candidate.skills.slice(0, 3).map((s) => (
-            <span key={s} className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">{s}</span>
-          ))}
-          {candidate.skills.length > 3 && (
-            <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md">+{candidate.skills.length - 3}</span>
-          )}
-        </div>
+      <td className="px-4 py-3">
+        <Badge tone={matchTone(score)}>{score}%</Badge>
       </td>
 
-      <td className="px-4 py-3.5 text-sm text-gray-500 whitespace-nowrap">
-        {candidate.current_location || "—"}
-      </td>
+      <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">{dateStr}</td>
 
-      <td className="px-4 py-3.5">
-        <span className={`text-xs px-2 py-1 rounded-full font-medium ${SOURCE_BADGE[candidate.source] || "bg-gray-100 text-gray-600"}`}>
-          {candidate.source ? candidate.source.charAt(0).toUpperCase() + candidate.source.slice(1) : "—"}
-        </span>
-      </td>
-
-      <td className="px-4 py-3.5">
-        <div className="flex items-center gap-1.5">
-          <div className="relative w-8 h-8">
-            <svg viewBox="0 0 32 32" className="w-8 h-8 -rotate-90">
-              <circle cx="16" cy="16" r="13" fill="none" stroke="#f3f4f6" strokeWidth="3" />
-              <circle
-                cx="16" cy="16" r="13" fill="none"
-                stroke={score >= 88 ? "#10b981" : score >= 75 ? "#3b82f6" : score >= 60 ? "#f59e0b" : "#ef4444"}
-                strokeWidth="3"
-                strokeDasharray={`${(score / 100) * 82} 82`}
-                strokeLinecap="round"
-              />
-            </svg>
-            <span className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${mc.text}`}>
-              {score}%
-            </span>
-          </div>
-        </div>
-      </td>
-
-      <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">{dateStr}</td>
-
-      <td className="px-4 py-3.5">
-        <div className="flex items-center gap-1.5 justify-end">
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-end gap-1">
           <button
+            type="button"
             onClick={() => onSendEmail(candidate)}
             disabled={emailSending}
             title="Send email"
-            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            aria-label={`Send email to ${name}`}
+            className="rounded-lg p-2 text-muted transition-colors hover:bg-navy-50 hover:text-navy-600 disabled:opacity-50"
           >
-            <Mail size={14} />
+            <Mail size={16} />
           </button>
           <button
+            type="button"
             onClick={() => onAddToPipeline(candidate)}
-            title="Add to Pipeline"
-            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+            title="Add to pipeline"
+            aria-label={`Add ${name} to pipeline`}
+            className="rounded-lg p-2 text-muted transition-colors hover:bg-navy-50 hover:text-navy-600"
           >
-            <BookmarkPlus size={14} />
+            <BookmarkPlus size={16} />
           </button>
         </div>
       </td>
@@ -297,12 +273,14 @@ function CandidateRow({
 // ─── SelectDropdown ───────────────────────────────────────────────────────────
 
 function SelectDropdown({
+  id,
   value,
   options,
   onChange,
   placeholder,
   clearable,
 }: {
+  id?: string;
   value: string;
   options: string[];
   onChange: (v: string) => void;
@@ -313,22 +291,27 @@ function SelectDropdown({
   return (
     <div className="relative flex items-center">
       <select
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`appearance-none pl-3 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white transition-colors ${hasValue ? "border-blue-300 text-blue-700 bg-blue-50" : "border-gray-200 text-gray-700"}`}
+        className={`zh-input appearance-none py-2 pr-9 ${hasValue ? "border-navy-300 bg-navy-50 text-navy-700" : ""}`}
       >
         {placeholder && <option value="">{placeholder}</option>}
         {options.map((o) => (
-          <option key={o} value={o}>{o}</option>
+          <option key={o} value={o}>
+            {o}
+          </option>
         ))}
       </select>
-      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
       {clearable && hasValue && (
         <button
+          type="button"
           onClick={() => onChange(options[0])}
-          className="absolute right-7 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600"
+          aria-label="Clear"
+          className="absolute right-8 top-1/2 -translate-y-1/2 rounded p-0.5 text-navy-400 hover:text-navy-700"
         >
-          <X size={10} />
+          <X size={12} />
         </button>
       )}
     </div>
@@ -338,9 +321,11 @@ function SelectDropdown({
 // ─── SkillsTagInput ───────────────────────────────────────────────────────────
 
 function SkillsTagInput({
+  id,
   skills,
   onChange,
 }: {
+  id?: string;
   skills: string[];
   onChange: (s: string[]) => void;
 }) {
@@ -351,22 +336,33 @@ function SkillsTagInput({
     setInput("");
   };
   return (
-    <div className="flex items-center gap-1.5 flex-wrap border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white min-w-[180px] focus-within:ring-2 focus-within:ring-blue-500">
+    <div className="flex min-h-[2.5rem] w-full flex-wrap items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 focus-within:border-navy-600 focus-within:ring-[3px] focus-within:ring-navy-600/20">
       {skills.map((s) => (
-        <span key={s} className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
+        <span key={s} className="flex items-center gap-1 rounded-md bg-navy-50 px-2 py-0.5 text-xs text-navy-700">
           {s}
-          <button onClick={() => onChange(skills.filter((x) => x !== s))} className="hover:text-blue-900"><X size={10} /></button>
+          <button
+            type="button"
+            onClick={() => onChange(skills.filter((x) => x !== s))}
+            aria-label={`Remove ${s}`}
+            className="hover:text-navy-900"
+          >
+            <X size={12} />
+          </button>
         </span>
       ))}
       <input
+        id={id}
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addSkill(input); }
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            addSkill(input);
+          }
           if (e.key === "Backspace" && !input && skills.length > 0) onChange(skills.slice(0, -1));
         }}
         placeholder={skills.length === 0 ? "Add skills…" : ""}
-        className="text-sm flex-1 min-w-[80px] outline-none bg-transparent placeholder-gray-400"
+        className="min-w-[80px] flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted/70 focus-visible:shadow-none"
       />
     </div>
   );
@@ -590,46 +586,42 @@ export default function ResumeSearchPage() {
   const loading = status === "loading";
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
-        title="Resume Search"
+    <>
+      <PageHeader
+        title="Resume search"
         subtitle="Search across your entire candidate database"
         actions={
           selectedCandidates.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">{selectedCandidates.length} selected</span>
-              <button
-                onClick={() => setEmailCandidates(selectedCandidates)}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 font-medium"
-              >
-                <Mail size={13} /> Email
-              </button>
-              <button
-                onClick={() => setWizardCandidates(selectedCandidates)}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
-              >
-                <BookmarkPlus size={13} /> Add to Pipeline
-              </button>
-            </div>
+            <>
+              <span className="text-sm text-muted">{selectedCandidates.length} selected</span>
+              <Button variant="secondary" icon={<Mail size={16} />} onClick={() => setEmailCandidates(selectedCandidates)}>
+                Email
+              </Button>
+              <Button icon={<BookmarkPlus size={16} />} onClick={() => setWizardCandidates(selectedCandidates)}>
+                Add to pipeline
+              </Button>
+            </>
           ) : null
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         {/* ── Search Panel ── */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-          <p className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Search size={16} className="text-blue-600" />
-            Search Candidates
-          </p>
+        <section className="zh-card p-4 sm:p-5" aria-labelledby="resume-search-heading">
+          <h2 id="resume-search-heading" className="mb-4 flex items-center gap-2 text-base font-semibold text-ink">
+            <Search size={16} className="text-navy-600" aria-hidden="true" />
+            Search candidates
+          </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <div className="lg:col-span-1">
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Keywords</label>
+          <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label htmlFor="rs-keywords" className="zh-label">
+                Keywords
+              </label>
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
                 <input
+                  id="rs-keywords"
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
@@ -637,41 +629,47 @@ export default function ResumeSearchPage() {
                     if (e.key === "Enter" && !loading && (query.trim() || hasActiveFilters)) handleSearch();
                   }}
                   placeholder="React OR Vue AND TypeScript"
-                  className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="zh-input py-2 pl-9"
                 />
               </div>
             </div>
 
-            <div className="lg:col-span-1">
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">
-                <span className="flex items-center gap-1"><Tag size={11} />Skills</span>
+            <div>
+              <label htmlFor="rs-skills" className="zh-label flex items-center gap-1">
+                <Tag size={12} aria-hidden="true" />
+                Skills
               </label>
-              <SkillsTagInput
-                skills={filters.skills}
-                onChange={(s) => setFilter("skills", s)}
-              />
+              <SkillsTagInput id="rs-skills" skills={filters.skills} onChange={(s) => setFilter("skills", s)} />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Current Role</label>
+              <label htmlFor="rs-role" className="zh-label">
+                Current role
+              </label>
               <div className="relative">
                 <select
+                  id="rs-role"
                   value={filters.role}
                   onChange={(e) => setFilter("role", e.target.value)}
-                  className="w-full appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
+                  className="zh-input appearance-none py-2 pr-9"
                 >
                   <option value="">Any role</option>
                   {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>{r}</option>
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
                   ))}
                 </select>
-                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Experience</label>
+              <label htmlFor="rs-experience" className="zh-label">
+                Experience
+              </label>
               <SelectDropdown
+                id="rs-experience"
                 value={filters.experience}
                 options={EXPERIENCE_OPTIONS}
                 onChange={(v) => setFilter("experience", v)}
@@ -679,10 +677,13 @@ export default function ResumeSearchPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Location</label>
+              <label htmlFor="rs-location" className="zh-label">
+                Location
+              </label>
               <SelectDropdown
+                id="rs-location"
                 value={filters.location}
                 options={LOCATION_OPTIONS}
                 onChange={(v) => setFilter("location", v)}
@@ -690,16 +691,22 @@ export default function ResumeSearchPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Notice Period</label>
+              <label htmlFor="rs-notice" className="zh-label">
+                Notice period
+              </label>
               <SelectDropdown
+                id="rs-notice"
                 value={filters.noticePeriod}
                 options={NOTICE_OPTIONS}
                 onChange={(v) => setFilter("noticePeriod", v)}
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Source</label>
+              <label htmlFor="rs-source" className="zh-label">
+                Source
+              </label>
               <SelectDropdown
+                id="rs-source"
                 value={filters.source}
                 options={SOURCE_OPTIONS}
                 onChange={(v) => setFilter("source", v)}
@@ -707,130 +714,109 @@ export default function ResumeSearchPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 flex-wrap">
-            <button
-              onClick={handleClearAll}
-              className="text-sm px-4 py-2 text-gray-500 hover:text-gray-700 font-medium"
-            >
-              Clear All
-            </button>
-            <button
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <Button variant="ghost" onClick={handleClearAll}>
+              Clear all
+            </Button>
+            <Button
               onClick={handleSearch}
-              disabled={loading || (!query.trim() && !hasActiveFilters)}
-              className="flex items-center gap-2 bg-[#2a1f14] text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-[#3d2e1e] transition-colors disabled:opacity-50"
+              disabled={!query.trim() && !hasActiveFilters}
+              loading={loading}
+              icon={<Search size={16} />}
             >
-              {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-              Search Candidates
-            </button>
+              Search candidates
+            </Button>
           </div>
-        </div>
+        </section>
 
         {/* ── Skeleton (first load of a new search only) ── */}
-        {loading && (
-          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <div className="h-4 bg-gray-200 rounded w-40 animate-pulse" />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <tbody>{[1, 2, 3, 4, 5].map((i) => <SkeletonRow key={i} />)}</tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        {loading && <TableSkeleton rows={5} columns={6} />}
 
         {/* ── Error ── */}
         {status === "error" && (
-          <div className="flex flex-col items-center py-12 gap-4">
-            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-              <AlertCircle size={24} className="text-red-500" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-900">Search failed</p>
-              <p className="text-xs text-gray-500 mt-1">{searchError}</p>
-            </div>
-            <button
-              onClick={() => activeSearch && runSearch(activeSearch)}
-              className="flex items-center gap-2 text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <RefreshCw size={14} /> Retry
-            </button>
+          <div className="zh-card">
+            <ErrorState
+              title="Search failed"
+              message={searchError ?? undefined}
+              onRetry={activeSearch ? () => runSearch(activeSearch) : undefined}
+            />
           </div>
         )}
 
         {/* ── Empty pre-search state ── */}
         {status === "idle" && (
-          <div className="flex flex-col items-center py-16 gap-4 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center">
-              <Search size={28} className="text-blue-500" />
-            </div>
-            <div>
-              <p className="text-base font-semibold text-gray-700">Search your candidate database</p>
-              <p className="text-sm text-gray-400 mt-1">Use keywords, skills, role, or location filters to find the best matches</p>
-            </div>
-            <div className="flex flex-wrap gap-2 justify-center mt-2">
-              {["React TypeScript Node.js", "Python Machine Learning", "Java Spring Boot", "DevOps Kubernetes AWS"].map((q) => (
-                <button
-                  key={q}
-                  onClick={() => handleQuickSearch(q)}
-                  className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-full hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
+          <div className="zh-card">
+            <EmptyState
+              icon={<Search size={22} aria-hidden="true" />}
+              title="Search your candidate database"
+              description="Use keywords, skills, role, or location filters to find the best matches."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  {["React TypeScript Node.js", "Python Machine Learning", "Java Spring Boot", "DevOps Kubernetes AWS"].map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => handleQuickSearch(q)}
+                      className="rounded-full border border-line px-3 py-1.5 text-xs text-ink-soft transition-colors hover:border-navy-300 hover:bg-navy-50 hover:text-navy-700"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              }
+            />
           </div>
         )}
 
         {/* ── Results ── */}
         {status === "ready" && (
           <>
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center">
-                    <Star size={12} className="text-amber-600 fill-amber-600" />
-                  </div>
-                  <p className="text-base font-bold text-gray-900">
-                    {total.toLocaleString("en-IN")} Candidate{total === 1 ? "" : "s"} Found
-                  </p>
-                </div>
-                <p className="text-xs text-gray-400 mt-0.5 ml-8">Showing results for your search</p>
+                <h2 className="text-lg font-semibold text-ink">
+                  {total.toLocaleString("en-IN")} candidate{total === 1 ? "" : "s"} found
+                </h2>
+                <p className="mt-0.5 text-sm text-muted">Showing results for your search</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={handleExport}
-                  disabled={exporting || total === 0}
-                  className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium disabled:opacity-50"
+                  disabled={total === 0}
+                  loading={exporting}
+                  icon={<Download size={14} />}
                 >
-                  {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Export CSV
-                </button>
+                  Export CSV
+                </Button>
                 <div className="relative">
                   <select
                     value={sort}
                     onChange={(e) => handleSortChange(e.target.value as SearchSort)}
                     aria-label="Sort results"
-                    className="appearance-none text-xs pl-2 pr-7 py-2 border border-gray-200 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                    className="h-8 appearance-none rounded-md border border-line bg-white pl-3 pr-8 text-xs font-medium text-ink-soft"
                   >
                     {SORT_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
                     ))}
                   </select>
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <ChevronDown size={12} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
                 </div>
               </div>
             </div>
 
             {topMatches.length > 0 && (
-              <div>
+              <section aria-labelledby="rs-top-matches">
                 <div className="mb-3">
-                  <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
-                    <Star size={14} className="text-amber-500 fill-amber-500" />
-                    Top Matches
-                  </p>
-                  <p className="text-xs text-gray-400">Best matched candidates based on your search criteria</p>
+                  <h3 id="rs-top-matches" className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                    <Star size={14} className="fill-brand-500 text-brand-500" aria-hidden="true" />
+                    Top matches
+                  </h3>
+                  <p className="text-xs text-muted">Best matched candidates based on your search criteria</p>
                 </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin">
+                <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
                   {topMatches.map(({ candidate, score }) => (
                     <TopMatchCard
                       key={candidate.id}
@@ -840,31 +826,30 @@ export default function ResumeSearchPage() {
                     />
                   ))}
                 </div>
-              </div>
+              </section>
             )}
 
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-                <p className="text-sm font-semibold text-gray-900">All Candidates</p>
-                {selectedIds.size > 0 && (
-                  <p className="text-xs text-blue-600 font-medium">{selectedIds.size} selected</p>
-                )}
+            <section className="zh-card overflow-hidden" aria-labelledby="rs-all-candidates">
+              <div className="flex items-center justify-between border-b border-line px-4 py-3 sm:px-5">
+                <h3 id="rs-all-candidates" className="text-sm font-semibold text-ink">
+                  All candidates
+                </h3>
+                {selectedIds.size > 0 && <p className="text-xs font-medium text-navy-600">{selectedIds.size} selected</p>}
               </div>
 
               {results.length === 0 ? (
-                <div className="flex flex-col items-center py-16 gap-3">
-                  <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
-                    <Users size={24} className="text-gray-400" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700">No results found</p>
-                  <p className="text-xs text-gray-400">Try different keywords or adjust filters</p>
-                </div>
+                <EmptyState
+                  icon={<Users size={22} aria-hidden="true" />}
+                  title="No results found"
+                  description="Try different keywords or adjust filters."
+                />
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-50/60 border-b border-gray-100">
-                        <th className="px-4 py-3 w-10">
+                  <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+                    <caption className="sr-only">Search results</caption>
+                    <thead className="bg-surface">
+                      <tr className="border-b border-line">
+                        <th scope="col" className="w-10 px-4 py-2.5">
                           <input
                             type="checkbox"
                             aria-label="Select all loaded candidates"
@@ -873,14 +858,17 @@ export default function ResumeSearchPage() {
                               if (el) el.indeterminate = selectedIds.size > 0 && !allSelected;
                             }}
                             onChange={toggleSelectAll}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                            className="h-4 w-4 cursor-pointer rounded border-line-strong text-navy-600"
                           />
                         </th>
-                        {["CANDIDATE", "EXPERIENCE", "CURRENT ROLE", "SKILLS", "LOCATION", "SOURCE", "MATCH", "UPDATED ON", "ACTIONS"].map((h) => (
-                          <th key={h} className="px-4 py-3 text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                        {["Candidate", "Experience", "Current role", "Skills", "Location", "Source", "Match", "Updated on"].map((h) => (
+                          <th key={h} scope="col" className="whitespace-nowrap px-4 py-2.5 text-xs font-medium text-muted">
                             {h}
                           </th>
                         ))}
+                        <th scope="col" className="px-4 py-2.5 text-right text-xs font-medium text-muted">
+                          <span className="sr-only">Actions</span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -904,37 +892,33 @@ export default function ResumeSearchPage() {
 
               <div ref={sentinelRef} className="h-1" />
               {loadingMore && (
-                <div className="flex items-center justify-center gap-2 py-4 text-xs text-gray-500">
-                  <Loader2 size={14} className="animate-spin text-gray-400" /> Loading more…
+                <div className="flex items-center justify-center gap-2 py-4 text-xs text-muted" role="status">
+                  <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Loading more…
                 </div>
               )}
               {loadMoreError && !loadingMore && (
-                <div className="flex items-center justify-center gap-3 py-4 text-xs">
-                  <span className="text-red-600 flex items-center gap-1"><AlertCircle size={13} /> {loadMoreError}</span>
-                  <button
-                    onClick={loadMore}
-                    className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
-                  >
-                    <RefreshCw size={12} /> Retry
-                  </button>
+                <div className="flex flex-wrap items-center justify-center gap-3 px-4 py-4 text-xs">
+                  <span className="flex items-center gap-1 text-danger-600" role="alert">
+                    <AlertCircle size={14} aria-hidden="true" /> {loadMoreError}
+                  </span>
+                  <Button variant="secondary" size="sm" onClick={loadMore} icon={<RefreshCw size={12} />}>
+                    Retry
+                  </Button>
                 </div>
               )}
               {results.length > 0 && (
-                <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
-                  <p className="text-xs text-gray-500">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-4 py-3 sm:px-5">
+                  <p className="text-xs text-muted">
                     Showing {results.length.toLocaleString("en-IN")} of {total.toLocaleString("en-IN")} candidates
                   </p>
                   {canLoadMore && !loadingMore && !loadMoreError && (
-                    <button
-                      onClick={loadMore}
-                      className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
-                    >
+                    <Button variant="secondary" size="sm" onClick={loadMore}>
                       Load more
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
-            </div>
+            </section>
           </>
         )}
       </div>
@@ -942,10 +926,8 @@ export default function ResumeSearchPage() {
       {wizardCandidates && (
         <AddToPipelineModal candidates={wizardCandidates} onClose={() => setWizardCandidates(null)} />
       )}
-      {emailCandidates && (
-        <BulkEmailModal candidates={emailCandidates} onClose={() => setEmailCandidates(null)} />
-      )}
+      {emailCandidates && <BulkEmailModal candidates={emailCandidates} onClose={() => setEmailCandidates(null)} />}
       {emailToast && <EmailToast {...emailToast} />}
-    </div>
+    </>
   );
 }

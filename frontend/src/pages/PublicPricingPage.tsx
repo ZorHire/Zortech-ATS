@@ -1,66 +1,45 @@
 import { lazy, Suspense } from "react";
-import { useNavigate } from "react-router-dom";
-import { Briefcase, Loader2, ArrowLeft, LogIn } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { buttonClasses, LoadingBlock } from "../components/ui";
 
 const PricingCards = lazy(
   () => import("../components/subscription/PricingCards"),
 );
 
 export default function PublicPricingPage() {
-  const navigate = useNavigate();
-
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
+    <div className="flex min-h-screen flex-col bg-surface text-ink">
       {/* Top navbar */}
-      <nav className="flex items-center justify-between px-6 py-4 bg-[#1d170f]">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2 text-[#c8a97a] hover:text-[#f0c491] text-sm font-semibold transition-colors"
-        >
-          <ArrowLeft size={16} />
-          Back
-        </button>
+      <header className="border-b border-line bg-white">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <Link to="/" className="flex min-w-0 items-center gap-2 text-sm text-muted hover:text-ink" aria-label="Back to ZorHire home">
+            <ArrowLeft size={16} aria-hidden="true" className="shrink-0" />
+            <img src="/brand/zortech-logo.png" alt="" className="h-6 w-auto" />
+            <span className="hidden border-l border-line pl-2 font-semibold text-navy-700 sm:inline">ZorHire</span>
+          </Link>
 
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-[#b47b3b] rounded-lg flex items-center justify-center">
-            <Briefcase size={15} className="text-white" />
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <Link to="/login" className="rounded-lg px-2 py-2 text-sm font-semibold text-navy-600 hover:text-navy-800 sm:px-3">
+              Sign in
+            </Link>
+            <Link to="/book-demo" className={buttonClasses("primary", "md", "px-3 sm:px-4")}>
+              Book a demo
+            </Link>
           </div>
-          <span className="font-bold text-[#f6e6d2] text-sm">ZorHire</span>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate("/login")}
-            className="flex items-center gap-1.5 text-sm font-semibold text-[#c8a97a] hover:text-[#f0c491] px-3 py-2 transition-colors"
-          >
-            <LogIn size={14} />
-            Sign in
-          </button>
-          <button
-            onClick={() => navigate("/book-demo")}
-            className="text-sm font-bold text-white bg-[#b47b3b] hover:bg-[#9b5c27] px-4 py-2 rounded-xl transition-all"
-          >
-            Book a demo
-          </button>
-        </div>
-      </nav>
+      </header>
 
       {/* Pricing content */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-10 sm:py-14">
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-24">
-              <Loader2 size={28} className="animate-spin text-[#b47b3b]" />
-            </div>
-          }
-        >
+      <main className="flex-1 px-4 py-10 sm:px-6 sm:py-14 lg:px-10">
+        <Suspense fallback={<LoadingBlock label="Loading plans…" />}>
           <PricingCards publicMode />
         </Suspense>
 
-        <p className="text-center text-xs text-[#9b8064] mt-10 font-medium">
+        <p className="mt-10 text-center text-sm text-muted">
           After subscribing, log in with your ZorTech-provided credentials to access the platform.
         </p>
-      </div>
+      </main>
     </div>
   );
 }

@@ -1,15 +1,14 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import {
   TrendingUp,
   CheckCircle2,
   XCircle,
   Clock,
   Users,
-  Loader2,
   ExternalLink,
   Briefcase,
   MapPin,
-  IndianRupee,
 } from "lucide-react";
 import {
   useGetOfferStatsQuery,
@@ -18,24 +17,21 @@ import {
   type OfferRecord,
   type PlacementRecord,
 } from "../store/api/offersApi";
-import { Link } from "react-router-dom";
+import {
+  DataTable,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  StageBadge,
+  StatCard,
+  Button,
+  buttonClasses,
+} from "../components/ui";
+import type { Column } from "../components/ui";
+import { formatINR } from "../lib/format";
 
 type MainTab = "offers" | "placements";
 type OfferFilter = "all" | "offer_extended" | "offer_accepted" | "offer_rejected";
-
-const STAGE_COLORS: Record<string, string> = {
-  offer_extended: "bg-blue-50 text-blue-700 border-blue-100",
-  offer_accepted: "bg-emerald-50 text-emerald-700 border-emerald-100",
-  offer_rejected: "bg-red-50 text-red-600 border-red-100",
-  joined: "bg-purple-50 text-purple-700 border-purple-100",
-};
-
-const STAGE_LABELS: Record<string, string> = {
-  offer_extended: "Pending",
-  offer_accepted: "Accepted",
-  offer_rejected: "Declined",
-  joined: "Joined",
-};
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", {
@@ -45,346 +41,317 @@ function formatDate(iso: string) {
   });
 }
 
-function formatCTC(val: number | null) {
-  if (val == null) return "—";
-  return `₹${(val / 100000).toFixed(1)}L`;
-}
-
 function daysSince(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
-function OfferRow({ row }: { row: OfferRecord }) {
-  const days = daysSince(row.stage_updated_at);
-  return (
-    <tr className="hover:bg-gray-50/50 transition-colors">
-      <td className="px-5 py-3.5">
-        <p className="font-medium text-gray-900">
-          {row.first_name} {row.last_name}
-        </p>
-        <p className="text-xs text-gray-400">{row.candidate_email}</p>
-        {row.current_title && (
-          <p className="text-xs text-gray-400 mt-0.5">{row.current_title}</p>
-        )}
-      </td>
-      <td className="px-5 py-3.5">
-        <p className="font-medium text-gray-800">{row.job_title}</p>
-        {row.job_location && (
-          <span className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-            <MapPin size={11} />
-            {row.job_location}
+/** Fields shared by offer and placement rows. */
+type Row = OfferRecord | PlacementRecord;
+
+function sharedColumns<T extends Row>(): Column<T>[] {
+  return [
+    {
+      key: "candidate",
+      header: "Candidate",
+      cell: (row) => (
+        <div className="min-w-0">
+          <p className="font-medium text-ink">
+            {row.first_name} {row.last_name}
+          </p>
+          <p className="truncate text-xs text-muted">{row.candidate_email}</p>
+          {row.current_title && <p className="mt-0.5 text-xs text-muted">{row.current_title}</p>}
+        </div>
+      ),
+    },
+    {
+      key: "job",
+      header: "Job",
+      cell: (row) => (
+        <div>
+          <p className="font-medium text-ink">{row.job_title}</p>
+          {row.job_location && (
+            <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
+              <MapPin size={11} aria-hidden="true" />
+              {row.job_location}
+            </span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "client",
+      header: "Client",
+      cell: (row) => row.client_name || <span className="text-muted">—</span>,
+    },
+    {
+      key: "ctc",
+      header: "CTC (current → expected)",
+      className: "whitespace-nowrap",
+      cell: (row) => (
+        <div className="flex items-center gap-2 text-xs">
+          <span title="Current CTC" className="text-ink-soft">
+            {formatINR(row.current_ctc)}
           </span>
-        )}
-      </td>
-      <td className="px-5 py-3.5 text-gray-600 text-sm">
-        {row.client_name || <span className="text-gray-300">—</span>}
-      </td>
-      <td className="px-5 py-3.5">
-        <div className="flex gap-3 text-xs text-gray-600">
-          <span title="Current CTC" className="flex items-center gap-0.5">
-            <IndianRupee size={11} className="text-gray-400" />
-            {formatCTC(row.current_ctc)}
+          <span className="text-line-strong" aria-hidden="true">
+            →
           </span>
-          <span className="text-gray-300">→</span>
-          <span title="Expected CTC" className="flex items-center gap-0.5 text-emerald-700 font-medium">
-            <IndianRupee size={11} />
-            {formatCTC(row.expected_ctc)}
+          <span title="Expected CTC" className="font-medium text-success-700">
+            {formatINR(row.expected_ctc)}
           </span>
         </div>
-      </td>
-      <td className="px-5 py-3.5 text-sm text-gray-500 whitespace-nowrap">
-        {formatDate(row.stage_updated_at)}
-        <p className="text-xs text-gray-400 mt-0.5">{days}d ago</p>
-      </td>
-      <td className="px-5 py-3.5">
-        <span
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${STAGE_COLORS[row.stage]}`}
-        >
-          {STAGE_LABELS[row.stage]}
-        </span>
-      </td>
-      <td className="px-5 py-3.5">
-        <Link
-          to={`/jobs/${row.job_id}`}
-          className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-        >
-          <ExternalLink size={12} />
-          Pipeline
-        </Link>
-      </td>
-    </tr>
-  );
+      ),
+    },
+  ];
 }
 
-function PlacementRow({ row }: { row: PlacementRecord }) {
-  return (
-    <tr className="hover:bg-gray-50/50 transition-colors">
-      <td className="px-5 py-3.5">
-        <p className="font-medium text-gray-900">
-          {row.first_name} {row.last_name}
-        </p>
-        <p className="text-xs text-gray-400">{row.candidate_email}</p>
-        {row.current_title && (
-          <p className="text-xs text-gray-400 mt-0.5">{row.current_title}</p>
-        )}
-      </td>
-      <td className="px-5 py-3.5">
-        <p className="font-medium text-gray-800">{row.job_title}</p>
-        {row.job_location && (
-          <span className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-            <MapPin size={11} />
-            {row.job_location}
-          </span>
-        )}
-      </td>
-      <td className="px-5 py-3.5 text-gray-600 text-sm">
-        {row.client_name || <span className="text-gray-300">—</span>}
-      </td>
-      <td className="px-5 py-3.5">
-        <div className="flex gap-3 text-xs text-gray-600">
-          <span title="Current CTC" className="flex items-center gap-0.5">
-            <IndianRupee size={11} className="text-gray-400" />
-            {formatCTC(row.current_ctc)}
-          </span>
-          <span className="text-gray-300">→</span>
-          <span title="Expected CTC" className="flex items-center gap-0.5 text-emerald-700 font-medium">
-            <IndianRupee size={11} />
-            {formatCTC(row.expected_ctc)}
-          </span>
-        </div>
-      </td>
-      <td className="px-5 py-3.5 text-sm text-gray-500 whitespace-nowrap">
-        {formatDate(row.placement_date)}
-      </td>
-      <td className="px-5 py-3.5">
-        <span
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${STAGE_COLORS[row.stage]}`}
-        >
-          {row.stage === "joined" ? "Joined" : "Accepted"}
-        </span>
-      </td>
-      <td className="px-5 py-3.5">
-        <Link
-          to={`/jobs/${row.job_id}`}
-          className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-        >
-          <ExternalLink size={12} />
-          Pipeline
-        </Link>
-      </td>
-    </tr>
-  );
+function pipelineColumn<T extends Row>(): Column<T> {
+  return {
+    key: "link",
+    header: <span className="sr-only">Open</span>,
+    className: "whitespace-nowrap",
+    cell: (row) => (
+      <Link
+        to={`/jobs/${row.job_id}`}
+        className="flex items-center gap-1 text-xs font-medium text-navy-600 hover:underline"
+      >
+        <ExternalLink size={12} aria-hidden="true" />
+        Pipeline
+      </Link>
+    ),
+  };
 }
+
+const OFFER_COLUMNS: Column<OfferRecord>[] = [
+  ...sharedColumns<OfferRecord>(),
+  {
+    key: "date",
+    header: "Date",
+    className: "whitespace-nowrap",
+    cell: (row) => (
+      <div className="text-ink-soft">
+        {formatDate(row.stage_updated_at)}
+        <p className="mt-0.5 text-xs text-muted">{daysSince(row.stage_updated_at)}d ago</p>
+      </div>
+    ),
+  },
+  { key: "status", header: "Status", cell: (row) => <StageBadge stage={row.stage} /> },
+  pipelineColumn<OfferRecord>(),
+];
+
+const PLACEMENT_COLUMNS: Column<PlacementRecord>[] = [
+  ...sharedColumns<PlacementRecord>(),
+  {
+    key: "date",
+    header: "Placement date",
+    className: "whitespace-nowrap",
+    cell: (row) => <span className="text-ink-soft">{formatDate(row.placement_date)}</span>,
+  },
+  { key: "status", header: "Status", cell: (row) => <StageBadge stage={row.stage} /> },
+  pipelineColumn<PlacementRecord>(),
+];
+
+const OFFER_FILTER_TABS: { key: OfferFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "offer_extended", label: "Pending" },
+  { key: "offer_accepted", label: "Accepted" },
+  { key: "offer_rejected", label: "Declined" },
+];
 
 export default function OffersPage() {
   const [mainTab, setMainTab] = React.useState<MainTab>("offers");
   const [offerFilter, setOfferFilter] = React.useState<OfferFilter>("all");
 
-  const { data: stats, isLoading: statsLoading } = useGetOfferStatsQuery();
-  const { data: offers = [], isLoading: offersLoading } = useGetOffersQuery();
-  const { data: placements = [], isLoading: placementsLoading } = useGetPlacementsQuery();
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsError,
+    error: statsErr,
+    refetch: refetchStats,
+  } = useGetOfferStatsQuery();
+  const {
+    data: offers = [],
+    isLoading: offersLoading,
+    isError: offersIsError,
+    error: offersError,
+    refetch: refetchOffers,
+  } = useGetOffersQuery();
+  const {
+    data: placements = [],
+    isLoading: placementsLoading,
+    isError: placementsIsError,
+    error: placementsError,
+    refetch: refetchPlacements,
+  } = useGetPlacementsQuery();
 
   const filteredOffers =
-    offerFilter === "all"
-      ? offers
-      : offers.filter((o) => o.stage === offerFilter);
+    offerFilter === "all" ? offers : offers.filter((o) => o.stage === offerFilter);
 
-  const OFFER_FILTER_TABS: { key: OfferFilter; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "offer_extended", label: "Pending" },
-    { key: "offer_accepted", label: "Accepted" },
-    { key: "offer_rejected", label: "Declined" },
-  ];
-
-  const TABLE_HEADERS = [
-    "Candidate",
-    "Job",
-    "Client",
-    "CTC",
-    "Date",
-    "Status",
-    "",
-  ];
+  const pipelineAction = (
+    <Link to="/jobs" className={buttonClasses("primary")}>
+      Go to jobs
+    </Link>
+  );
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Offers & Placements</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Track offer letters and successful placements across all jobs
-        </p>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock size={15} className="text-blue-500" />
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pending</p>
+    <>
+      <PageHeader
+        title="Offers & placements"
+        subtitle="Track offer letters and successful placements across all jobs"
+      />
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        {statsError ? (
+          <div className="zh-card">
+            <ErrorState
+              compact
+              title="Couldn't load offer stats"
+              error={statsErr}
+              onRetry={refetchStats}
+            />
           </div>
-          <p className="text-3xl font-bold text-blue-600">
-            {statsLoading ? "—" : (stats?.pending ?? 0)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">awaiting response</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Pending"
+              value={stats?.pending ?? 0}
+              hint="Awaiting response"
+              icon={<Clock size={18} />}
+              tone="navy"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Accepted"
+              value={stats?.accepted ?? 0}
+              hint="Offers accepted"
+              icon={<CheckCircle2 size={18} />}
+              tone="success"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Declined"
+              value={stats?.declined ?? 0}
+              hint="Offers declined"
+              icon={<XCircle size={18} />}
+              tone="danger"
+              loading={statsLoading}
+            />
+            <StatCard
+              label="Placements"
+              value={stats?.placements ?? 0}
+              hint="Candidates joined"
+              icon={<TrendingUp size={18} />}
+              tone="brand"
+              loading={statsLoading}
+            />
+          </div>
+        )}
+
+        <div
+          role="tablist"
+          aria-label="Offers or placements"
+          className="flex w-full gap-1 rounded-lg bg-surface-sunken p-1 sm:w-fit"
+        >
+          {(["offers", "placements"] as MainTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={mainTab === tab}
+              onClick={() => setMainTab(tab)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md px-5 py-1.5 text-sm font-medium transition-colors sm:flex-none ${
+                mainTab === tab ? "bg-white text-ink shadow-sm" : "text-muted hover:text-ink"
+              }`}
+            >
+              {tab === "offers" ? (
+                <Briefcase size={14} aria-hidden="true" />
+              ) : (
+                <Users size={14} aria-hidden="true" />
+              )}
+              {tab === "offers" ? "Offers" : "Placements"}
+            </button>
+          ))}
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle2 size={15} className="text-emerald-500" />
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Accepted</p>
-          </div>
-          <p className="text-3xl font-bold text-emerald-600">
-            {statsLoading ? "—" : (stats?.accepted ?? 0)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">offers accepted</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <XCircle size={15} className="text-red-400" />
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Declined</p>
-          </div>
-          <p className="text-3xl font-bold text-red-500">
-            {statsLoading ? "—" : (stats?.declined ?? 0)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">offers declined</p>
-        </div>
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp size={15} className="text-purple-500" />
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Placements</p>
-          </div>
-          <p className="text-3xl font-bold text-purple-600">
-            {statsLoading ? "—" : (stats?.placements ?? 0)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">candidates joined</p>
-        </div>
-      </div>
 
-      {/* Main Tabs */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        {(["offers", "placements"] as MainTab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setMainTab(tab)}
-            className={`px-5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              mainTab === tab
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {tab === "offers" ? (
-              <span className="flex items-center gap-2">
-                <Briefcase size={14} />
-                Offers
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <Users size={14} />
-                Placements
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Offers Panel */}
-      {mainTab === "offers" && (
-        <>
-          {/* Stage filter sub-tabs */}
-          <div className="flex gap-2">
-            {OFFER_FILTER_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setOfferFilter(tab.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  offerFilter === tab.key
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                {tab.label}
-                <span className="ml-1.5 opacity-60">
-                  {tab.key === "all"
-                    ? offers.length
-                    : offers.filter((o) => o.stage === tab.key).length}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {offersLoading ? (
-              <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
-                <Loader2 size={20} className="animate-spin" />
-                Loading offers…
-              </div>
-            ) : filteredOffers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 gap-2 text-gray-400">
-                <Briefcase size={32} className="opacity-40" />
-                <p className="text-sm">No offers in this view</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/60">
-                    {TABLE_HEADERS.map((h, i) => (
-                      <th
-                        key={i}
-                        className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filteredOffers.map((row) => (
-                    <OfferRow key={row.application_id} row={row} />
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Placements Panel */}
-      {mainTab === "placements" && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {placementsLoading ? (
-            <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
-              <Loader2 size={20} className="animate-spin" />
-              Loading placements…
+        {mainTab === "offers" && (
+          <>
+            <div className="flex flex-wrap gap-2" aria-label="Filter offers by status">
+              {OFFER_FILTER_TABS.map((tab) => {
+                const active = offerFilter === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setOfferFilter(tab.key)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? "border-navy-600 bg-navy-600 text-white"
+                        : "border-line bg-white text-ink-soft hover:border-line-strong"
+                    }`}
+                  >
+                    {tab.label}
+                    <span className="ml-1.5 opacity-70">
+                      {tab.key === "all"
+                        ? offers.length
+                        : offers.filter((o) => o.stage === tab.key).length}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          ) : placements.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-2 text-gray-400">
-              <Users size={32} className="opacity-40" />
-              <p className="text-sm">No placements yet</p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
-                  {TABLE_HEADERS.map((h, i) => (
-                    <th
-                      key={i}
-                      className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {placements.map((row) => (
-                  <PlacementRow key={row.application_id} row={row} />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-    </div>
+
+            <DataTable
+              caption="Offers"
+              columns={OFFER_COLUMNS}
+              rows={offersIsError ? undefined : filteredOffers}
+              rowKey={(r) => r.application_id}
+              loading={offersLoading}
+              error={offersIsError ? offersError : undefined}
+              onRetry={refetchOffers}
+              empty={
+                offers.length === 0 ? (
+                  <EmptyState
+                    icon={<Briefcase size={22} aria-hidden="true" />}
+                    title="No offers yet"
+                    description="Candidates moved to an offer stage in a job pipeline show up here."
+                    action={pipelineAction}
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Briefcase size={22} aria-hidden="true" />}
+                    title="No offers in this view"
+                    action={
+                      <Button variant="secondary" onClick={() => setOfferFilter("all")}>
+                        Show all offers
+                      </Button>
+                    }
+                  />
+                )
+              }
+            />
+          </>
+        )}
+
+        {mainTab === "placements" && (
+          <DataTable
+            caption="Placements"
+            columns={PLACEMENT_COLUMNS}
+            rows={placementsIsError ? undefined : placements}
+            rowKey={(r) => r.application_id}
+            loading={placementsLoading}
+            error={placementsIsError ? placementsError : undefined}
+            onRetry={refetchPlacements}
+            empty={
+              <EmptyState
+                icon={<Users size={22} aria-hidden="true" />}
+                title="No placements yet"
+                description="Accepted offers and joined candidates appear here."
+                action={pipelineAction}
+              />
+            }
+          />
+        )}
+      </div>
+    </>
   );
 }

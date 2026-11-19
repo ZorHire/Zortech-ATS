@@ -1,247 +1,195 @@
 import { useNavigate } from "react-router-dom";
-import {
-  Trophy,
-  ArrowLeft,
-  TrendingUp,
-  CheckCircle2,
-  Award,
-  XCircle,
-  Users,
-} from "lucide-react";
-import Header from "../components/layout/Header";
+import { Trophy, ArrowLeft, TrendingUp, Users, Award, Gauge, CheckCircle2 } from "lucide-react";
 import { useGetVendorLeaderboardQuery } from "../store/api/vendorApi";
-
-const tierConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  preferred: { label: "Preferred", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: Award },
-  standard: { label: "Standard", color: "bg-blue-50 text-blue-700 border-blue-200", icon: CheckCircle2 },
-  blocked: { label: "Blocked", color: "bg-red-100 text-red-600 border-red-200", icon: XCircle },
-};
-
-function ScoreBar({ value, color }: { value: number; color: string }) {
-  return (
-    <div className="flex items-center gap-2 min-w-[100px]">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
-      </div>
-      <span className="text-xs font-semibold text-gray-700 w-8 text-right">{value}%</span>
-    </div>
-  );
-}
+import { Button, PageHeader, StatCard, EmptyState, ErrorState, CardGridSkeleton, TableSkeleton } from "../components/ui";
+import { ScoreBar, TierBadge, VendorAvatar, qualityColor } from "../components/vendors/vendorUi";
 
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1)
     return (
-      <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center shadow-sm">
-        <Trophy size={15} className="text-white" />
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-ink shadow-sm" aria-label="Rank 1">
+        <Trophy size={15} aria-hidden="true" />
       </div>
     );
-  if (rank === 2)
-    return (
-      <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center shadow-sm">
-        <span className="text-xs font-semibold text-gray-700">2</span>
-      </div>
-    );
-  if (rank === 3)
-    return (
-      <div className="w-8 h-8 rounded-full bg-amber-600/70 flex items-center justify-center shadow-sm">
-        <span className="text-xs font-semibold text-white">3</span>
-      </div>
-    );
+  const cls =
+    rank === 2
+      ? "bg-navy-100 text-navy-700"
+      : rank === 3
+        ? "bg-brand-100 text-brand-800"
+        : "bg-surface-sunken text-muted";
   return (
-    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-      <span className="text-xs font-bold text-gray-500">{rank}</span>
+    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold ${cls}`} aria-label={`Rank ${rank}`}>
+      {rank}
     </div>
   );
 }
 
 export default function VendorLeaderboardPage() {
   const navigate = useNavigate();
-  const { data: entries = [], isLoading } = useGetVendorLeaderboardQuery();
+  const { data: entries = [], isLoading, isError, error, refetch, isFetching } = useGetVendorLeaderboardQuery();
 
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
 
-  const statCards = [
-    { label: "Total Vendors", value: entries.length, color: "text-gray-900" },
-    {
-      label: "Avg Quality",
-      value: entries.length
-        ? `${Math.round(entries.reduce((s, e) => s + Number(e.quality_score || 0), 0) / entries.length)}%`
-        : "—",
-      color: "text-amber-600",
-    },
-    {
-      label: "Preferred",
-      value: entries.filter((e) => e.tier === "preferred").length,
-      color: "text-emerald-600",
-    },
-    {
-      label: "Active",
-      value: entries.filter((e) => e.is_active).length,
-      color: "text-blue-600",
-    },
-  ];
+  const avgQuality = entries.length
+    ? `${Math.round(entries.reduce((s, e) => s + Number(e.quality_score || 0), 0) / entries.length)}%`
+    : "—";
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
-        title="Vendor Leaderboard"
-        subtitle="Ranked by quality score — shortlist rate, fill rate, and SLA adherence"
+    <>
+      <PageHeader
+        title="Vendor leaderboard"
+        subtitle="Ranked by quality score: shortlist rate, fill rate and SLA adherence"
+        breadcrumbs={[{ label: "Vendors", to: "/vendors" }, { label: "Leaderboard" }]}
         actions={
-          <button
-            onClick={() => navigate("/vendors")}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <ArrowLeft size={15} />
-            Back to Vendors
-          </button>
+          <Button variant="secondary" icon={<ArrowLeft size={16} />} onClick={() => navigate("/vendors")}>
+            Back to vendors
+          </Button>
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {statCards.map((s) => (
-            <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">{s.label}</p>
-              <p className={`text-2xl font-semibold ${s.color}`}>{s.value}</p>
-            </div>
-          ))}
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+          <StatCard label="Total vendors" value={entries.length} icon={<Users size={18} />} loading={isLoading} />
+          <StatCard label="Avg quality" value={avgQuality} icon={<Gauge size={18} />} tone="brand" loading={isLoading} />
+          <StatCard
+            label="Preferred"
+            value={entries.filter((e) => e.tier === "preferred").length}
+            icon={<Award size={18} />}
+            tone="success"
+            loading={isLoading}
+          />
+          <StatCard
+            label="Active"
+            value={entries.filter((e) => e.is_active).length}
+            icon={<CheckCircle2 size={18} />}
+            loading={isLoading}
+          />
         </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <>
+            <CardGridSkeleton count={3} />
+            <TableSkeleton />
+          </>
+        ) : isError ? (
+          <div className="zh-card">
+            <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
           </div>
         ) : entries.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
-            <Users size={36} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-500 font-semibold">No vendor data yet</p>
-            <p className="text-sm text-gray-400 mt-1">Vendor metrics appear once submissions are made.</p>
+          <div className="zh-card">
+            <EmptyState
+              icon={<Users size={22} aria-hidden="true" />}
+              title="No vendor data yet"
+              description="Vendor metrics appear once submissions are made."
+            />
           </div>
         ) : (
           <>
-            {/* Top 3 podium cards */}
             {top3.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {top3.map((entry) => {
-                  const tier = tierConfig[entry.tier] ?? tierConfig.standard;
-                  const TierIcon = tier.icon;
-                  const scoreColor =
-                    entry.quality_score >= 80
-                      ? "bg-emerald-500"
-                      : entry.quality_score >= 60
-                      ? "bg-amber-500"
-                      : "bg-red-400";
-                  return (
-                    <div
-                      key={entry.id}
-                      className={`relative bg-white rounded-2xl border shadow-sm p-5 ${
-                        entry.rank === 1 ? "border-amber-300 ring-2 ring-amber-200" : "border-gray-100"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <RankBadge rank={entry.rank} />
-                        <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${tier.color}`}>
-                          <TierIcon size={10} />
-                          {tier.label}
-                        </span>
-                      </div>
-                      <div className="mb-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center mb-2">
-                          <span className="text-sm font-bold text-white">{entry.company_name.charAt(0)}</span>
-                        </div>
-                        <p className="font-bold text-gray-900 text-sm">{entry.company_name}</p>
-                        <p className="text-xs text-gray-400">{entry.submission_count} submissions</p>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <span className="flex items-center gap-1"><TrendingUp size={11} />Quality</span>
-                          <span className="font-bold text-gray-800">{entry.quality_score}%</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${entry.quality_score}%` }} />
-                        </div>
-                        <div className="grid grid-cols-3 gap-1 pt-1">
-                          {[
-                            { label: "Shortlist", value: entry.shortlist_rate },
-                            { label: "Fill", value: entry.fill_rate },
-                            { label: "SLA", value: entry.sla_adherence },
-                          ].map((m) => (
-                            <div key={m.label} className="text-center p-1.5 bg-gray-50 rounded-lg">
-                              <p className="text-xs font-bold text-gray-800">{m.value}%</p>
-                              <p className="text-xs text-gray-400">{m.label}</p>
-                            </div>
-                          ))}
-                        </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {top3.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className={`zh-card p-5 ${entry.rank === 1 ? "border-brand-300 ring-2 ring-brand-100" : ""}`}
+                  >
+                    <div className="mb-4 flex items-start justify-between">
+                      <RankBadge rank={entry.rank} />
+                      <TierBadge tier={entry.tier} />
+                    </div>
+                    <div className="mb-4 flex items-center gap-3">
+                      <VendorAvatar name={entry.company_name} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">{entry.company_name}</p>
+                        <p className="text-xs text-muted">{entry.submission_count} submissions</p>
                       </div>
                     </div>
-                  );
-                })}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-muted">
+                        <span className="flex items-center gap-1">
+                          <TrendingUp size={12} aria-hidden="true" />
+                          Quality
+                        </span>
+                        <span className="font-semibold text-ink">{entry.quality_score}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-surface-sunken">
+                        <div
+                          className={`h-full rounded-full ${qualityColor(entry.quality_score)}`}
+                          style={{ width: `${Math.min(100, Math.max(0, entry.quality_score))}%` }}
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5 pt-1">
+                        {[
+                          { label: "Shortlist", value: entry.shortlist_rate },
+                          { label: "Fill", value: entry.fill_rate },
+                          { label: "SLA", value: entry.sla_adherence },
+                        ].map((m) => (
+                          <div key={m.label} className="rounded-lg bg-surface p-1.5 text-center">
+                            <p className="text-xs font-semibold text-ink">{m.value}%</p>
+                            <p className="text-xs text-muted">{m.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {/* Full table for rank 4+ */}
             {rest.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="zh-card overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100">
-                        {["Rank", "Vendor", "Tier", "Submissions", "Shortlist", "Fill Rate", "SLA", "Quality Score"].map((h) => (
-                          <th key={h} className="px-4 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                  <table className="w-full min-w-[860px] border-collapse text-left text-sm">
+                    <caption className="sr-only">Vendors ranked 4 and below</caption>
+                    <thead className="bg-surface">
+                      <tr>
+                        {["Rank", "Vendor", "Tier", "Submissions", "Shortlist", "Fill rate", "SLA", "Quality score"].map((h) => (
+                          <th
+                            key={h}
+                            scope="col"
+                            className="whitespace-nowrap border-b border-line px-4 py-2.5 text-xs font-medium text-muted"
+                          >
                             {h}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {rest.map((entry) => {
-                        const tier = tierConfig[entry.tier] ?? tierConfig.standard;
-                        const TierIcon = tier.icon;
-                        const scoreColor =
-                          entry.quality_score >= 80
-                            ? "bg-emerald-500"
-                            : entry.quality_score >= 60
-                            ? "bg-amber-500"
-                            : "bg-red-400";
-                        return (
-                          <tr key={entry.id} className={`hover:bg-gray-50/60 transition-colors ${!entry.is_active ? "opacity-60" : ""}`}>
-                            <td className="px-4 py-3.5">
-                              <RankBadge rank={entry.rank} />
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center flex-shrink-0">
-                                  <span className="text-xs font-bold text-white">{entry.company_name.charAt(0)}</span>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-900">{entry.company_name}</p>
-                                  <p className="text-xs text-gray-400">{entry.is_active ? "Active" : "Inactive"}</p>
-                                </div>
+                    <tbody>
+                      {rest.map((entry) => (
+                        <tr
+                          key={entry.id}
+                          className={`border-b border-line last:border-0 hover:bg-surface ${!entry.is_active ? "opacity-60" : ""}`}
+                        >
+                          <td className="px-4 py-3">
+                            <RankBadge rank={entry.rank} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              <VendorAvatar name={entry.company_name} size="sm" />
+                              <div className="min-w-0">
+                                <p className="max-w-[200px] truncate font-medium text-ink">{entry.company_name}</p>
+                                <p className="text-xs text-muted">{entry.is_active ? "Active" : "Inactive"}</p>
                               </div>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${tier.color}`}>
-                                <TierIcon size={10} /> {tier.label}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5 text-sm font-bold text-gray-900">{entry.submission_count}</td>
-                            <td className="px-4 py-3.5">
-                              <ScoreBar value={entry.shortlist_rate} color="bg-amber-400" />
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <ScoreBar value={entry.fill_rate} color="bg-blue-400" />
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <ScoreBar value={entry.sla_adherence} color="bg-violet-400" />
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <ScoreBar value={entry.quality_score} color={scoreColor} />
-                            </td>
-                          </tr>
-                        );
-                      })}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <TierBadge tier={entry.tier} />
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-ink">{entry.submission_count}</td>
+                          <td className="px-4 py-3">
+                            <ScoreBar value={entry.shortlist_rate} color="bg-brand-400" />
+                          </td>
+                          <td className="px-4 py-3">
+                            <ScoreBar value={entry.fill_rate} color="bg-navy-400" />
+                          </td>
+                          <td className="px-4 py-3">
+                            <ScoreBar value={entry.sla_adherence} color="bg-navy-600" />
+                          </td>
+                          <td className="px-4 py-3">
+                            <ScoreBar value={entry.quality_score} color={qualityColor(entry.quality_score)} />
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -250,6 +198,6 @@ export default function VendorLeaderboardPage() {
           </>
         )}
       </div>
-    </div>
+    </>
   );
 }

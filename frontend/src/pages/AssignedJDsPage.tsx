@@ -1,14 +1,17 @@
 import { useState } from "react";
-import {
-  ClipboardList, Search, X, Loader2, Users, Building2,
-  ChevronLeft, ChevronRight,
-} from "lucide-react";
-import Header from "../components/layout/Header";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
+import { ClipboardList, Search, X, Loader2, Users, Building2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useAppSelector } from "../hooks/useAppSelector";
+import { useNotify } from "../hooks/useNotify";
 import { selectCurrentUser } from "../store/slices/authSlice";
 import { useGetJobsQuery, useUpdateJobMutation } from "../store/api/jobApi";
 import { useGetUsersQuery } from "../store/api/adminApi";
 import { useGetVendorsQuery } from "../store/api/vendorApi";
+import { getErrorMessage } from "../lib/format";
+import { PageHeader, StatCard, DataTable, EmptyState, Button, buttonClasses } from "../components/ui";
+import type { Column } from "../components/ui";
+import { JobStatusBadge } from "../components/jobs/jobBadges";
 
 interface AssignedJob {
   id: string;
@@ -23,21 +26,37 @@ interface VendorInfo { id: string; company_name: string; }
 
 const PAGE_SIZE = 15;
 
-const statusConfig: Record<string, string> = {
-  active: "bg-emerald-50 text-emerald-700",
-  draft: "bg-gray-100 text-gray-600",
-  pending_review: "bg-amber-50 text-amber-700",
-  on_hold: "bg-slate-100 text-slate-600",
-  closed_filled: "bg-blue-50 text-blue-700",
-  closed_cancelled: "bg-red-50 text-red-600",
-};
-
-function statusLabel(s: string) {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function AssignmentChip({
+  icon,
+  label,
+  removing,
+  onRemove,
+}: {
+  icon: ReactNode;
+  label: string;
+  removing: boolean;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-line bg-surface py-0.5 pl-2.5 pr-1 text-xs font-medium text-ink-soft">
+      {icon}
+      {label}
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        aria-label={`Remove ${label}`}
+        className="ml-0.5 rounded-full p-0.5 text-muted transition-colors hover:bg-surface-sunken hover:text-danger-600 disabled:opacity-40"
+      >
+        {removing ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+      </button>
+    </span>
+  );
 }
 
 export default function AssignedJDsPage() {
   const profile = useAppSelector(selectCurrentUser);
+  const notify = useNotify();
   const [removing, setRemoving] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -45,7 +64,7 @@ export default function AssignedJDsPage() {
   const canManageRecruiters = profile?.role === "super_admin" || profile?.role === "accounts_manager";
   const canManageVendors = profile?.role === "super_admin" || profile?.role === "vendor_manager" || profile?.role === "accounts_manager";
 
-  const { data: rawJobs = [], isLoading } = useGetJobsQuery();
+  const { data: rawJobs = [], isLoading, isError, error, refetch } = useGetJobsQuery();
   const { data: usersData = [] } = useGetUsersQuery(undefined, { skip: !canManageRecruiters });
   const { data: vendorsData = [] } = useGetVendorsQuery(undefined, { skip: !canManageVendors });
   const [updateJob] = useUpdateJobMutation();
@@ -54,7 +73,10 @@ export default function AssignedJDsPage() {
   const recruiters: RecruiterInfo[] = usersData
     .filter((u) => u.role === "recruiter")
     .map((u) => ({ id: u.id, full_name: u.full_name || u.email, email: u.email }));
-  const vendors: VendorInfo[] = (vendorsData as any[]).map((v) => ({ id: v.id, company_name: v.company_name }));
+  const vendors: VendorInfo[] = (vendorsData as { id: string; company_name: string }[]).map((v) => ({
+    id: v.id,
+    company_name: v.company_name,
+  }));
 
   const removeRecruiter = async (jobId: string, recruiterId: string) => {
     const job = jobs.find((j) => j.id === jobId);
@@ -64,8 +86,12 @@ export default function AssignedJDsPage() {
     try {
       const newIds = (job.assigned_recruiter_ids ?? []).filter((id) => id !== recruiterId);
       await updateJob({ id: jobId, body: { assigned_recruiter_ids: newIds } }).unwrap();
-    } catch (err) { console.error("Failed to remove recruiter assignment:", err); }
-    finally { setRemoving(null); }
+    } catch (err) {
+      console.error("Failed to remove recruiter assignment:", err);
+      notify.error(getErrorMessage(err, "Couldn't remove the recruiter assignment."));
+    } finally {
+      setRemoving(null);
+    }
   };
 
   const removeVendor = async (jobId: string, vendorId: string) => {
@@ -76,8 +102,12 @@ export default function AssignedJDsPage() {
     try {
       const newIds = (job.assigned_vendor_ids ?? []).filter((id) => id !== vendorId);
       await updateJob({ id: jobId, body: { assigned_vendor_ids: newIds } }).unwrap();
-    } catch (err) { console.error("Failed to remove vendor assignment:", err); }
-    finally { setRemoving(null); }
+    } catch (err) {
+      console.error("Failed to remove vendor assignment:", err);
+      notify.error(getErrorMessage(err, "Couldn't remove the vendor assignment."));
+    } finally {
+      setRemoving(null);
+    }
   };
 
   const getRecruiterLabel = (id: string) => {
@@ -104,151 +134,211 @@ export default function AssignedJDsPage() {
   const totalRecruiterLinks = filtered.reduce((s, j) => s + (j.assigned_recruiter_ids?.length ?? 0), 0);
   const totalVendorLinks = filtered.reduce((s, j) => s + (j.assigned_vendor_ids?.length ?? 0), 0);
 
-  return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header title="JD Assignments" subtitle="Track which jobs are assigned to recruiters and vendors" />
-
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Assigned JDs</p>
-            <p className="text-2xl font-semibold text-gray-900">{totalAssigned}</p>
-            <p className="text-xs text-gray-400 mt-0.5">with active assignments</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Recruiter Links</p>
-            <p className="text-2xl font-semibold text-blue-600">{totalRecruiterLinks}</p>
-            <p className="text-xs text-gray-400 mt-0.5">across all jobs</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Vendor Links</p>
-            <p className="text-2xl font-semibold text-violet-600">{totalVendorLinks}</p>
-            <p className="text-xs text-gray-400 mt-0.5">across all jobs</p>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" placeholder="Search by job title…" value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
-        </div>
-
-        {/* Table */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20 gap-2 text-gray-400">
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">Loading assignments…</span>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-gray-100">
-            <ClipboardList size={36} className="mx-auto mb-3 text-gray-300" />
-            <p className="text-sm font-semibold text-gray-500">No assigned JDs found</p>
-            <p className="text-xs mt-1 text-gray-400">Use the Assign JD button on the Vendors page to make assignments.</p>
-          </div>
+  const columns: Column<AssignedJob>[] = [
+    {
+      key: "title",
+      header: "Job title",
+      cell: (job) => {
+        const count = (job.assigned_recruiter_ids?.length ?? 0) + (job.assigned_vendor_ids?.length ?? 0);
+        return (
+          <>
+            <Link to={`/jobs/${job.id}`} className="block max-w-[240px] truncate font-medium text-ink hover:text-navy-600 hover:underline">
+              {job.title}
+            </Link>
+            <p className="mt-0.5 text-xs text-muted">
+              {count} assignment{count !== 1 ? "s" : ""}
+            </p>
+          </>
+        );
+      },
+      className: "align-top",
+    },
+    { key: "status", header: "Status", cell: (job) => <JobStatusBadge status={job.status} />, className: "align-top" },
+  ];
+  if (canManageRecruiters) {
+    columns.push({
+      key: "recruiters",
+      header: "Assigned recruiters",
+      className: "align-top",
+      cell: (job) =>
+        (job.assigned_recruiter_ids?.length ?? 0) === 0 ? (
+          <span className="text-xs text-muted">—</span>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Job Title</th>
-                    <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Status</th>
-                    {canManageRecruiters && (
-                      <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Assigned Recruiters</th>
-                    )}
-                    {canManageVendors && (
-                      <th className="px-5 py-3.5 text-xs font-bold text-gray-400 uppercase tracking-wide">Assigned Vendors</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {paginated.map((job) => (
-                    <tr key={job.id} className="hover:bg-gray-50/60 transition-colors align-top">
-                      <td className="px-5 py-4">
-                        <p className="text-sm font-semibold text-gray-900 max-w-[220px] truncate">{job.title}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {(job.assigned_recruiter_ids?.length ?? 0) + (job.assigned_vendor_ids?.length ?? 0)} assignment{((job.assigned_recruiter_ids?.length ?? 0) + (job.assigned_vendor_ids?.length ?? 0)) !== 1 ? "s" : ""}
-                        </p>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold ${statusConfig[job.status] || "bg-gray-100 text-gray-600"}`}>
-                          {statusLabel(job.status)}
-                        </span>
-                      </td>
-                      {canManageRecruiters && (
-                        <td className="px-5 py-4">
-                          <div className="flex flex-wrap gap-1.5">
-                            {(job.assigned_recruiter_ids?.length ?? 0) === 0 ? (
-                              <span className="text-xs text-gray-300">—</span>
-                            ) : job.assigned_recruiter_ids.map((rid) => (
-                              <span key={rid}
-                                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 bg-blue-50 border border-blue-100 rounded-full text-xs text-blue-800 font-medium">
-                                <Users size={10} className="text-blue-400" />
-                                {getRecruiterLabel(rid)}
-                                <button onClick={() => removeRecruiter(job.id, rid)} disabled={removing === `${job.id}-r-${rid}`}
-                                  className="ml-0.5 p-0.5 rounded-full hover:bg-blue-200 transition-colors disabled:opacity-40">
-                                  {removing === `${job.id}-r-${rid}` ? <Loader2 size={9} className="animate-spin" /> : <X size={9} />}
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      )}
-                      {canManageVendors && (
-                        <td className="px-5 py-4">
-                          <div className="flex flex-wrap gap-1.5">
-                            {(job.assigned_vendor_ids?.length ?? 0) === 0 ? (
-                              <span className="text-xs text-gray-300">—</span>
-                            ) : job.assigned_vendor_ids.map((vid) => (
-                              <span key={vid}
-                                className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 bg-violet-50 border border-violet-100 rounded-full text-xs text-violet-800 font-medium">
-                                <Building2 size={10} className="text-violet-400" />
-                                {getVendorLabel(vid)}
-                                <button onClick={() => removeVendor(job.id, vid)} disabled={removing === `${job.id}-v-${vid}`}
-                                  className="ml-0.5 p-0.5 rounded-full hover:bg-violet-200 transition-colors disabled:opacity-40">
-                                  {removing === `${job.id}-v-${vid}` ? <Loader2 size={9} className="animate-spin" /> : <X size={9} />}
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
-                <p className="text-xs text-gray-500">
-                  {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
-                </p>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30">
-                    <ChevronLeft size={15} />
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                    <button key={p} onClick={() => setPage(p)}
-                      className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-navy-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
-                      {p}
-                    </button>
-                  ))}
-                  <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                    className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30">
-                    <ChevronRight size={15} />
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="flex flex-wrap gap-1.5">
+            {job.assigned_recruiter_ids.map((rid) => (
+              <AssignmentChip
+                key={rid}
+                icon={<Users size={11} className="text-navy-500" aria-hidden="true" />}
+                label={getRecruiterLabel(rid)}
+                removing={removing === `${job.id}-r-${rid}`}
+                onRemove={() => removeRecruiter(job.id, rid)}
+              />
+            ))}
           </div>
-        )}
+        ),
+    });
+  }
+  if (canManageVendors) {
+    columns.push({
+      key: "vendors",
+      header: "Assigned vendors",
+      className: "align-top",
+      cell: (job) =>
+        (job.assigned_vendor_ids?.length ?? 0) === 0 ? (
+          <span className="text-xs text-muted">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {job.assigned_vendor_ids.map((vid) => (
+              <AssignmentChip
+                key={vid}
+                icon={<Building2 size={11} className="text-brand-600" aria-hidden="true" />}
+                label={getVendorLabel(vid)}
+                removing={removing === `${job.id}-v-${vid}`}
+                onRemove={() => removeVendor(job.id, vid)}
+              />
+            ))}
+          </div>
+        ),
+    });
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="JD assignments"
+        subtitle="Track which jobs are assigned to recruiters and vendors"
+        actions={
+          canManageVendors ? (
+            <Link to="/vendors" className={buttonClasses("secondary")}>
+              Assign from vendors
+            </Link>
+          ) : undefined
+        }
+      />
+
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Assigned JDs"
+            value={totalAssigned}
+            hint="with active assignments"
+            loading={isLoading}
+            icon={<ClipboardList size={18} aria-hidden="true" />}
+          />
+          <StatCard
+            label="Recruiter links"
+            value={totalRecruiterLinks}
+            hint="across all jobs"
+            loading={isLoading}
+            icon={<Users size={18} aria-hidden="true" />}
+          />
+          <StatCard
+            label="Vendor links"
+            value={totalVendorLinks}
+            hint="across all jobs"
+            loading={isLoading}
+            tone="brand"
+            icon={<Building2 size={18} aria-hidden="true" />}
+          />
+        </div>
+
+        <div className="relative max-w-md">
+          <label htmlFor="assigned-jd-search" className="sr-only">
+            Search by job title
+          </label>
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+          <input
+            id="assigned-jd-search"
+            type="search"
+            placeholder="Search by job title…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="zh-input pl-9"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <DataTable
+            caption="Job assignments"
+            columns={columns}
+            rows={isError ? undefined : paginated}
+            rowKey={(j) => j.id}
+            loading={isLoading}
+            error={isError ? error : undefined}
+            onRetry={refetch}
+            empty={
+              search ? (
+                <EmptyState
+                  compact
+                  icon={<Search size={22} aria-hidden="true" />}
+                  title="No matching assignments"
+                  description={`No assigned job matches "${search}".`}
+                  action={
+                    <Button variant="secondary" size="sm" onClick={() => setSearch("")}>
+                      Clear search
+                    </Button>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  compact
+                  icon={<ClipboardList size={22} aria-hidden="true" />}
+                  title="No assigned JDs yet"
+                  description="Use the Assign JD button on the Vendors page to make assignments."
+                  action={
+                    canManageVendors ? (
+                      <Link to="/vendors" className={buttonClasses("secondary", "sm")}>
+                        Go to vendors
+                      </Link>
+                    ) : undefined
+                  }
+                />
+              )
+            }
+          />
+
+          {!isLoading && !isError && totalPages > 1 && (
+            <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </p>
+              <div className="flex flex-wrap items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Previous page"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  icon={<ChevronLeft size={15} />}
+                />
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <Button
+                    key={p}
+                    variant={page === p ? "primary" : "ghost"}
+                    size="sm"
+                    aria-current={page === p ? "page" : undefined}
+                    onClick={() => setPage(p)}
+                    className="w-8 px-0"
+                  >
+                    {p}
+                  </Button>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Next page"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  icon={<ChevronRight size={15} />}
+                />
+              </div>
+            </nav>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

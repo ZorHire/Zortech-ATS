@@ -3,6 +3,8 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Briefcase, MapPin, Clock, Send, Loader2 } from "lucide-react";
 import { JobApplication } from "../../types";
+import { Badge, useConfirm } from "../ui";
+import { Avatar } from "../jobs/jobBadges";
 
 interface CandidateCardProps {
   application: JobApplication;
@@ -19,6 +21,7 @@ export default function CandidateCard({
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: application.id });
   const [sendingInvite, setSendingInvite] = useState(false);
+  const confirm = useConfirm();
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -38,17 +41,20 @@ export default function CandidateCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white border rounded-xl p-3.5 select-none transition-all group
-        ${isDragging && !isOverlay ? "opacity-30 border-blue-300 shadow-none" : ""}
-        ${isOverlay ? "shadow-2xl border-blue-400 rotate-1 cursor-grabbing ring-2 ring-blue-300/50" : "border-gray-200 hover:border-blue-300 hover:shadow-md cursor-grab shadow-sm"}
-      `}
+      className={`group select-none rounded-lg border bg-white p-3 transition-all ${
+        isDragging && !isOverlay ? "border-navy-300 opacity-30 shadow-none" : ""
+      } ${
+        isOverlay
+          ? "rotate-1 cursor-grabbing border-navy-400 shadow-pop ring-2 ring-navy-200"
+          : "cursor-grab border-line shadow-card hover:border-line-strong hover:shadow-md"
+      }`}
     >
       {/* Drag handle + name */}
       <div className="flex items-start gap-2">
         <button
           {...listeners}
           {...attributes}
-          className="mt-0.5 flex-shrink-0 text-gray-300 hover:text-gray-500 transition-colors cursor-grab active:cursor-grabbing"
+          className="mt-0.5 flex-shrink-0 cursor-grab rounded text-line-strong transition-colors hover:text-muted active:cursor-grabbing"
           aria-label="Drag to move"
         >
           <GripVertical size={14} />
@@ -57,27 +63,15 @@ export default function CandidateCard({
         <div className="flex-1 min-w-0">
           {/* Avatar + Name + AI score */}
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">
-                {candidate?.first_name?.[0] ?? "?"}
-                {candidate?.last_name?.[0] ?? ""}
-              </span>
-            </div>
-            <p className="text-sm font-semibold text-gray-900 truncate leading-tight flex-1 min-w-0">
+            <Avatar name={fullName} size="xs" />
+            <p className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight text-ink">
               {fullName}
             </p>
             {application.ai_score != null && (
-              <span
-                className={`text-xs font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                  application.ai_score >= 75
-                    ? "bg-emerald-50 text-emerald-700"
-                    : application.ai_score >= 50
-                      ? "bg-amber-50 text-amber-700"
-                      : "bg-gray-100 text-gray-500"
-                }`}
-                title={application.ai_match_breakdown?.rationale}
-              >
-                {application.ai_score}/100
+              <span className="flex-shrink-0" title={application.ai_match_breakdown?.rationale}>
+                <Badge tone={application.ai_score >= 75 ? "success" : application.ai_score >= 50 ? "warning" : "neutral"}>
+                  {application.ai_score}/100
+                </Badge>
               </span>
             )}
           </div>
@@ -85,21 +79,21 @@ export default function CandidateCard({
           {/* Title */}
           {title && (
             <div className="flex items-center gap-1 mb-1.5">
-              <Briefcase size={11} className="text-gray-400 flex-shrink-0" />
-              <span className="text-xs text-gray-500 truncate">{title}</span>
+              <Briefcase size={11} className="flex-shrink-0 text-muted" />
+              <span className="truncate text-xs text-muted">{title}</span>
             </div>
           )}
 
           {/* Location + Experience */}
-          <div className="flex items-center gap-3 mb-2.5">
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             {location && (
-              <span className="flex items-center gap-1 text-xs text-gray-400">
+              <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
                 <MapPin size={11} />
                 {location}
               </span>
             )}
             {experience > 0 && (
-              <span className="flex items-center gap-1 text-xs text-gray-400">
+              <span className="flex min-w-0 items-center gap-1 text-xs text-muted">
                 <Clock size={11} />
                 {experience}y exp
               </span>
@@ -112,13 +106,13 @@ export default function CandidateCard({
               {skills.slice(0, 3).map((skill) => (
                 <span
                   key={skill}
-                  className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-medium"
+                  className="max-w-full truncate rounded-md bg-navy-50 px-1.5 py-0.5 text-xs font-medium text-navy-700"
                 >
                   {skill}
                 </span>
               ))}
               {skills.length > 3 && (
-                <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md">
+                <span className="rounded-md bg-surface-sunken px-1.5 py-0.5 text-xs text-muted">
                   +{skills.length - 3}
                 </span>
               )}
@@ -131,7 +125,12 @@ export default function CandidateCard({
               onClick={async (e) => {
                 e.stopPropagation();
                 if (sendingInvite) return;
-                if (!window.confirm(`Send a screening invite email to ${fullName}?`)) return;
+                const ok = await confirm({
+                  title: "Send screening invite?",
+                  message: `${fullName} will get a screening invite email.`,
+                  confirmText: "Send invite",
+                });
+                if (!ok) return;
                 setSendingInvite(true);
                 try {
                   await onScreeningInvite(application);
@@ -140,10 +139,10 @@ export default function CandidateCard({
                 }
               }}
               disabled={sendingInvite}
-              className="mt-2.5 flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
+              className="mt-2 flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-navy-600 disabled:cursor-wait disabled:opacity-60"
             >
-              {sendingInvite ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
-              {sendingInvite ? "Sending…" : "Send Screening Invite"}
+              {sendingInvite ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+              {sendingInvite ? "Sending…" : "Send screening invite"}
             </button>
           )}
         </div>

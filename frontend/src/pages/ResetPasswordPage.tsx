@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { Briefcase, Eye, EyeOff, Shield, CheckCircle2, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Shield, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useResetPasswordMutation } from "../store/api/authApi";
+import { Button } from "../components/ui";
+
+function BrandMark() {
+  return (
+    <div className="mb-6 flex items-center gap-3">
+      <img src="/brand/zortech-logo.png" alt="ZorTech" className="h-6 w-auto" />
+      <span className="border-l border-line pl-3 text-sm font-semibold text-navy-700">ZorHire</span>
+    </div>
+  );
+}
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -19,19 +29,16 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#281a10] via-[#1a110a] to-[#0b0704] flex items-center justify-center px-6">
-        <div className="bg-[#f7efe4] rounded-2xl p-10 max-w-sm w-full text-center space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-full bg-red-50 flex items-center justify-center">
-            <AlertTriangle size={22} className="text-red-500" />
+      <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-10 sm:px-6">
+        <div className="zh-card w-full max-w-sm space-y-4 p-8 text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger-50 text-danger-600">
+            <AlertTriangle size={22} aria-hidden="true" />
           </div>
-          <h2 className="text-xl font-bold text-[#3a230f]">Invalid Link</h2>
-          <p className="text-sm text-[#7d6651]">This password reset link is missing or malformed.</p>
-          <button
-            onClick={() => navigate("/login")}
-            className="w-full bg-[#b67031] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#9b5c27] transition-all"
-          >
+          <h1 className="text-xl font-semibold text-navy-800">Invalid Link</h1>
+          <p className="text-sm text-muted">This password reset link is missing or malformed.</p>
+          <Button size="lg" fullWidth onClick={() => navigate("/login")}>
             Back to Sign In
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -57,107 +64,97 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#281a10] via-[#1a110a] to-[#0b0704] flex items-center justify-center px-6">
-      <div className="bg-[#f7efe4] rounded-2xl p-10 max-w-sm w-full space-y-6">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 bg-[#b47b3b] rounded-lg flex items-center justify-center">
-            <Briefcase size={16} className="text-white" />
-          </div>
-          <span className="font-bold text-[#3a230f]">ZorHire</span>
-        </div>
+    <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-10 sm:px-6">
+      <div className="zh-card w-full max-w-sm p-6 sm:p-8">
+        <BrandMark />
 
         {success ? (
-          <div className="flex flex-col items-center gap-4 py-4 text-center">
-            <CheckCircle2 size={48} className="text-green-500" />
-            <p className="text-[#3a230f] font-bold text-base">Password updated!</p>
-            <p className="text-sm text-[#7d6651]">You can now sign in with your new password.</p>
-            <button
-              onClick={() => navigate("/login")}
-              className="w-full bg-[#b67031] text-white py-3.5 rounded-xl font-bold text-sm hover:bg-[#9b5c27] transition-all"
-            >
+          <div className="flex flex-col items-center gap-4 py-4 text-center" role="status">
+            <CheckCircle2 size={48} aria-hidden="true" className="text-success-600" />
+            <h1 className="text-base font-semibold text-ink">Password updated!</h1>
+            <p className="text-sm text-muted">You can now sign in with your new password.</p>
+            <Button size="lg" fullWidth onClick={() => navigate("/login")}>
               Sign In
-            </button>
+            </Button>
           </div>
         ) : (
           <>
-            <div>
-              <h2 className="text-2xl font-bold text-[#3a230f]">Set new password</h2>
-              <p className="text-xs text-[#7d6651] mt-1">Choose a strong password for your account.</p>
+            <div className="mb-6">
+              <h1 className="text-2xl font-semibold text-navy-800">Set new password</h1>
+              <p className="mt-1 text-sm text-muted">Choose a strong password for your account.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
-                <div className="p-3 bg-[#f9dfd5] text-[#8f3522] text-sm rounded-lg flex items-start gap-2 border border-[#f4c7be]">
-                  <Shield size={16} className="flex-shrink-0 mt-0.5" />
+                <div role="alert" className="flex items-start gap-2 rounded-lg border border-danger-600/20 bg-danger-50 p-3 text-sm text-danger-700">
+                  <Shield size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold text-[#7d6651] uppercase tracking-wider mb-1.5 ml-1">
-                  New Password
+                <label htmlFor="rp-new" className="zh-label">
+                  New password
                 </label>
                 <div className="relative">
                   <input
+                    id="rp-new"
                     type={showNew ? "text" : "password"}
+                    autoComplete="new-password"
                     required
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-12"
+                    readOnly={loading}
+                    aria-describedby="rp-new-hint"
+                    className="zh-input pr-12"
                     placeholder="Min. 8 characters"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNew(!showNew)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                    aria-label={showNew ? "Hide password" : "Show password"}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted hover:text-ink"
                   >
-                    {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showNew ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
                   </button>
                 </div>
+                <p id="rp-new-hint" className="mt-1 text-xs text-muted">At least 8 characters.</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#7d6651] uppercase tracking-wider mb-1.5 ml-1">
-                  Confirm Password
+                <label htmlFor="rp-confirm" className="zh-label">
+                  Confirm password
                 </label>
                 <div className="relative">
                   <input
+                    id="rp-confirm"
                     type={showConfirm ? "text" : "password"}
+                    autoComplete="new-password"
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 bg-surface border border-[#e5d1bb] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c88a3f] focus:bg-white transition-all pr-12"
+                    readOnly={loading}
+                    className="zh-input pr-12"
                     placeholder="Re-enter new password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirm(!showConfirm)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                    aria-label={showConfirm ? "Hide password" : "Show password"}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted hover:text-ink"
                   >
-                    {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showConfirm ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
                   </button>
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#b67031] text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#b67031]/20 hover:bg-[#9b5c27] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-                ) : (
-                  "Update Password"
-                )}
-              </button>
+              <Button type="submit" size="lg" fullWidth loading={loading} loadingText="Updating…">
+                Update Password
+              </Button>
 
-              <button
-                type="button"
-                onClick={() => navigate("/login")}
-                className="w-full py-3 text-[#7d6651] font-semibold text-sm hover:text-[#3a230f] transition-colors"
-              >
-                ← Back to Sign In
-              </button>
+              <Button variant="ghost" fullWidth onClick={() => navigate("/login")} icon={<ArrowLeft size={16} aria-hidden="true" />}>
+                Back to Sign In
+              </Button>
             </form>
           </>
         )}

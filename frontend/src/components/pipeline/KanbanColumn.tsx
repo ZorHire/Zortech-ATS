@@ -1,69 +1,61 @@
 import { useDroppable } from "@dnd-kit/core";
 import { JobApplication, PipelineStage } from "../../types";
+import { getStage } from "../../lib/stages";
 import CandidateCard from "./CandidateCard";
 
 interface KanbanColumnProps {
   stage: PipelineStage;
-  label: string;
-  color: {
-    header: string;
-    border: string;
-    bg: string;
-    dot: string;
-  };
+  /** Defaults to the shared stage label from lib/stages. */
+  label?: string;
   applications: JobApplication[];
   onScreeningInvite?: (application: JobApplication) => void | Promise<unknown>;
 }
 
-export default function KanbanColumn({
-  stage,
-  label,
-  color,
-  applications,
-  onScreeningInvite,
-}: KanbanColumnProps) {
+export default function KanbanColumn({ stage, label, applications, onScreeningInvite }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
+  const s = getStage(stage);
+  const count = applications.length;
 
   return (
-    <div className="flex flex-col flex-shrink-0 w-64">
-      {/* Sticky column header */}
-      <div
-        className={`sticky top-0 z-10 flex items-center justify-between px-3 py-2.5 rounded-t-xl border-b ${color.header} mb-0`}
-      >
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
-          <span className="text-xs font-bold uppercase tracking-wider truncate">
-            {label}
+    <section aria-label={`${label ?? s.label}: ${count}`} className="flex w-60 flex-shrink-0 flex-col">
+      {/* Sticky column header: stays visible while the board scrolls vertically. */}
+      <div className="sticky top-0 z-10 bg-surface pb-2">
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 shadow-card">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={`h-2 w-2 flex-shrink-0 rounded-full ${s.dot}`} aria-hidden="true" />
+            <span className="truncate text-sm font-semibold text-ink">{label ?? s.label}</span>
+          </div>
+          <span
+            className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+              count > 0 ? s.badge.replace(/ring-\S+/g, "") : "bg-surface-sunken text-muted"
+            }`}
+          >
+            {count}
           </span>
         </div>
-        <span className="text-xs font-semibold bg-white/60 px-2 py-0.5 rounded-full">
-          {applications.length}
-        </span>
       </div>
 
       {/* Drop zone */}
       <div
         ref={setNodeRef}
-        className={`flex-1 min-h-[120px] rounded-b-xl border-x border-b transition-colors duration-150 p-2 space-y-2
-          ${color.border} ${isOver ? "bg-blue-50/80 border-blue-300" : color.bg}
-        `}
+        className={`flex-1 space-y-2 rounded-xl border p-1.5 transition-colors duration-150 ${
+          isOver ? "border-navy-300 bg-navy-50" : "border-transparent bg-surface-sunken/60"
+        }`}
       >
         {applications.map((app) => (
           <CandidateCard key={app.id} application={app} onScreeningInvite={onScreeningInvite} />
         ))}
 
-        {applications.length === 0 && (
+        {count === 0 && (
           <div
-            className={`flex items-center justify-center h-16 rounded-lg border-2 border-dashed transition-colors
-              ${isOver ? "border-blue-300 bg-blue-50" : "border-gray-200"}
-            `}
+            className={`flex h-14 items-center justify-center rounded-lg text-xs transition-colors ${
+              isOver ? "border border-dashed border-navy-300 text-navy-600" : "text-muted/70"
+            }`}
           >
-            <p className="text-xs text-gray-400">
-              {isOver ? "Drop here" : "No candidates"}
-            </p>
+            {isOver ? "Drop here" : "No candidates"}
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }

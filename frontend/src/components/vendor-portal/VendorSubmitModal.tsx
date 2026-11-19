@@ -1,11 +1,15 @@
 import { useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { useSubmitCandidateMutation } from "../../store/api/vendorPortalApi";
+import { Button, Modal } from "../ui";
 
 interface Props {
   jobId: string;
   jobTitle: string;
   onClose: () => void;
 }
+
+const FORM_ID = "vendor-submit-candidate";
 
 export default function VendorSubmitModal({ jobId, jobTitle, onClose }: Props) {
   const [submitCandidate, { isLoading }] = useSubmitCandidateMutation();
@@ -56,155 +60,130 @@ export default function VendorSubmitModal({ jobId, jobTitle, onClose }: Props) {
 
   if (success) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full mx-4 text-center">
-          <div className="w-14 h-14 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-7 h-7 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+      <Modal open onClose={onClose} size="sm" hideHeader closeOnBackdrop footer={<Button onClick={onClose} fullWidth>Done</Button>}>
+        <div className="py-2 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success-50 text-success-600">
+            <CheckCircle2 size={24} aria-hidden="true" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Submitted!</h3>
-          <p className="text-sm text-gray-500 mb-6">
-            Candidate submitted for <span className="font-medium">{jobTitle}</span>. Track status in My Submissions.
+          <h2 className="text-lg font-semibold text-ink">Candidate submitted</h2>
+          <p className="mt-1 text-sm text-muted">
+            Submitted for <span className="font-medium text-ink">{jobTitle}</span>. Track status in My submissions.
           </p>
-          <button
-            onClick={onClose}
-            className="w-full bg-teal-600 text-white py-2.5 rounded-lg font-medium hover:bg-teal-700 transition-colors"
-          >
-            Done
-          </button>
         </div>
-      </div>
+      </Modal>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
-        {/* Header */}
-        <div className="bg-teal-600 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-white font-semibold text-lg">Submit Candidate</h2>
-              <p className="text-teal-100 text-sm truncate">{jobTitle}</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-teal-200 hover:text-white transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+    <Modal
+      open
+      onClose={onClose}
+      title="Submit candidate"
+      description={jobTitle}
+      preventClose={isLoading}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button type="submit" form={FORM_ID} loading={isLoading} loadingText="Submitting…">
+            Submit candidate
+          </Button>
+        </>
+      }
+    >
+      <form id={FORM_ID} onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div role="alert" className="rounded-lg border border-danger-600/20 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+            {error}
           </div>
-        </div>
+        )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={form.candidate_full_name}
-                onChange={set("candidate_full_name")}
-                placeholder="e.g. Priya Sharma"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                required
-                value={form.candidate_email}
-                onChange={set("candidate_email")}
-                placeholder="priya@example.com"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-              <input
-                type="tel"
-                value={form.candidate_phone}
-                onChange={set("candidate_phone")}
-                placeholder="+91 98765 43210"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Experience (years)</label>
-              <input
-                type="number"
-                min={0}
-                max={50}
-                step={0.5}
-                value={form.experience_years}
-                onChange={set("experience_years")}
-                placeholder="5"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Skills
-                <span className="text-gray-400 font-normal ml-1">(comma-separated)</span>
-              </label>
-              <input
-                type="text"
-                value={form.skills}
-                onChange={set("skills")}
-                placeholder="React, Node.js, PostgreSQL"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cover Note</label>
-            <textarea
-              rows={3}
-              value={form.cover_note}
-              onChange={set("cover_note")}
-              placeholder="Why is this candidate a strong fit for this role?"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label htmlFor="vs-name" className="zh-label">
+              Full name <span className="text-danger-600">*</span>
+            </label>
+            <input
+              id="vs-name"
+              type="text"
+              required
+              value={form.candidate_full_name}
+              onChange={set("candidate_full_name")}
+              placeholder="e.g. Priya Sharma"
+              className="zh-input"
             />
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 bg-teal-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isLoading ? "Submitting…" : "Submit Candidate"}
-            </button>
+          <div>
+            <label htmlFor="vs-email" className="zh-label">
+              Email <span className="text-danger-600">*</span>
+            </label>
+            <input
+              id="vs-email"
+              type="email"
+              required
+              value={form.candidate_email}
+              onChange={set("candidate_email")}
+              placeholder="priya@example.com"
+              className="zh-input"
+            />
           </div>
-        </form>
-      </div>
-    </div>
+
+          <div>
+            <label htmlFor="vs-phone" className="zh-label">Phone</label>
+            <input
+              id="vs-phone"
+              type="tel"
+              value={form.candidate_phone}
+              onChange={set("candidate_phone")}
+              placeholder="+91 98765 43210"
+              className="zh-input"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="vs-exp" className="zh-label">Experience (years)</label>
+            <input
+              id="vs-exp"
+              type="number"
+              min={0}
+              max={50}
+              step={0.5}
+              value={form.experience_years}
+              onChange={set("experience_years")}
+              placeholder="5"
+              className="zh-input"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="vs-skills" className="zh-label">
+              Skills <span className="font-normal text-muted">(comma-separated)</span>
+            </label>
+            <input
+              id="vs-skills"
+              type="text"
+              value={form.skills}
+              onChange={set("skills")}
+              placeholder="React, Node.js, PostgreSQL"
+              className="zh-input"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="vs-note" className="zh-label">Cover note</label>
+          <textarea
+            id="vs-note"
+            rows={3}
+            value={form.cover_note}
+            onChange={set("cover_note")}
+            placeholder="Why is this candidate a strong fit for this role?"
+            className="zh-input resize-none"
+          />
+        </div>
+      </form>
+    </Modal>
   );
 }

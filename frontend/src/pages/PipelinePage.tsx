@@ -11,8 +11,7 @@ import {
   useSensors,
   closestCenter,
 } from "@dnd-kit/core";
-import { ArrowLeft, RefreshCw, AlertCircle, Sparkles } from "lucide-react";
-import Header from "../components/layout/Header";
+import { RefreshCw, Sparkles, Users } from "lucide-react";
 import KanbanColumn from "../components/pipeline/KanbanColumn";
 import CandidateCard from "../components/pipeline/CandidateCard";
 import { JobApplication, PipelineStage } from "../types";
@@ -22,34 +21,29 @@ import api from "../lib/api";
 import { useNotify } from "../hooks/useNotify";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { baseApi } from "../store/api/baseApi";
+import { getErrorMessage } from "../lib/format";
+import { STAGES as ALL_STAGES, getStage } from "../lib/stages";
+import { Button, EmptyState, ErrorState, PageHeader, Skeleton, buttonClasses } from "../components/ui";
 
-const STAGES: {
-  key: PipelineStage;
-  label: string;
-  color: { header: string; border: string; bg: string; dot: string };
-}[] = [
-  { key: "new", label: "New", color: { header: "bg-gray-100 text-gray-700 border-gray-200", border: "border-gray-200", bg: "bg-gray-50", dot: "bg-gray-400" } },
-  { key: "sourced", label: "Sourced", color: { header: "bg-blue-50 text-blue-700 border-blue-200", border: "border-blue-200", bg: "bg-blue-50/40", dot: "bg-blue-400" } },
-  { key: "screened", label: "Screened", color: { header: "bg-cyan-50 text-cyan-700 border-cyan-200", border: "border-cyan-200", bg: "bg-cyan-50/40", dot: "bg-cyan-400" } },
-  { key: "shortlisted", label: "Shortlisted", color: { header: "bg-violet-50 text-violet-700 border-violet-200", border: "border-violet-200", bg: "bg-violet-50/40", dot: "bg-violet-400" } },
-  { key: "submitted_to_client", label: "Submitted", color: { header: "bg-amber-50 text-amber-700 border-amber-200", border: "border-amber-200", bg: "bg-amber-50/40", dot: "bg-amber-400" } },
-  { key: "client_interview_scheduled", label: "Interview", color: { header: "bg-orange-50 text-orange-700 border-orange-200", border: "border-orange-200", bg: "bg-orange-50/40", dot: "bg-orange-400" } },
-  { key: "interview_completed", label: "Interviewed", color: { header: "bg-purple-50 text-purple-700 border-purple-200", border: "border-purple-200", bg: "bg-purple-50/40", dot: "bg-purple-400" } },
-  { key: "selected", label: "Selected", color: { header: "bg-green-50 text-green-700 border-green-200", border: "border-green-200", bg: "bg-green-50/40", dot: "bg-green-500" } },
-  { key: "offer_extended", label: "Offer Extended", color: { header: "bg-emerald-50 text-emerald-700 border-emerald-200", border: "border-emerald-200", bg: "bg-emerald-50/40", dot: "bg-emerald-500" } },
-  { key: "offer_accepted", label: "Offer Accepted", color: { header: "bg-teal-50 text-teal-700 border-teal-200", border: "border-teal-200", bg: "bg-teal-50/40", dot: "bg-teal-500" } },
-  { key: "joined", label: "Joined", color: { header: "bg-lime-50 text-lime-700 border-lime-200", border: "border-lime-200", bg: "bg-lime-50/40", dot: "bg-lime-500" } },
-  { key: "disqualified", label: "Disqualified", color: { header: "bg-red-50 text-red-700 border-red-200", border: "border-red-200", bg: "bg-red-50/40", dot: "bg-red-400" } },
-];
+// Board columns: shared stage order/labels from lib/stages. "Offer declined"
+// has never been a column on this board, so it stays out.
+// Every stage gets a column, including "Offer declined", so no candidate is hidden from the board.
+const STAGES = ALL_STAGES;
 
 export default function PipelinePage() {
   const { jobId } = useParams<{ jobId: string }>();
 
-  const { data: job, isLoading: jobLoading, error: jobError } = useGetJobQuery(jobId!, { skip: !jobId });
+  const {
+    data: job,
+    isLoading: jobLoading,
+    error: jobError,
+    refetch: refetchJob,
+  } = useGetJobQuery(jobId!, { skip: !jobId });
   const {
     data: appsData = [],
     isLoading: appsLoading,
     error: appsError,
+    isFetching: appsFetching,
     refetch: refetchPipeline,
   } = useGetPipelineApplicationsQuery(jobId!, { skip: !jobId });
   const [updateStage] = useUpdateApplicationStageMutation();
@@ -64,9 +58,7 @@ export default function PipelinePage() {
 
   // origin/main: derived loading / error values from RTK Query
   const loading = jobLoading || appsLoading;
-  const errorMsg = jobError || appsError
-    ? (jobError as any)?.data?.message || (appsError as any)?.data?.message || "Failed to load pipeline data"
-    : null;
+  const loadError = jobError || appsError;
 
   useEffect(() => {
     setApplications(Array.isArray(appsData) ? appsData : []);
@@ -86,8 +78,8 @@ export default function PipelinePage() {
       notify.success(`Scored ${data.scored}/${data.total_eligible}, auto-shortlisted ${data.shortlisted}`);
       // Raw api call bypasses RTK Query — refresh this board and anything else showing stage counts.
       dispatch(baseApi.util.invalidateTags(["Pipeline", "Dashboard", "Candidates"]));
-    } catch (err: any) {
-      notify.error(err?.message || "Failed to run AI shortlisting");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to run AI shortlisting"));
     } finally {
       setShortlisting(false);
     }
@@ -99,8 +91,8 @@ export default function PipelinePage() {
       const data = await api.post(`/pipeline/applications/${application.id}/screening-invite`, {});
       if (data.emailSent) notify.success("Screening invite sent");
       else notify.warning("Screening invite created, but the email failed to send");
-    } catch (err: any) {
-      notify.error(err?.message || "Failed to send screening invite");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to send screening invite"));
     }
   };
 
@@ -129,11 +121,11 @@ export default function PipelinePage() {
 
     try {
       await updateStage({ applicationId, stage: newStage }).unwrap();
-      notify.success(`Moved to ${STAGES.find((s) => s.key === newStage)?.label ?? newStage}`);
-    } catch (err: any) {
+      notify.success(`Moved to ${getStage(newStage).label}`);
+    } catch (err) {
       // Revert on failure. RTK unwrap() errors carry the server message in `data`, not `message`.
       setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: prevStage } : a)));
-      notify.error(err?.data?.message ?? err?.error ?? "Could not move candidate");
+      notify.error(getErrorMessage(err, "Could not move candidate"));
     } finally {
       setMovingId(null);
     }
@@ -141,112 +133,128 @@ export default function PipelinePage() {
 
   const byStage = (stage: PipelineStage) => applications.filter((a) => a.stage === stage);
 
+  const breadcrumbs = [
+    { label: "Jobs", to: "/jobs" },
+    { label: job?.title ?? "Job", to: `/jobs/${jobId}` },
+    { label: "Pipeline" },
+  ];
+
   if (loading) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Pipeline" subtitle="Loading..." />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">Loading pipeline...</p>
+      <>
+        <PageHeader title="Pipeline" subtitle="Loading candidates…" breadcrumbs={breadcrumbs} />
+        <div className="p-4 sm:p-6 lg:p-8" role="status" aria-label="Loading pipeline">
+          <div className="flex gap-3 overflow-hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="w-60 flex-shrink-0 space-y-2">
+                <Skeleton className="h-9 w-full" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  if (errorMsg) {
+  if (loadError) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Pipeline" subtitle="Error" />
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center">
-            <AlertCircle size={40} className="mx-auto text-red-400 mb-3" />
-            <p className="text-gray-700 font-medium mb-1">Failed to load pipeline</p>
-            <p className="text-sm text-gray-500 mb-4">{errorMsg}</p>
-            <button
-              onClick={() => refetchPipeline()}
-              className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-            >
-              <RefreshCw size={14} />
-              Retry
-            </button>
+      <>
+        <PageHeader title="Pipeline" breadcrumbs={breadcrumbs} />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <div className="zh-card">
+            <ErrorState
+              error={loadError}
+              title="Couldn't load this pipeline"
+              retrying={appsFetching}
+              onRetry={() => {
+                if (jobError) refetchJob();
+                refetchPipeline();
+              }}
+            />
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
-        title={job?.title ?? "Pipeline"}
-        subtitle={`${applications.length} candidate${applications.length !== 1 ? "s" : ""} · Kanban View`}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Pipeline"
+        subtitle={`${job?.title ? `${job.title} · ` : ""}${applications.length} candidate${applications.length !== 1 ? "s" : ""} · drag cards between stages`}
+        breadcrumbs={breadcrumbs}
         actions={
-          <div className="flex items-center gap-2">
-            <Link
-              to={`/jobs/${jobId}`}
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              <ArrowLeft size={15} />
-              Back to Job
-            </Link>
-            {/* feat/agents: AI shortlisting button */}
-            <button
-              onClick={handleRunShortlisting}
-              disabled={shortlisting}
-              className="flex items-center gap-1.5 text-sm text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors disabled:opacity-60"
-            >
-              <Sparkles size={14} />
-              {shortlisting ? "Scoring…" : "Run AI Shortlisting"}
-            </button>
-            {/* origin/main: manual refresh via RTK Query refetch */}
-            <button
+          <>
+            <Button
+              variant="ghost"
               onClick={() => refetchPipeline()}
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              loading={appsFetching}
+              icon={<RefreshCw size={16} />}
+              aria-label="Refresh pipeline"
               title="Refresh"
             >
-              <RefreshCw size={14} />
-            </button>
-          </div>
+              <span className="sr-only sm:not-sr-only">Refresh</span>
+            </Button>
+            <Button onClick={handleRunShortlisting} loading={shortlisting} loadingText="Scoring…" icon={<Sparkles size={16} />}>
+              Run AI shortlisting
+            </Button>
+          </>
         }
       />
 
-      <div className="flex-1 overflow-x-auto overflow-y-auto p-4">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <div className="flex gap-3 h-full pb-4" style={{ minWidth: "max-content" }}>
-            {STAGES.map(({ key, label, color }) => (
-              <KanbanColumn
-                key={key}
-                stage={key}
-                label={label}
-                color={color}
-                applications={byStage(key)}
-                onScreeningInvite={handleScreeningInvite}
-              />
-            ))}
+      {applications.length === 0 ? (
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <div className="zh-card">
+            <EmptyState
+              icon={<Users size={22} aria-hidden="true" />}
+              title="No candidates in this pipeline yet"
+              description="Candidates added to this job will appear here, grouped by stage."
+              action={
+                <Link to={`/jobs/${jobId}`} className={buttonClasses("secondary")}>
+                  Open job
+                </Link>
+              }
+            />
           </div>
+        </div>
+      ) : (
+        <div className="min-h-[24rem] flex-1 overflow-auto px-4 pb-4 sm:px-6 lg:px-8">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="flex min-h-full gap-3 pb-2 pt-4" style={{ minWidth: "max-content" }}>
+              {STAGES.map(({ key, label }) => (
+                <KanbanColumn
+                  key={key}
+                  stage={key as PipelineStage}
+                  label={label}
+                  applications={byStage(key as PipelineStage)}
+                  onScreeningInvite={handleScreeningInvite}
+                />
+              ))}
+            </div>
 
-          <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
-            {activeApplication && (
-              <CandidateCard application={activeApplication} isOverlay />
-            )}
-          </DragOverlay>
-        </DndContext>
-      </div>
-
-      {movingId && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg z-50">
-          <div className="w-3 h-3 border border-white/30 border-t-white rounded-full animate-spin" />
-          Saving…
+            <DragOverlay dropAnimation={{ duration: 180, easing: "ease" }}>
+              {activeApplication && <CandidateCard application={activeApplication} isOverlay />}
+            </DragOverlay>
+          </DndContext>
         </div>
       )}
 
+      {movingId && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-navy-900 px-3 py-1.5 text-xs text-white shadow-pop"
+        >
+          <div className="h-3 w-3 animate-spin rounded-full border border-white/30 border-t-white" />
+          Saving…
+        </div>
+      )}
     </div>
   );
 }
