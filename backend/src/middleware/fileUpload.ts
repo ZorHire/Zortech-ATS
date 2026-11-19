@@ -1,23 +1,8 @@
-import fs from "fs";
-import path from "path";
 import multer from "multer";
-import env from "../config/env";
 
-const uploadRoot = path.resolve(
-  env.UPLOAD_DIR || path.resolve(__dirname, "../uploads"),
-);
-const resumeDir = path.resolve(uploadRoot, "resumes");
-
-fs.mkdirSync(resumeDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: resumeDir,
-  filename: (_req, file, cb) => {
-    const timestamp = Date.now();
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-    cb(null, `${timestamp}-${safeName}`);
-  },
-});
+// Resumes are kept in memory (max 8 MB) so the handler can both extract their
+// text and hand them to services/resumeStorage, which writes to R2 or local disk.
+const storage = multer.memoryStorage();
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
