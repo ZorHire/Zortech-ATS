@@ -179,31 +179,28 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <aside
-      className={`flex flex-col bg-[#24180f] text-white transition-all duration-300 ${collapsed ? "w-20" : "w-64"} h-full py-6`}
+      className={`flex flex-col bg-[#24180f] text-white transition-all duration-300 ${collapsed ? "w-20" : "w-64"} h-full py-5`}
     >
       {/* Logo */}
-      <div
-        className={`flex items-center mb-10 ${collapsed ? "justify-center" : "px-6 gap-3"}`}
+      <Link
+        to="/"
+        aria-label="ZorHire home"
+        className={`flex flex-col mb-6 ${collapsed ? "items-center" : "px-6"}`}
       >
-        <img
-          src="/favicon.png"
-          alt="ZorHire"
-          className="flex-shrink-0 w-14 h-14 object-contain"
-        />
-        {!collapsed && (
-          <div>
-            <p className="text-xl font-black text-amber-100 tracking-tight leading-none">
-              ZorHire
+        {collapsed ? (
+          <img src="/brand/zortech-icon.svg" alt="ZorTech" className="w-10 h-10 object-contain" />
+        ) : (
+          <>
+            <img src="/brand/zortech-logo-white.png" alt="ZorTech" className="w-40 h-auto object-contain" />
+            <p className="mt-2 text-[11px] font-semibold text-amber-200/80 tracking-wide">
+              ZorHire · Recruitment
             </p>
-            <p className="text-[10px] font-bold text-amber-200 uppercase tracking-widest mt-1">
-              Recruitment
-            </p>
-          </div>
+          </>
         )}
-      </div>
+      </Link>
 
-      {/* Nav Items */}
-      <nav className="flex-1 space-y-0.5 px-3">
+      {/* Nav Items: scrolls on short screens so Logout and the collapse toggle stay visible */}
+      <nav aria-label="Main" className="flex-1 min-h-0 overflow-y-auto space-y-0.5 px-3">
         {visibleItems.map(({ icon: Icon, label, path }) => {
           const active =
             location.pathname === path ||
@@ -213,6 +210,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
               key={path}
               to={path}
               title={collapsed ? label : undefined}
+              aria-label={collapsed ? label : undefined}
+              aria-current={active ? "page" : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
                 ${
                   active
@@ -221,7 +220,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 } ${collapsed ? "justify-center" : ""}`}
             >
               {active && (
-                <div className="absolute left-[-16px] w-1.5 h-8 bg-amber-200 rounded-r-full" />
+                <div className="absolute left-[-12px] w-1.5 h-8 bg-amber-200 rounded-r-full" />
               )}
               <Icon
                 size={18}
@@ -241,20 +240,24 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* Footer Actions */}
-      <div className="mt-auto px-3 space-y-1">
+      <div className="pt-3 px-3 space-y-1 border-t border-white/10">
         <button
+          type="button"
           onClick={() => dispatch(clearCredentials())}
+          aria-label="Sign out"
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[#d7c1a5] hover:text-[#ffcda2] hover:bg-[#7f5a30]/15 transition-all ${collapsed ? "justify-center" : ""}`}
           title={collapsed ? "Sign Out" : undefined}
         >
           <LogOut size={18} strokeWidth={2} />
           {!collapsed && (
-            <span className="text-[13px] font-bold tracking-tight">Logout</span>
+            <span className="text-[13px] font-bold tracking-tight">Sign out</span>
           )}
         </button>
 
         <button
+          type="button"
           onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-amber-300 hover:text-amber-100 transition-all ${collapsed ? "justify-center" : "justify-end"}`}
         >
           {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}

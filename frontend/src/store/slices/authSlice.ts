@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-export type SessionStatus = "idle" | "active" | "expired" | "loggedOut";
+export type SessionStatus = "idle" | "active" | "expired" | "loggedOut" | "unreachable";
 
 export interface AuthUser {
   id: string;

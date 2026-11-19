@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { setCredentials, setSessionStatus } from "../store/slices/authSlice";
 import type { AuthUser } from "../store/slices/authSlice";
@@ -11,13 +11,18 @@ export default function OAuthCallbackPage() {
   const dispatch = useAppDispatch();
 
   const [error, setError] = useState("");
+  // The exchange code is single-use; React StrictMode runs effects twice in dev.
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
     const code = searchParams.get("code");
     const oauthError = searchParams.get("oauth_error");
 
     if (oauthError) {
-      setError(oauthError);
+      setError(`The sign-in provider reported a problem (${oauthError}). Please try again or use your email and password.`);
       return;
     }
 
@@ -28,9 +33,10 @@ export default function OAuthCallbackPage() {
 
     const exchange = async () => {
       try {
-        const apiBase = import.meta.env.VITE_API_URL || "";
+        // VITE_API_URL already ends in /v1.
+        const apiBase = (import.meta.env.VITE_API_URL || "http://localhost:5000/v1").replace(/\/$/, "");
 
-        const response = await fetch(`${apiBase}/v1/auth/oauth/exchange`, {
+        const response = await fetch(`${apiBase}/auth/oauth/exchange`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -38,10 +44,15 @@ export default function OAuthCallbackPage() {
           body: JSON.stringify({ code }),
         });
 
-        const data = await response.json();
+        // A proxy error page is HTML, not JSON; don't show "Unexpected token <".
+        const data = await response.json().catch(() => ({}) as { message?: string });
 
         if (!response.ok) {
-          throw new Error(data.message || "OAuth login failed");
+          throw new Error(
+            response.status >= 500
+              ? "The ZorHire server is having trouble right now. Please try again shortly."
+              : data.message || "This sign-in link has expired. Please try again.",
+          );
         }
 
         localStorage.setItem("jwt", data.token);
@@ -71,7 +82,11 @@ export default function OAuthCallbackPage() {
           replace: true,
         });
       } catch (err: any) {
-        setError(err?.message || "OAuth login failed. Please try again.");
+        setError(
+          err instanceof TypeError
+            ? "Can't reach the ZorHire server right now. Please try again in a few minutes."
+            : err?.message || "Sign-in failed. Please try again.",
+        );
       }
     };
 

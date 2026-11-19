@@ -3,6 +3,7 @@ import { KeyRound, Lock, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-rea
 import { useChangePasswordMutation } from '../store/api/authApi';
 import { useAppDispatch } from '../hooks/useAppDispatch';
 import { clearCredentials } from '../store/slices/authSlice';
+import { baseApi, describeApiError } from '../store/api/baseApi';
 
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -32,13 +33,13 @@ export default function ChangePasswordPage() {
     try {
       await changePassword({ currentPassword, newPassword }).unwrap();
       setSuccess(true);
-      // Wait a bit then logout so they can login with new password.
-      // authMiddleware handles JWT removal + cache reset on clearCredentials.
+      // The current token stays valid, so continue into the app instead of
+      // forcing a second login: refetching /auth/me clears must_change_password.
       setTimeout(() => {
-        dispatch(clearCredentials());
-      }, 2000);
+        dispatch(baseApi.util.invalidateTags(['Auth']));
+      }, 1200);
     } catch (err: any) {
-      setError(err?.data?.message || err?.message || 'Failed to change password');
+      setError(describeApiError(err, 'Failed to change password'));
     } finally {
       setLoading(false);
     }
@@ -52,7 +53,7 @@ export default function ChangePasswordPage() {
             <ShieldCheck size={40} />
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Password Changed!</h2>
-          <p className="text-gray-500">Your password has been updated successfully. You will be redirected to the login page shortly.</p>
+          <p className="text-gray-500">Your password has been updated successfully. Taking you to ZorHire…</p>
           <div className="w-full bg-emerald-500 h-1.5 rounded-full overflow-hidden">
             <div className="bg-emerald-200 h-full animate-progress" style={{ width: '100%' }}></div>
           </div>
@@ -83,10 +84,12 @@ export default function ChangePasswordPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">Current Password</label>
+            <label htmlFor="cp-current" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">Current Password</label>
             <div className="relative">
               <input
+                id="cp-current"
                 type="password"
+                autoComplete="current-password"
                 required
                 value={currentPassword}
                 onChange={e => setCurrentPassword(e.target.value)}
@@ -98,10 +101,12 @@ export default function ChangePasswordPage() {
           </div>
 
           <div className="pt-2 border-t border-gray-50">
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">New Password</label>
+            <label htmlFor="cp-new" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">New Password</label>
             <div className="relative">
               <input
+                id="cp-new"
                 type="password"
+                autoComplete="new-password"
                 required
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
@@ -113,10 +118,12 @@ export default function ChangePasswordPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">Confirm New Password</label>
+            <label htmlFor="cp-confirm" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 ml-1">Confirm New Password</label>
             <div className="relative">
               <input
+                id="cp-confirm"
                 type="password"
+                autoComplete="new-password"
                 required
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
@@ -142,6 +149,13 @@ export default function ChangePasswordPage() {
             )}
           </button>
         </form>
+        <button
+          type="button"
+          onClick={() => dispatch(clearCredentials())}
+          className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-800"
+        >
+          Not you? Sign out
+        </button>
       </div>
     </div>
   );

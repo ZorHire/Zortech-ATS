@@ -2,6 +2,9 @@ import { lazy, Suspense } from "react";
 import { Loader2, CreditCard, Headphones, ShieldCheck } from "lucide-react";
 import { Subscription } from "../services/billing.service";
 import { useNavigate } from "react-router-dom";
+import { useAppDispatch } from "../hooks/useAppDispatch";
+import { setSubscription } from "../store/slices/subscriptionSlice";
+import { useNotify } from "../hooks/useNotify";
 
 const PricingCards = lazy(
   () => import("../components/subscription/PricingCards"),
@@ -17,9 +20,15 @@ function CardsSkeleton() {
 
 export default function PricingPage() {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
+  const notify = useNotify();
 
   const handleSubscribed = (_sub: Subscription) => {
-    navigate("/subscription");
+    // Unlock the app straight away; previously the subscription gate still
+    // saw the old "inactive" state and bounced the user back to /pricing.
+    dispatch(setSubscription({ active: true, isPlatformOwner: false, reason: null }));
+    notify.success("Payment received. Your ZorHire plan is active.");
+    navigate("/onboarding");
   };
 
   return (
@@ -111,19 +120,13 @@ export default function PricingPage() {
                 <button
                   onClick={() =>
                     window.open(
-                      "mailto:sales@zortech.in?subject=Plan%20Inquiry",
+                      "mailto:tech@zortechs.in?subject=Plan%20Inquiry",
                       "_blank",
                     )
                   }
                   className="w-full py-2 rounded-xl bg-[#111111] text-white text-[11px] font-black hover:bg-black transition-colors"
                 >
                   Talk to Sales
-                </button>
-                <button
-                  onClick={() => navigate("/public-pricing")}
-                  className="w-full py-2 rounded-xl border border-gray-200 text-[#111111] text-[11px] font-black hover:bg-gray-50 transition-colors"
-                >
-                  Compare Features →
                 </button>
               </div>
             </div>

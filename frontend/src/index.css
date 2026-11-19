@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  color-scheme: light; /* was "dark", which rendered native scrollbars, selects and date pickers dark on light pages */
   --bg: #1c1510;
   --surface: #f9efe1;
   --surface-strong: #f0e2d2;
@@ -59,4 +59,10 @@ input,
 textarea,
 select {
   font-family: inherit;
+}
+
+/* Visible keyboard focus for buttons and links (many have focus:outline-none). */
+:where(a, button, [role="button"], summary):focus-visible {
+  outline: 2px solid #F7911E;
+  outline-offset: 2px;
 }

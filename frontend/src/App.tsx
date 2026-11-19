@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAppDispatch } from "./hooks/useAppDispatch";
 import { useAppSelector } from "./hooks/useAppSelector";
 import {
@@ -20,6 +20,8 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import Layout from "./components/layout/Layout";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
+import { FullPageLoader, ServerUnreachableScreen } from "./components/layout/AppStatusScreens";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SubscribePage from "./pages/SubscribePage";
 import PublicPricingPage from "./pages/PublicPricingPage";
@@ -75,7 +77,7 @@ function SessionRestorer() {
   const dispatch = useAppDispatch();
   const hasToken = !!localStorage.getItem("jwt");
 
-  const { data, isSuccess, isError } = useMeQuery(undefined, {
+  const { data, isSuccess, isError, error } = useMeQuery(undefined, {
     skip: !hasToken,
   });
 
@@ -108,14 +110,26 @@ function SessionRestorer() {
     dispatch(setSessionStatus("active"));
   }, [isSuccess, data, dispatch]);
 
-  // Any /auth/me error (401, 5xx): clear session, matching AuthContext behavior
+  // Only a real auth rejection ends the session. If the server is down or
+  // erroring, keep the token and show a "can't reach ZorHire" screen instead
+  // of logging everyone out (the base query already handles 401).
   useEffect(() => {
-    if (isError) dispatch(clearCredentials());
-  }, [isError, dispatch]);
+    if (!isError) return;
+    const status = (error as { status?: unknown } | undefined)?.status;
+    if (status === 401 || status === 403) {
+      dispatch(clearCredentials());
+      dispatch(setSessionStatus("expired"));
+    } else {
+      dispatch(setSessionStatus("unreachable"));
+    }
+  }, [isError, error, dispatch]);
 
   // Handle mid-session 401s fired by legacy api.ts calls
   useEffect(() => {
-    const onUnauthorized = () => dispatch(clearCredentials());
+    const onUnauthorized = () => {
+      dispatch(clearCredentials());
+      dispatch(setSessionStatus("expired"));
+    };
     window.addEventListener("auth:unauthorized", onUnauthorized);
     return () =>
       window.removeEventListener("auth:unauthorized", onUnauthorized);
@@ -136,20 +150,16 @@ function ProtectedRoute({
   const user = useAppSelector(selectCurrentUser);
   const sessionStatus = useAppSelector(selectSessionStatus);
   const subscription = useAppSelector(selectSubscription);
+  const location = useLocation();
 
   // Show spinner while SessionRestorer hasn't resolved yet.
-  if (sessionStatus === "idle") {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Loading platform...</p>
-        </div>
-      </div>
-    );
-  }
+  if (sessionStatus === "idle") return <FullPageLoader />;
 
-  if (!user) return <Navigate to="/login" replace />;
+  // Signed in, but the API can't be reached: keep the session and offer a retry.
+  if (sessionStatus === "unreachable" && !user) return <ServerUnreachableScreen />;
+
+  // Remember where the user was heading so login can send them back there.
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
 
   // Gate 1: force password change before any other navigation
   if (user.must_change_password) {
@@ -200,8 +210,25 @@ function ProtectedRoute({
   return <Layout>{children}</Layout>;
 }
 
+/** Login page; once signed in, go back to the page the user originally wanted. */
+function LoginRoute() {
+  const user = useAppSelector(selectCurrentUser);
+  const location = useLocation();
+  if (user) {
+    const from = (location.state as { from?: { pathname?: string; search?: string } } | null)?.from;
+    const target = from?.pathname && from.pathname !== "/login" ? `${from.pathname}${from.search ?? ""}` : "/";
+    return <Navigate to={target} replace />;
+  }
+  return <LoginPage />;
+}
+
 function AppRoutes() {
   const user = useAppSelector(selectCurrentUser);
+  const sessionStatus = useAppSelector(selectSessionStatus);
+  // A stored token means "probably signed in": don't flash the marketing page
+  // while the session is being restored (or while the API is down).
+  const restoringSession =
+    !user && !!localStorage.getItem("jwt") && (sessionStatus === "idle" || sessionStatus === "unreachable");
 
   return (
     <Routes>
@@ -210,10 +237,8 @@ function AppRoutes() {
         path="/subscribe"
         element={user ? <Navigate to="/" replace /> : <SubscribePage />}
       />
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/" replace /> : <LoginPage />}
-      />
+      <Route path="/login" element={<LoginRoute />} />
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/screening/:sessionId" element={<ScreeningChatPage />} />
       {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}
@@ -232,7 +257,7 @@ function AppRoutes() {
       <Route
         path="/"
         element={
-          user ? (
+          user || restoringSession ? (
             <ProtectedRoute path="/">
               <DashboardPage />
             </ProtectedRoute>
@@ -471,7 +496,7 @@ function AppRoutes() {
 
       <Route
         path="*"
-        element={<Navigate to={user ? "/" : "/subscribe"} replace />}
+        element={<Navigate to="/" replace />}
       />
     </Routes>
   );

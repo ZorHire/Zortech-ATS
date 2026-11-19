@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Globe, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
 import { useListBoardsQuery, usePublishJobMutation } from '../../store/api/jobBoardsApi';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface Props {
   jobId: string;
@@ -11,6 +12,8 @@ interface Props {
 export default function JobBoardPublishModal({ jobId, onClose, onSuccess }: Props) {
   const { data, isLoading: loadingBoards } = useListBoardsQuery();
   const [publishJob, { isLoading: publishing }] = usePublishJobMutation();
+  // Esc closes (not mid-publish). No backdrop-close, consistent with other selection/form modals.
+  useEscapeKey(onClose, !publishing);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Array<{ board_key: string; board_name: string; success: boolean; error?: string }> | null>(null);
@@ -51,7 +54,7 @@ export default function JobBoardPublishModal({ jobId, onClose, onSuccess }: Prop
             <Globe size={18} className="text-blue-600" />
             <h2 className="text-base font-semibold text-gray-900">Publish to Job Boards</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-gray-600 transition-colors">
             <X size={18} />
           </button>
         </div>

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../../lib/confidenceIndicator";
 import { useParseResumeMutation, useAddCandidateToJobMutation } from "../../store/api/candidateApi";
+import { useNotify } from "../../hooks/useNotify";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 
 interface Props {
   jobId: string;
@@ -46,6 +48,10 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
 
   const [parseResume, { isLoading: resumeParsing }] = useParseResumeMutation();
   const [addCandidateToJob, { isLoading: submitting }] = useAddCandidateToJobMutation();
+  const notify = useNotify();
+
+  // Esc closes (not mid-submit). No backdrop-close: it would discard the typed form.
+  useEscapeKey(onClose, !submitting);
 
   const parseResumeFile = async (file: File) => {
     setResumeParseMessage("");
@@ -90,9 +96,10 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email.trim() && !formData.phone.trim()) {
-      alert("Please provide at least an email or phone number.");
+      notify.warning("Please provide at least an email or phone number.");
       return;
     }
+    if (submitting) return;
     try {
       const fd = new FormData();
       fd.append("first_name", formData.first_name);
@@ -115,10 +122,11 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
       if (resumeFile) fd.append("resume", resumeFile);
 
       await addCandidateToJob({ jobId, body: fd }).unwrap();
+      notify.success("Candidate added to job");
       onSuccess();
       onClose();
     } catch (err: any) {
-      alert(err?.data?.message || err?.message || "Failed to add candidate");
+      notify.error(err?.data?.message || err?.message || "Failed to add candidate");
     }
   };
 
@@ -141,6 +149,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
           <h2 className="text-xl font-black text-[#111111] tracking-tight">Add Candidate to Job</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]"
           >
             <X size={20} />

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, X, Zap, Loader2 } from "lucide-react";
+import { useNotify } from "../../hooks/useNotify";
 import {
   PLANS,
   Plan,
@@ -28,6 +29,7 @@ interface PricingCardsProps {
 }
 
 export default function PricingCards({ onSubscribed, publicMode = false }: PricingCardsProps) {
+  const notify = useNotify();
   const navigate = useNavigate();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
@@ -49,7 +51,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
       return;
     }
     if (plan.id === "enterprise") {
-      window.open("mailto:sales@zortech.in?subject=Enterprise Plan Inquiry", "_blank");
+      window.open("mailto:tech@zortechs.in?subject=Enterprise Plan Inquiry", "_blank");
       return;
     }
     setSubscribing(plan.id);
@@ -58,7 +60,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
 
       const loaded = await loadRazorpayScript();
       if (!loaded) {
-        alert("Failed to load payment gateway. Please check your connection and try again.");
+        notify.error("Failed to load payment gateway. Please check your connection and try again.");
         setSubscribing(null);
         return;
       }
@@ -87,7 +89,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
             setCurrentSub(subscription);
             onSubscribed?.(subscription);
           } catch (err: any) {
-            alert(err?.message || "Payment verification failed. Please contact support.");
+            notify.error(err?.message || "Payment verification failed. Please contact support.");
           } finally {
             setSubscribing(null);
           }
@@ -98,7 +100,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
       });
       rzp.open();
     } catch (err: any) {
-      alert(err?.message || "Failed to initiate payment. Please try again.");
+      notify.error(err?.message || "Failed to initiate payment. Please try again.");
       setSubscribing(null);
     }
   };

@@ -6,8 +6,6 @@ import {
   Mail,
   Clock,
   ChevronRight,
-  TrendingUp,
-  TrendingDown,
   LayoutGrid,
   Circle,
   AlertCircle,
@@ -66,8 +64,6 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  trend,
-  trendLabel,
   color,
   bgColor,
   onClick,
@@ -75,8 +71,6 @@ function StatCard({
   icon: React.ComponentType<any>;
   label: string;
   value: string | number;
-  trend?: number;
-  trendLabel?: string;
   color: string;
   bgColor: string;
   onClick?: () => void;
@@ -91,54 +85,12 @@ function StatCard({
         <div className={`w-10 h-10 ${bgColor} rounded-xl flex items-center justify-center`}>
           <Icon size={20} className={color} />
         </div>
-        {trend !== undefined && (
-          <div className={`flex items-center gap-1 text-xs font-semibold ${trend >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-            {trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {Math.abs(trend)}%
-          </div>
-        )}
       </div>
       <div>
         <p className="text-2xl font-bold text-gray-900">{value}</p>
         <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-        {trendLabel && <p className="text-[10px] text-gray-400 mt-0.5">{trendLabel}</p>}
       </div>
     </Wrapper>
-  );
-}
-
-// ─── Simple SVG line chart ────────────────────────────────────────────────────
-
-function PipelineChart({ data }: { data: { day: string; count: number }[] }) {
-  if (!data.length) return null;
-  const max = Math.max(...data.map((d) => d.count), 1);
-  const W = 400;
-  const H = 80;
-  const pad = 8;
-  const xStep = (W - pad * 2) / (data.length - 1);
-
-  const points = data.map((d, i) => ({
-    x: pad + i * xStep,
-    y: H - pad - ((d.count / max) * (H - pad * 2)),
-  }));
-
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const areaPath = `${path} L ${points[points.length - 1].x} ${H} L ${pad} ${H} Z`;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.3" />
-          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={areaPath} fill="url(#lineGrad)" />
-      <path d={path} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-      {points.map((p, i) => (
-        <circle key={i} cx={p.x} cy={p.y} r="3.5" fill="#f59e0b" stroke="white" strokeWidth="2" />
-      ))}
-    </svg>
   );
 }
 
@@ -264,12 +216,7 @@ export default function DashboardPage() {
 
   const fmt = (n: number | undefined) => (n !== undefined ? n.toLocaleString("en-IN") : "—");
 
-  // Build week sparkline data from pipeline stages
-  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const weekData = weekDays.map((day, i) => ({
-    day,
-    count: stats ? Math.max(0, Math.round((stats.total_candidates / 7) * (0.6 + 0.5 * Math.sin(i * 1.2 + 0.5)))) : 0,
-  }));
+  // NOTE: no per-day pipeline data exists in the API, so there is no weekly trend chart.
 
   // Build donut segments
   const snapshotStages = ["sourced", "screened", "shortlisted", "submitted_to_client", "selected"];
@@ -375,8 +322,6 @@ export default function DashboardPage() {
             icon={Users}
             label="Total Candidates"
             value={fmt(stats?.total_candidates)}
-            trend={12}
-            trendLabel="from last week"
             color="text-blue-600"
             bgColor="bg-blue-50"
             onClick={() => setActiveCard("pipeline")}
@@ -384,9 +329,7 @@ export default function DashboardPage() {
           <StatCard
             icon={Mail}
             label="Emails Sent"
-            value={fmt(stats?.emails_sent ?? 0)}
-            trend={8}
-            trendLabel="from last week"
+            value={fmt(stats?.emails_sent)}
             color="text-emerald-600"
             bgColor="bg-emerald-50"
           />
@@ -394,8 +337,6 @@ export default function DashboardPage() {
             icon={Briefcase}
             label="Active Jobs"
             value={stats ? fmt(stats.active_jobs) : fmt(activeJobs.length)}
-            trend={15}
-            trendLabel="from last week"
             color="text-violet-600"
             bgColor="bg-violet-50"
             onClick={() => setActiveCard("jobs")}
@@ -404,8 +345,6 @@ export default function DashboardPage() {
             icon={Calendar}
             label="Interviews"
             value={fmt(stats?.upcoming_interviews)}
-            trend={25}
-            trendLabel="from last week"
             color="text-amber-600"
             bgColor="bg-amber-50"
             onClick={() => setActiveCard("interviews")}
@@ -414,8 +353,6 @@ export default function DashboardPage() {
             icon={AlertTriangle}
             label="SLA Alerts"
             value={fmt(stats?.sla_alerts)}
-            trend={(stats?.sla_alerts ?? 0) > 0 ? -(stats?.sla_alerts ?? 0) : 0}
-            trendLabel="2 new alerts"
             color="text-red-600"
             bgColor="bg-red-50"
             onClick={() => setActiveCard("alerts")}
@@ -433,20 +370,6 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-gray-900 mt-1">{pipelineTotal.toLocaleString("en-IN")}</p>
                 <p className="text-xs text-gray-400">Candidates in pipeline</p>
               </div>
-              <div className="flex items-center gap-1 text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-500">
-                This Week
-                <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
-              </div>
-            </div>
-            <div className="mt-4">
-              <PipelineChart data={weekData} />
-            </div>
-            <div className="flex items-center justify-between mt-3 text-center">
-              {weekDays.map((d, i) => (
-                <div key={d} className="flex flex-col items-center">
-                  <span className={`text-[11px] font-semibold ${i === 2 ? "text-amber-600" : "text-gray-400"}`}>{d}</span>
-                </div>
-              ))}
             </div>
             <div className="grid grid-cols-5 gap-1 mt-4 pt-4 border-t border-gray-50">
               {pipelineRow.map((row) => (
@@ -461,19 +384,8 @@ export default function DashboardPage() {
           {/* Recruitment Snapshot */}
           <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <p className="text-sm font-bold text-gray-900 mb-4">Recruitment Snapshot</p>
-            <DonutChart
-              segments={
-                donutSegments.length > 0
-                  ? donutSegments
-                  : [
-                      { label: "Sourced", value: 4, color: "#3b82f6" },
-                      { label: "Screening", value: 4, color: "#8b5cf6" },
-                      { label: "Interview", value: 5, color: "#f59e0b" },
-                      { label: "Offered", value: 2, color: "#6366f1" },
-                      { label: "Hired", value: 1, color: "#10b981" },
-                    ]
-              }
-            />
+            {/* Real stage counts only; DonutChart renders "No data yet" when empty. */}
+            <DonutChart segments={donutSegments} />
           </div>
 
           {/* Tasks & Reminders */}

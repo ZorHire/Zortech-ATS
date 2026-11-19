@@ -351,13 +351,39 @@ const EXPERIENCE_RANGES: Record<string, [number, number | null]> = {
   "0-3 yrs": [0, 3],
   "3-7 yrs": [3, 7],
   "7+ yrs": [7, null],
+  // Labels sent by the Resume Search page
+  "0-2 Years": [0, 2],
+  "2-4 Years": [2, 4],
+  "4-8 Years": [4, 8],
+  "8-12 Years": [8, 12],
+  "12+ Years": [12, null],
 };
+
+const SEARCH_SOURCES = new Set([
+  "linkedin", "indeed", "naukri", "monster", "glassdoor",
+  "vendor", "referral", "direct", "other",
+]);
+
+/** Escape LIKE/ILIKE wildcards so user input is matched literally. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
+/** Accepts ?skills=a,b or repeated ?skills=a&skills=b. */
+function parseSkillsParam(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : raw != null ? [raw] : [];
+  return list
+    .flatMap((v) => String(v).split(","))
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
 
 function buildSearchFilters(
   tenantId: string,
   query: Record<string, any>,
 ): { filters: string[]; params: any[] } {
-  const { location, experience, noticePeriod } = query;
+  const { location, experience, noticePeriod, role, source } = query;
   // NOTE: intentionally omits is_active filter — matches getCandidates behaviour
   // and avoids excluding rows where is_active IS NULL (no NOT NULL on schema)
   const filters: string[] = ["tenant_id = $1", "deleted_at IS NULL"];
@@ -381,13 +407,39 @@ function buildSearchFilters(
   }
 
   if (noticePeriod && noticePeriod !== "Any") {
-    if (noticePeriod === "< 30 days") {
+    if (noticePeriod === "Immediate") {
+      filters.push("notice_period_days = 0");
+    } else if (noticePeriod === "< 15 days") {
+      filters.push("notice_period_days < 15");
+    } else if (noticePeriod === "< 30 days") {
       filters.push("notice_period_days < 30");
     } else if (noticePeriod === "30-60 days") {
       filters.push("notice_period_days BETWEEN 30 AND 60");
     } else if (noticePeriod === "60+ days") {
       filters.push("notice_period_days > 60");
     }
+  }
+
+  // Current role / title: case-insensitive substring
+  const roleStr = typeof role === "string" ? role.trim() : "";
+  if (roleStr) {
+    params.push(`%${escapeLike(roleStr)}%`);
+    filters.push(`current_title ILIKE $${params.length}`);
+  }
+
+  // Source: exact match against the known source values only
+  const sourceStr = typeof source === "string" ? source.trim().toLowerCase() : "";
+  if (sourceStr && sourceStr !== "all" && SEARCH_SOURCES.has(sourceStr)) {
+    params.push(sourceStr);
+    filters.push(`source = $${params.length}`);
+  }
+
+  // Skills: candidate must have every requested skill (substring, case-insensitive)
+  for (const skill of parseSkillsParam(query.skills)) {
+    params.push(`%${escapeLike(skill)}%`);
+    filters.push(
+      `EXISTS (SELECT 1 FROM unnest(skills) AS sk WHERE sk ILIKE $${params.length})`,
+    );
   }
 
   return { filters, params };
@@ -485,6 +537,43 @@ function matchesBooleanQuery(
   return true;
 }
 
+/**
+ * Applies the keyword query (plain text or AND/OR/NOT) to rows already
+ * narrowed by buildSearchFilters, and scores them. Shared by search + export.
+ */
+function applyKeywordQuery(
+  rows: any[],
+  queryStr: string,
+): Array<{ candidate: any; score: number }> {
+  if (queryStr.length === 0) {
+    return rows.map((c) => ({ candidate: c, score: 100 }));
+  }
+  if (/\b(AND|OR|NOT)\b/i.test(queryStr)) {
+    // True boolean mode: parse AND/OR/NOT operators
+    const { mustHave, shouldHave, mustNot } = parseBooleanQuery(queryStr);
+    const scoreTerms = [...mustHave, ...shouldHave];
+    return rows
+      .filter((c) => matchesBooleanQuery(c, mustHave, shouldHave, mustNot))
+      .map((c) => ({ candidate: c, score: scoreCandidate(c, scoreTerms) }))
+      .sort((a, b) => b.score - a.score);
+  }
+  // Plain text: score by term overlap
+  const queryTerms = queryStr
+    .toLowerCase()
+    .split(/\s+/)
+    .map((t) => t.replace(/[()]/g, "").trim())
+    .filter(Boolean);
+  return rows
+    .map((c) => ({ candidate: c, score: scoreCandidate(c, queryTerms) }))
+    .filter((r) => r.score > 55)
+    .sort((a, b) => b.score - a.score);
+}
+
+function timeOf(v: unknown): number {
+  const t = v ? new Date(v as any).getTime() : 0;
+  return Number.isFinite(t) ? t : 0;
+}
+
 // ─── search ─────────────────────────────────────────────────────────────────
 
 export const searchCandidates = async (req: AuthRequest, res: Response) => {
@@ -510,29 +599,23 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
     );
 
     const queryStr = String(rawQuery ?? "").trim();
-    let withScores: Array<{ candidate: any; score: number }>;
+    const withScores = applyKeywordQuery(dbResult.rows, queryStr);
 
-    if (queryStr.length === 0) {
-      withScores = dbResult.rows.map((c) => ({ candidate: c, score: 100 }));
-    } else if (/\b(AND|OR|NOT)\b/i.test(queryStr)) {
-      // True boolean mode: parse AND/OR/NOT operators
-      const { mustHave, shouldHave, mustNot } = parseBooleanQuery(queryStr);
-      const scoreTerms = [...mustHave, ...shouldHave];
-      withScores = dbResult.rows
-        .filter((c) => matchesBooleanQuery(c, mustHave, shouldHave, mustNot))
-        .map((c) => ({ candidate: c, score: scoreCandidate(c, scoreTerms) }))
-        .sort((a, b) => b.score - a.score);
-    } else {
-      // Plain text: all words treated as AND (all must appear somewhere)
-      const queryTerms = queryStr
-        .toLowerCase()
-        .split(/\s+/)
-        .map((t) => t.replace(/[()]/g, "").trim())
-        .filter(Boolean);
-      withScores = dbResult.rows
-        .map((c) => ({ candidate: c, score: scoreCandidate(c, queryTerms) }))
-        .filter((r) => r.score > 55)
-        .sort((a, b) => b.score - a.score);
+    // Sort: relevance (default, already score-sorted; ties keep created_at DESC),
+    // recent (updated_at DESC) or experience (experience_years DESC).
+    const sort = String(req.query.sort ?? "relevance");
+    if (sort === "recent") {
+      withScores.sort(
+        (a, b) =>
+          timeOf(b.candidate.updated_at ?? b.candidate.created_at) -
+          timeOf(a.candidate.updated_at ?? a.candidate.created_at),
+      );
+    } else if (sort === "experience") {
+      withScores.sort(
+        (a, b) =>
+          (Number(b.candidate.experience_years) || 0) -
+          (Number(a.candidate.experience_years) || 0),
+      );
     }
 
     const total = withScores.length;
@@ -540,11 +623,18 @@ export const searchCandidates = async (req: AuthRequest, res: Response) => {
 
     // Fire-and-forget: record this search in history (only when there's something meaningful)
     const userId = req.user?.id;
-    if (userId && (queryStr.length > 0 || req.query.location || req.query.experience || req.query.noticePeriod)) {
+    const hasFilters = Boolean(
+      req.query.location || req.query.experience || req.query.noticePeriod ||
+      req.query.skills || req.query.role || req.query.source,
+    );
+    if (userId && (queryStr.length > 0 || hasFilters)) {
       const histFilters = {
         location: req.query.location ?? null,
         experience: req.query.experience ?? null,
         noticePeriod: req.query.noticePeriod ?? null,
+        skills: parseSkillsParam(req.query.skills),
+        role: req.query.role ?? null,
+        source: req.query.source ?? null,
       };
       (async () => {
         try {
@@ -696,14 +786,19 @@ export const exportCandidates = async (req: AuthRequest, res: Response) => {
     const dbResult = await pool.query(
       `SELECT first_name, last_name, email, phone, current_title, current_company,
               experience_years, current_location, notice_period_days, expected_ctc,
-              skills, source, created_at
+              skills, source, created_at, summary
        FROM candidates
        WHERE ${filters.join(" AND ")}
        ORDER BY created_at DESC`,
       params,
     );
 
-    const rows = dbResult.rows.map((r) => ({
+    // Apply the same keyword query as /search so the export matches the screen.
+    // (summary is selected only for matching; it is not in the CSV fields.)
+    const queryStr = String(req.query.query ?? "").trim();
+    const matched = applyKeywordQuery(dbResult.rows, queryStr).map((r) => r.candidate);
+
+    const rows = matched.map((r) => ({
       ...r,
       skills: Array.isArray(r.skills) ? r.skills.join(", ") : r.skills,
     }));

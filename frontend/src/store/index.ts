@@ -17,6 +17,7 @@ import permissionReducer from "./slices/permissionSlice";
 import featureReducer from "./slices/featureSlice";
 import uiReducer from "./slices/uiSlice";
 import notificationReducer from "./slices/notificationSlice";
+import connectionReducer from "./slices/connectionSlice";
 import { baseApi } from "./api/baseApi";
 import { authMiddleware } from "./middleware/authMiddleware";
 
@@ -28,6 +29,7 @@ const rootReducer = combineReducers({
   features: featureReducer,
   ui: uiReducer,
   notifications: notificationReducer,
+  connection: connectionReducer,
   [baseApi.reducerPath]: baseApi.reducer,
 });
 

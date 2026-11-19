@@ -17,12 +17,12 @@ export const pipelineApi = baseApi.injectEndpoints({
         method: "PATCH",
         body: { to_stage: stage, note },
       }),
-      invalidatesTags: ["Pipeline"],
+      invalidatesTags: ["Pipeline", "Dashboard", "Candidates", "Candidate"],
     }),
 
     addToPipeline: builder.mutation<void, { candidateId: string; jobId: string }>({
       query: (body) => ({ url: "/pipeline/add", method: "POST", body }),
-      invalidatesTags: ["Pipeline"],
+      invalidatesTags: ["Pipeline", "Dashboard", "Candidates", "Candidate"],
     }),
 
     addApplicationToJob: builder.mutation<
@@ -34,7 +34,7 @@ export const pipelineApi = baseApi.injectEndpoints({
         method: "POST",
         body: { candidate_id: candidateId, stage },
       }),
-      invalidatesTags: ["Pipeline"],
+      invalidatesTags: ["Pipeline", "Dashboard", "Candidates", "Candidate"],
     }),
   }),
   overrideExisting: false,

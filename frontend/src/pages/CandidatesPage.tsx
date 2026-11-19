@@ -2,8 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
-  Building2,
-  Clock,
   Mail,
   Phone,
   Plus,
@@ -17,12 +15,8 @@ import {
   MoreHorizontal,
   ExternalLink,
   Users,
-  TrendingUp,
-  TrendingDown,
   ChevronLeft,
   ChevronRight,
-  Filter,
-  Sparkles,
 } from "lucide-react";
 import Header from "../components/layout/Header";
 import { Candidate } from "../types";
@@ -38,9 +32,10 @@ import {
 import { useGetJobsQuery } from "../store/api/jobApi";
 import CandidateModal from "../components/candidates/CandidateModal";
 import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
-import { useSendEmail } from "../hooks/useSendEmail";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
-import EmailToast from "../components/ui/EmailToast";
+import { useNotify } from "../hooks/useNotify";
+import { useEscapeKey } from "../hooks/useEscapeKey";
+import { getErrorMessage } from "../lib/format";
 import BulkResumeUploadModal from "../components/bulk/BulkResumeUploadModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -130,9 +125,9 @@ function RowMenu({
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
-function StatCard({ icon: Icon, label, value, color, bg, trend }: {
+function StatCard({ icon: Icon, label, value, color, bg }: {
   icon: React.ComponentType<any>; label: string; value: number | string;
-  color: string; bg: string; trend?: number;
+  color: string; bg: string;
 }) {
   return (
     <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
@@ -140,11 +135,6 @@ function StatCard({ icon: Icon, label, value, color, bg, trend }: {
         <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center`}>
           <Icon size={16} className={color} />
         </div>
-        {trend !== undefined && (
-          <span className={`text-xs font-semibold flex items-center gap-0.5 ${trend >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-            {trend >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{Math.abs(trend)}%
-          </span>
-        )}
       </div>
       <p className="text-2xl font-bold text-gray-900">{value}</p>
       <p className="text-xs text-gray-500 mt-0.5">{label}</p>
@@ -165,11 +155,12 @@ export default function CandidatesPage() {
   const { data: candidates = [], isLoading: loading, refetch } = useGetCandidatesQuery();
   const { data: assignedJobs = [] } = useGetJobsQuery(undefined, { skip: !(isVendor || isRecruiter) });
   const [parseResume, { isLoading: resumeParsing }] = useParseResumeMutation();
-  const [addCandidateToJob] = useAddCandidateToJobMutation();
-  const [createCandidate] = useCreateCandidateMutation();
+  const [addCandidateToJob, { isLoading: addingToJob }] = useAddCandidateToJobMutation();
+  const [createCandidate, { isLoading: creating }] = useCreateCandidateMutation();
   const [deleteCandidate] = useDeleteCandidateMutation();
+  const savingCandidate = addingToJob || creating;
+  const notify = useNotify();
 
-  const { emailToast } = useSendEmail();
   const [composeTarget, setComposeTarget] = useState<Candidate | null>(null);
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
@@ -192,6 +183,10 @@ export default function CandidatesPage() {
   const [resumeParseMessage, setResumeParseMessage] = useState("");
   const [resumeParseError, setResumeParseError] = useState("");
   const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
+
+  const closeAddModal = () => { setIsAddModalOpen(false); setSelectedJobId(""); };
+  // Esc closes the add form (not while saving). No backdrop-close: it would discard typed input.
+  useEscapeKey(closeAddModal, isAddModalOpen && !savingCandidate);
 
   const parseResumeFile = async (file: File) => {
     setResumeParseMessage(""); setResumeParseError("");
@@ -230,13 +225,14 @@ export default function CandidatesPage() {
   const handleAddCandidate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email.trim() && !formData.phone.trim()) {
-      alert("Please provide at least an email or phone number.");
+      notify.warning("Please provide at least an email or phone number.");
       return;
     }
     if ((isVendor || isRecruiter) && !selectedJobId) {
-      alert("Please select a job to add this candidate to.");
+      notify.warning("Please select a job to add this candidate to.");
       return;
     }
+    if (savingCandidate) return;
     try {
       const fd = new FormData();
       Object.entries(formData).forEach(([k, v]) => {
@@ -260,8 +256,9 @@ export default function CandidatesPage() {
       setLowConfidenceFields([]);
       setResumeFile(null);
       setResumeParseMessage(""); setResumeParseError("");
+      notify.success("Candidate added");
     } catch (error: any) {
-      alert(error?.data?.message || error?.message || "Failed to add candidate");
+      notify.error(error?.data?.message || error?.message || "Failed to add candidate");
     }
   };
 
@@ -270,7 +267,10 @@ export default function CandidatesPage() {
     try {
       await deleteCandidate(id).unwrap();
       if (viewingCandidate?.id === id) setViewingCandidate(null);
-    } catch { alert("Failed to delete candidate"); }
+      notify.success("Candidate deleted");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to delete candidate"));
+    }
   };
 
   // ── Filtering ──
@@ -339,12 +339,11 @@ export default function CandidatesPage() {
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
         {/* ── Stat Cards ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Candidates" value={candidates.length} color="text-blue-600" bg="bg-blue-50" trend={12} />
-          <StatCard icon={UserCheck} label="Active" value={activeCount} color="text-emerald-600" bg="bg-emerald-50" trend={8} />
-          <StatCard icon={Clock} label="In Process" value={Math.floor(activeCount * 0.4)} color="text-amber-600" bg="bg-amber-50" trend={15} />
-          <StatCard icon={Building2} label="Hired" value={Math.floor(candidates.length * 0.05)} color="text-violet-600" bg="bg-violet-50" trend={20} />
-          <StatCard icon={X} label="Rejected" value={inactiveCount} color="text-red-500" bg="bg-red-50" trend={-5} />
+        {/* Only counts we can derive from real data; per-stage counts live on the Pipeline page. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+          <StatCard icon={Users} label="Total Candidates" value={candidates.length} color="text-blue-600" bg="bg-blue-50" />
+          <StatCard icon={UserCheck} label="Active" value={activeCount} color="text-emerald-600" bg="bg-emerald-50" />
+          <StatCard icon={X} label="Inactive" value={inactiveCount} color="text-red-500" bg="bg-red-50" />
         </div>
 
         {/* ── Search + Filters ── */}
@@ -376,9 +375,6 @@ export default function CandidatesPage() {
                 <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
               </div>
             ))}
-            <button className="flex items-center gap-1.5 text-sm px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
-              <Filter size={13} /> Filters
-            </button>
           </div>
         </div>
 
@@ -403,9 +399,6 @@ export default function CandidatesPage() {
               className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
             >
               <Download size={13} /> Export CSV
-            </button>
-            <button className="flex items-center gap-1.5 text-xs px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg hover:bg-emerald-100 font-medium">
-              <Sparkles size={13} /> AI Match to Job
             </button>
           </div>
         </div>
@@ -554,7 +547,7 @@ export default function CandidatesPage() {
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
             <div className="px-7 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
               <h2 className="text-lg font-bold text-gray-900">Add New Candidate</h2>
-              <button onClick={() => { setIsAddModalOpen(false); setSelectedJobId(""); }} className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-600">
+              <button onClick={closeAddModal} aria-label="Close" className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-600">
                 <X size={18} />
               </button>
             </div>
@@ -652,10 +645,10 @@ export default function CandidatesPage() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-3 bg-gray-50 text-gray-700 font-semibold text-sm rounded-xl hover:bg-gray-100">Cancel</button>
-                <button type="submit" disabled={resumeParsing || ((isVendor || isRecruiter) && assignedJobs.length === 0)}
+                <button type="button" onClick={closeAddModal} disabled={savingCandidate} className="flex-1 py-3 bg-gray-50 text-gray-700 font-semibold text-sm rounded-xl hover:bg-gray-100 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={resumeParsing || savingCandidate || ((isVendor || isRecruiter) && assignedJobs.length === 0)}
                   className="flex-1 py-3 bg-gray-900 text-white font-semibold text-sm rounded-xl hover:bg-gray-800 disabled:opacity-50">
-                  {resumeParsing ? "Parsing…" : "Create Profile"}
+                  {resumeParsing ? "Parsing…" : savingCandidate ? "Saving…" : "Create Profile"}
                 </button>
               </div>
             </form>
@@ -679,7 +672,6 @@ export default function CandidatesPage() {
         />
       )}
 
-      {emailToast && <EmailToast {...emailToast} />}
       {composeTarget && (
         <ComposeEmailModal
           to={composeTarget.email}

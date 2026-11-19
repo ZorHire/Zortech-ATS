@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 import {
   X,
   Search,
@@ -38,6 +39,7 @@ export default function PipelineJobSelector({ jobs, onClose }: Props) {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  useEscapeKey(onClose);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -57,7 +59,10 @@ export default function PipelineJobSelector({ jobs, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl flex flex-col max-h-[80vh] overflow-hidden">
         {/* Header */}
         <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
@@ -69,6 +74,7 @@ export default function PipelineJobSelector({ jobs, onClose }: Props) {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
           >
             <X size={18} />

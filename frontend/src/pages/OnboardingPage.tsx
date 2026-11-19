@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { selectCurrentUser } from "../store/slices/authSlice";
+import { selectSubscription } from "../store/slices/subscriptionSlice";
 import { useGetOnboardingStatusQuery } from "../store/api/adminApi";
 
 import type { OnboardingStatus } from "../store/api/adminApi";
@@ -113,6 +114,7 @@ const C = {
 
 export default function OnboardingPage() {
   const user = useAppSelector(selectCurrentUser);
+  const subscription = useAppSelector(selectSubscription);
   const navigate = useNavigate();
   const [animating, setAnimating] = useState(false);
 
@@ -202,6 +204,7 @@ export default function OnboardingPage() {
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section style={{ maxWidth: 900, margin: "0 auto", padding: "72px 24px 48px", textAlign: "center" }}>
+        {(subscription?.active || subscription?.isPlatformOwner) && (
         <div
           style={{
             display: "inline-block",
@@ -217,6 +220,7 @@ export default function OnboardingPage() {
         >
           ✅ Your subscription is active
         </div>
+        )}
         <h1
           style={{
             margin: "0 0 16px",
@@ -525,7 +529,7 @@ export default function OnboardingPage() {
               Complete Setup →
             </button>
             <a
-              href="mailto:hello@zorhire.com"
+              href="mailto:tech@zortechs.in"
               style={{
                 background: "transparent",
                 color: C.text,
@@ -562,16 +566,8 @@ export default function OnboardingPage() {
             justifyContent: "center",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.muted }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-            All systems operational
-          </div>
-          <a href="mailto:hello@zorhire.com" style={{ fontSize: 13, color: C.muted, textDecoration: "none" }}>
-            ✉ hello@zorhire.com
-          </a>
-          <span style={{ fontSize: 13, color: C.muted }}>💬 Live chat: 9am–6pm IST, Mon–Fri</span>
-          <a href="#" style={{ fontSize: 13, color: C.blue, textDecoration: "none" }}>
-            📘 docs.zorhire.com
+          <a href="mailto:tech@zortechs.in" style={{ fontSize: 13, color: C.muted, textDecoration: "none" }}>
+            ✉ Need help? tech@zortechs.in
           </a>
         </div>
       </footer>
