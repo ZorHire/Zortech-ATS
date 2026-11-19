@@ -742,6 +742,7 @@ export const getCandidateTimeline = async (req: AuthRequest, res: Response) => {
          ja.stage,
          ja.notes,
          ja.ai_score,
+         ja.rejection_reason,
          ja.created_at,
          ja.updated_at,
          j.id        AS job_id,

@@ -28,71 +28,98 @@ import { Button, buttonClasses } from "../components/ui";
 import type { OnboardingStatus } from "../store/api/adminApi";
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
+// Each step maps to one flag from GET /onboarding/status. "Go live" has no flag of
+// its own: it is done once every other step is. `path` deep-links to the exact
+// screen; `hint` says what to click there when the page can't open it by URL.
 
-const STEPS: {
-  key: "account_created" | "team_invited" | "pipeline_created" | "channel_connected" | "first_job_posted";
+type FlagKey = "profile_complete" | "team_invited" | "channel_connected" | "first_job_posted" | "pipeline_created";
+
+interface Step {
+  key: FlagKey | "go_live";
   num: number;
   title: string;
   description: string;
+  hint: string;
+  action: string;
   time: string;
   icon: LucideIcon;
   path: string;
-}[] = [
+}
+
+const STEPS: Step[] = [
   {
-    key: "account_created",
+    key: "profile_complete",
     num: 1,
-    title: "Set up company profile",
-    description: "Add your brand, industry, and company details to personalise your ATS.",
-    time: "5 mins",
+    title: "Complete your profile",
+    description: "Add your name and details so your team and vendors know who they're working with.",
+    hint: "Fill in your full name on the Profile page and click Save.",
+    action: "Open profile",
+    time: "3 mins",
     icon: Building2,
-    path: "/admin",
+    path: "/profile",
   },
   {
     key: "team_invited",
     num: 2,
     title: "Invite your hiring team",
     description: "Add recruiters, account managers, and admins to collaborate.",
+    hint: "On the Users page, click \u201cInvite user\u201d and enter their email and role.",
+    action: "Invite a teammate",
     time: "3 mins",
     icon: Users,
     path: "/admin",
   },
   {
-    key: "pipeline_created",
-    num: 3,
-    title: "Build your hiring pipeline",
-    description: "Set up stages from sourcing to offer acceptance for your workflow.",
-    time: "10 mins",
-    icon: Workflow,
-    path: "/jobs",
-  },
-  {
     key: "channel_connected",
-    num: 4,
-    title: "Connect your channels",
-    description: "Link your email and job boards so candidates flow in automatically.",
+    num: 3,
+    title: "Connect your email",
+    description: "Link your mailbox so job and candidate emails go out from your own address.",
+    hint: "Enter your SMTP details and save. You'll come back here once it's connected.",
+    action: "Connect email",
     time: "8 mins",
     icon: Link2,
-    path: "/settings/email",
+    path: "/settings/email?returnTo=%2Fonboarding",
   },
   {
     key: "first_job_posted",
-    num: 5,
+    num: 4,
     title: "Post your first job",
-    description: "Create and activate your first job opening to start receiving applications.",
+    description: "Create your first job opening to start receiving candidates from your vendors.",
+    hint: "Fill in the job form (or paste the JD) and save it.",
+    action: "Create a job",
     time: "7 mins",
     icon: Briefcase,
     path: "/jobs/new",
   },
   {
-    key: "first_job_posted",
-    num: 6,
-    title: "Go live",
-    description: "Review your setup and flip the switch — your ATS is ready to hire.",
-    time: "2 mins",
-    icon: Rocket,
+    key: "pipeline_created",
+    num: 5,
+    title: "Build your hiring pipeline",
+    description: "Set up stages from sourcing to offer acceptance for your workflow.",
+    hint: "On the Jobs page, click \u201cPipeline\u201d and pick your job to open its stages.",
+    action: "Open jobs",
+    time: "10 mins",
+    icon: Workflow,
     path: "/jobs",
   },
+  {
+    key: "go_live",
+    num: 6,
+    title: "Go live",
+    description: "Review your setup, share jobs with your vendors and start hiring.",
+    hint: "Finish the steps above and your dashboard is ready.",
+    action: "Go to dashboard",
+    time: "2 mins",
+    icon: Rocket,
+    path: "/",
+  },
 ];
+
+function isStepDone(step: Step, status: OnboardingStatus | undefined): boolean {
+  if (!status) return false;
+  if (step.key === "go_live") return STEPS.every((s) => s.key === "go_live" || Boolean(status[s.key]));
+  return Boolean(status[step.key]);
+}
 
 const FEATURES: { icon: LucideIcon; title: string; description: string }[] = [
   {
@@ -145,15 +172,15 @@ export default function OnboardingPage() {
     }
   }, [loading]);
 
-  const pct = animating ? (status?.percent_complete ?? 0) : 0;
-  const completedSteps = status?.completed_steps ?? 0;
-
-  function isStepDone(key: string, stepNum: number): boolean {
-    if (!status) return false;
-    if (key === "account_created") return true;
-    if (stepNum === 6) return status.first_job_posted;
-    return Boolean(status[key as keyof OnboardingStatus]);
-  }
+  const doneFlags = STEPS.map((step) => isStepDone(step, status));
+  const completedSteps = doneFlags.filter(Boolean).length;
+  const percent = Math.round((completedSteps / STEPS.length) * 100);
+  const pct = animating ? percent : 0;
+  // First unfinished step; null when everything is done or the status isn't known.
+  const nextStep = status ? (STEPS.find((_, i) => !doneFlags[i]) ?? null) : null;
+  const allDone = !!status && nextStep === null;
+  const goNext = () => navigate(nextStep ? nextStep.path : "/");
+  const mainCtaLabel = nextStep && nextStep.key !== "go_live" ? `Continue setup: ${nextStep.title}` : "Go to dashboard";
 
   return (
     <div className="min-h-screen bg-surface text-ink">
@@ -192,8 +219,8 @@ export default function OnboardingPage() {
             Complete your setup in ~35 minutes and start hiring the best talent — faster than ever.
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <Button size="lg" onClick={() => navigate("/")} iconRight={<ArrowRight size={18} aria-hidden="true" />}>
-              Launch ZorHire
+            <Button size="lg" onClick={goNext} iconRight={<ArrowRight size={18} aria-hidden="true" />}>
+              {mainCtaLabel}
             </Button>
             <Button
               variant="secondary"
@@ -211,7 +238,7 @@ export default function OnboardingPage() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-semibold text-ink">Setup Progress</h2>
               <span className="text-sm font-semibold text-navy-600">
-                {loading ? "…" : isError ? "Progress unavailable" : `${completedSteps} / 6 steps complete`}
+                {loading ? "…" : isError ? "Progress unavailable" : `${completedSteps} / ${STEPS.length} steps complete`}
               </span>
             </div>
 
@@ -221,7 +248,7 @@ export default function OnboardingPage() {
               aria-label="Setup progress"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={status?.percent_complete ?? 0}
+              aria-valuenow={status ? percent : 0}
             >
               {/* Width is data-driven, so it stays an inline style. */}
               <div
@@ -230,9 +257,36 @@ export default function OnboardingPage() {
               />
             </div>
 
+            {nextStep && (
+              <div className="mb-6 rounded-xl border border-brand-200 bg-brand-50 p-4 sm:p-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-navy-600">
+                    <nextStep.icon size={20} aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-brand-800">
+                      Next step · Step {nextStep.num} of {STEPS.length}
+                    </p>
+                    <h3 className="text-base font-semibold text-ink">{nextStep.title}</h3>
+                    <p className="mt-0.5 text-sm text-ink-soft">{nextStep.hint}</p>
+                  </div>
+                  <Link to={nextStep.path} className={buttonClasses("primary", "md", "shrink-0")}>
+                    {nextStep.action}
+                    <ArrowRight size={16} aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            )}
+            {allDone && (
+              <div className="mb-6 flex items-center gap-3 rounded-xl border border-success-600/20 bg-success-50 p-4 text-sm font-medium text-success-700">
+                <CheckCircle2 size={18} aria-hidden="true" />
+                Setup complete. You're ready to hire.
+              </div>
+            )}
+
             <ul className="grid gap-2 sm:grid-cols-2">
-              {STEPS.map((step) => {
-                const done = isStepDone(step.key, step.num);
+              {STEPS.map((step, i) => {
+                const done = doneFlags[i];
                 return (
                   <li key={step.num}>
                     <Link
@@ -264,15 +318,16 @@ export default function OnboardingPage() {
         <section className="mx-auto mb-20 max-w-6xl px-4 sm:px-6">
           <h2 className="mb-8 text-center text-2xl font-semibold text-navy-800 sm:text-3xl">Your onboarding roadmap</h2>
           <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {STEPS.map((step) => {
-              const done = isStepDone(step.key, step.num);
+            {STEPS.map((step, i) => {
+              const done = doneFlags[i];
+              const isNext = nextStep?.num === step.num;
               const Icon = step.icon;
               return (
                 <li key={step.num}>
                   <Link
                     to={step.path}
                     className={`zh-card relative block h-full p-5 transition hover:-translate-y-0.5 hover:border-navy-300 hover:shadow-pop sm:p-6 ${
-                      done ? "border-success-600/30" : ""
+                      done ? "border-success-600/30" : isNext ? "border-brand-300 ring-1 ring-brand-200" : ""
                     }`}
                   >
                     {done && (
@@ -284,7 +339,10 @@ export default function OnboardingPage() {
                     <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-navy-50 text-navy-600">
                       <Icon size={20} aria-hidden="true" />
                     </span>
-                    <span className="mb-1.5 block text-xs font-semibold text-brand-700">Step {step.num}</span>
+                    <span className="mb-1.5 block text-xs font-semibold text-brand-700">
+                      Step {step.num}
+                      {isNext && " · Next"}
+                    </span>
                     <h3 className="mb-2 text-base font-semibold leading-snug text-ink">{step.title}</h3>
                     <p className="mb-4 text-sm leading-relaxed text-muted">{step.description}</p>
                     <span className="inline-flex items-center gap-1 rounded-full bg-surface-sunken px-2.5 py-1 text-xs text-ink-soft">
@@ -327,8 +385,8 @@ export default function OnboardingPage() {
               Complete your setup in under 35 minutes and post your first job today.
             </p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row">
-              <Button variant="accent" size="lg" onClick={() => navigate("/")} iconRight={<ArrowRight size={18} aria-hidden="true" />}>
-                Complete Setup
+              <Button variant="accent" size="lg" onClick={goNext} iconRight={<ArrowRight size={18} aria-hidden="true" />}>
+                {mainCtaLabel}
               </Button>
               <a
                 href="mailto:tech@zortechs.in"

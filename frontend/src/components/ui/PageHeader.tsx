@@ -44,7 +44,8 @@ export default function PageHeader({ title, subtitle, breadcrumbs, actions, chil
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold text-ink sm:text-2xl">{title}</h1>
+          {/* Wrap rather than truncate: header actions can leave little room on tablets. */}
+          <h1 className="break-words text-xl font-semibold text-ink sm:text-2xl">{title}</h1>
           {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div>}

@@ -10,7 +10,7 @@ import { useNotify } from "../hooks/useNotify";
 import { selectCurrentUser } from "../store/slices/authSlice";
 import { useGetVendorsQuery, useDeleteVendorMutation } from "../store/api/vendorApi";
 import { Button, PageHeader, StatCard, EmptyState, ErrorState, TableSkeleton, useConfirm } from "../components/ui";
-import { ScoreBar, TierBadge, VendorAvatar, qualityColor, slaColor } from "../components/vendors/vendorUi";
+import { DocsStatusBadge, ScoreBar, TierBadge, VendorAvatar, qualityColor, slaColor } from "../components/vendors/vendorUi";
 import AssignJdModal from "../components/vendors/AssignJdModal";
 import VendorDetailModal from "../components/vendors/VendorDetailModal";
 import EditVendorModal from "../components/vendors/EditVendorModal";
@@ -223,7 +223,7 @@ export default function VendorsPage() {
 
         {/* Table */}
         {loading ? (
-          <TableSkeleton columns={6} />
+          <TableSkeleton columns={7} />
         ) : isError && vendors.length === 0 ? (
           <div className="zh-card">
             <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
@@ -252,7 +252,7 @@ export default function VendorsPage() {
         ) : (
           <div className="zh-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] border-collapse text-left text-sm">
+              <table className="w-full min-w-[1160px] border-collapse text-left text-sm">
                 <caption className="sr-only">Vendors</caption>
                 <thead className="bg-surface">
                   <tr>
@@ -268,7 +268,7 @@ export default function VendorsPage() {
                         className="h-4 w-4 cursor-pointer rounded border-line-strong accent-navy-600"
                       />
                     </th>
-                    {["Vendor", "Tier", "Contact", "Submissions", "Shortlist", "Fill rate", "Quality score", "SLA"].map((h) => (
+                    {["Vendor", "Tier", "Docs", "Contact", "Submissions", "Shortlist", "Fill rate", "Quality score", "SLA"].map((h) => (
                       <th
                         key={h}
                         scope="col"
@@ -320,6 +320,9 @@ export default function VendorsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <TierBadge tier={vendor.tier} />
+                      </td>
+                      <td className="px-4 py-3">
+                        {vendor.docs_status !== undefined && <DocsStatusBadge status={vendor.docs_status} />}
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-sm text-ink">{vendor.primary_contact_name}</p>

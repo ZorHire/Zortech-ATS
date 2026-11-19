@@ -2,6 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import CommandPalette, { useCommandPaletteShortcut } from "./CommandPalette";
 import ToastContainer from "../ui/ToastContainer";
 import ErrorBoundary from "../ErrorBoundary";
 import { PageSkeleton } from "../ui/Skeleton";
@@ -20,6 +21,9 @@ export default function Layout({ children }: LayoutProps) {
   // Desktop collapse is persisted in the ui slice; the phone drawer is not.
   const collapsed = useAppSelector(selectSidebarCollapsed);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Command palette: Ctrl+K / Cmd+K anywhere, "/" outside text fields.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useCommandPaletteShortcut(paletteOpen, setPaletteOpen);
 
   // Close the phone drawer on navigation and with Esc.
   useEffect(() => setMobileOpen(false), [location.pathname]);
@@ -45,7 +49,7 @@ export default function Layout({ children }: LayoutProps) {
         onMobileClose={() => setMobileOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar onMenu={() => setMobileOpen(true)} />
+        <TopBar onMenu={() => setMobileOpen(true)} onSearch={() => setPaletteOpen(true)} />
         <ServerUnreachableBanner />
         {/* The page area scrolls; pages without their own scroll wrapper used to be clipped. */}
         <main id="main-content" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
@@ -55,6 +59,7 @@ export default function Layout({ children }: LayoutProps) {
           </ErrorBoundary>
         </main>
       </div>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ToastContainer />
     </div>
   );

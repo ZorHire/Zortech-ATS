@@ -16,6 +16,8 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  Briefcase,
+  X,
 } from "lucide-react";
 import { Candidate } from "../types";
 import { useAppSelector } from "../hooks/useAppSelector";
@@ -34,6 +36,7 @@ import { isLowConfidence } from "../lib/confidenceIndicator";
 import { useNotify } from "../hooks/useNotify";
 import { getErrorMessage } from "../lib/format";
 import BulkResumeUploadModal from "../components/bulk/BulkResumeUploadModal";
+import AddToPipelineModal from "../components/resume-search/AddToPipelineModal";
 import {
   Badge,
   Button,
@@ -53,6 +56,31 @@ const sourceLabels: Record<string, string> = {
   linkedin: "LinkedIn", indeed: "Indeed", naukri: "Naukri", monster: "Monster",
   vendor: "Vendor", referral: "Referral", direct: "Direct", other: "Other",
 };
+
+/** Quote every field so commas, quotes and newlines survive. */
+function csvCell(value: unknown): string {
+  const text = value === null || value === undefined ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadCandidatesCsv(rows: Candidate[], suffix = "") {
+  const headers = ["First Name", "Last Name", "Email", "Phone", "Title", "Company", "Experience", "Location", "Skills", "Source"];
+  const lines = rows.map((c) =>
+    [
+      c.first_name, c.last_name, c.email, c.phone || "",
+      c.current_title || "", c.current_company || "",
+      c.experience_years, c.current_location || "",
+      (c.skills ?? []).join(", "), c.source,
+    ].map(csvCell).join(","),
+  );
+  const csv = [headers.map(csvCell).join(","), ...lines].join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `candidates${suffix}_${new Date().toISOString().split("T")[0]}.csv`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
 
 const TH = "border-b border-line px-4 py-2.5 text-left text-xs font-medium text-muted whitespace-nowrap";
 const TD = "px-4 py-3 align-middle text-ink";
@@ -144,6 +172,7 @@ export default function CandidatesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewingCandidate, setViewingCandidate] = useState<Candidate | null>(null);
+  const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const [selectedJobId, setSelectedJobId] = useState("");
@@ -270,18 +299,18 @@ export default function CandidatesPage() {
 
   const handleExportCSV = () => {
     if (filtered.length === 0) return;
-    const headers = ["First Name", "Last Name", "Email", "Phone", "Title", "Company", "Experience", "Location", "Skills", "Source"];
-    const rows = filtered.map((c) => [
-      c.first_name, c.last_name, c.email, c.phone || "",
-      `"${c.current_title || ""}"`, `"${c.current_company || ""}"`,
-      c.experience_years, `"${c.current_location || ""}"`,
-      `"${c.skills.join(", ")}"`, c.source,
-    ].join(","));
-    const csv = [headers.join(","), ...rows].join("\n");
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-    link.download = `candidates_${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
+    downloadCandidatesCsv(filtered);
+  };
+
+  // Selection can span pages and filters; resolve it against the full list.
+  const selectedCandidates = candidates.filter((c) => selectedIds.has(c.id));
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleExportSelected = () => {
+    if (selectedCandidates.length === 0) return;
+    downloadCandidatesCsv(selectedCandidates, "_selected");
+    notify.success(`Exported ${selectedCandidates.length} candidate${selectedCandidates.length !== 1 ? "s" : ""}`);
+    clearSelection();
   };
 
   const activeCount = candidates.filter((c) => c.is_active).length;
@@ -526,7 +555,39 @@ export default function CandidatesPage() {
             </div>
           </div>
         )}
+
+        {/* ── Bulk actions ── */}
+        {selectedCandidates.length > 0 && (
+          <div
+            role="region"
+            aria-label="Bulk actions"
+            className="sticky bottom-4 z-20 mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-xl border border-line bg-white px-4 py-3 shadow-pop"
+          >
+            <p className="mr-auto text-sm font-medium text-ink" aria-live="polite">
+              {selectedCandidates.length} selected
+            </p>
+            <Button size="sm" icon={<Briefcase size={14} />} onClick={() => setBulkAddOpen(true)}>
+              Add to job
+            </Button>
+            <Button size="sm" variant="secondary" icon={<Download size={14} />} onClick={handleExportSelected}>
+              Export CSV
+            </Button>
+            <Button size="sm" variant="ghost" icon={<X size={14} />} onClick={clearSelection}>
+              Clear
+            </Button>
+          </div>
+        )}
       </div>
+
+      {bulkAddOpen && (
+        <AddToPipelineModal
+          candidates={selectedCandidates}
+          onAdded={(outcome) => {
+            if (outcome.failed.length === 0) clearSelection();
+          }}
+          onClose={() => setBulkAddOpen(false)}
+        />
+      )}
 
       {/* ── Add Candidate Modal ── */}
       <Modal

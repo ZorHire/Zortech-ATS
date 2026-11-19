@@ -32,6 +32,14 @@ import { Badge, Button, Modal, StageBadge, useConfirm } from "../ui";
 import type { BadgeTone } from "../ui";
 import { useNotify } from "../../hooks/useNotify";
 import { TierBadge, VendorAvatar, qualityColor, slaColor } from "./vendorUi";
+import VendorDocumentsSection from "./VendorDocumentsSection";
+
+
+/** "42%" for numbers, "—" when a new vendor has no data yet (instead of "undefined%"). */
+const pct = (v: unknown): string => {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n) ? `${Math.round(n * 10) / 10}%` : "—";
+};
 
 function SectionTitle({ icon, children, extra }: { icon?: ReactNode; children: ReactNode; extra?: ReactNode }) {
   return (
@@ -90,6 +98,7 @@ export default function VendorDetailModal({
 
   const emptyContractForm = { title: "", contract_type: "msa", start_date: "", end_date: "", status: "active", value: "", notes: "" };
   const [showContractForm, setShowContractForm] = useState(false);
+  const [showDocForm, setShowDocForm] = useState(false);
   const [editingContract, setEditingContract] = useState<VendorContract | null>(null);
   const [contractForm, setContractForm] = useState(emptyContractForm);
   const [contractError, setContractError] = useState("");
@@ -157,7 +166,7 @@ export default function VendorDetailModal({
       open
       onClose={onClose}
       size="lg"
-      closeOnBackdrop={!showContractForm}
+      closeOnBackdrop={!showContractForm && !showDocForm}
       title={
         <span className="flex items-center gap-3">
           <VendorAvatar name={vendor.company_name} />
@@ -207,6 +216,8 @@ export default function VendorDetailModal({
           </div>
         </section>
 
+        <VendorDocumentsSection vendorId={vendor.id} onFormOpenChange={setShowDocForm} />
+
         {(vendor.registration_number || vendor.gst_id) && (
           <section>
             <SectionTitle>Registration details</SectionTitle>
@@ -230,8 +241,8 @@ export default function VendorDetailModal({
           <div className="mb-4 grid grid-cols-3 gap-3">
             {[
               { label: "Submissions", value: metrics.submission_count },
-              { label: "Shortlist rate", value: `${metrics.shortlist_rate}%` },
-              { label: "Fill rate", value: `${metrics.fill_rate}%` },
+              { label: "Shortlist rate", value: pct(metrics.shortlist_rate) },
+              { label: "Fill rate", value: pct(metrics.fill_rate) },
             ].map((m) => (
               <div key={m.label} className="rounded-lg bg-surface p-3 text-center">
                 <p className="font-display text-xl font-semibold text-ink">{m.value}</p>
@@ -251,7 +262,7 @@ export default function VendorDetailModal({
                     <m.icon size={12} aria-hidden="true" />
                     {m.label}
                   </span>
-                  <span className="font-semibold text-ink">{m.value}%</span>
+                  <span className="font-semibold text-ink">{pct(m.value)}</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-surface-sunken">
                   <div
@@ -264,7 +275,7 @@ export default function VendorDetailModal({
           </div>
         </section>
 
-        {scorecard && scorecard.job_breakdown.length > 0 && (
+        {scorecard && (scorecard.job_breakdown ?? []).length > 0 && (
           <section>
             <SectionTitle>Job breakdown</SectionTitle>
             <div className="overflow-x-auto rounded-lg border border-line">
@@ -279,7 +290,7 @@ export default function VendorDetailModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {scorecard.job_breakdown.map((row) => (
+                  {(scorecard.job_breakdown ?? []).map((row) => (
                     <tr key={row.job_id} className="border-b border-line last:border-0 hover:bg-surface">
                       <td className="max-w-[200px] truncate px-3 py-2 font-medium text-ink">{row.title}</td>
                       <td className="px-3 py-2 text-ink-soft">{row.submissions}</td>
@@ -293,11 +304,11 @@ export default function VendorDetailModal({
           </section>
         )}
 
-        {scorecard && scorecard.recent_submissions.length > 0 && (
+        {scorecard && (scorecard.recent_submissions ?? []).length > 0 && (
           <section>
             <SectionTitle>Recent submissions</SectionTitle>
             <ol className="space-y-2">
-              {scorecard.recent_submissions.map((s) => {
+              {(scorecard.recent_submissions ?? []).map((s) => {
                 const fb = localFeedback[s.submission_id];
                 const currentRating = fb !== undefined ? fb.rating : s.recruiter_rating;
                 const currentNotes = fb !== undefined ? fb.notes : (s.recruiter_notes ?? "");
@@ -577,13 +588,13 @@ export default function VendorDetailModal({
           )}
         </section>
 
-        {(vendor.industry_specializations.length > 0 || vendor.geographies.length > 0) && (
+        {((vendor.industry_specializations ?? []).length > 0 || (vendor.geographies ?? []).length > 0) && (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            {vendor.industry_specializations.length > 0 && (
+            {(vendor.industry_specializations ?? []).length > 0 && (
               <section>
                 <SectionTitle icon={<Briefcase size={16} className="text-muted" aria-hidden="true" />}>Specializations</SectionTitle>
                 <div className="flex flex-wrap gap-1.5">
-                  {vendor.industry_specializations.map((spec) => (
+                  {(vendor.industry_specializations ?? []).map((spec) => (
                     <Badge key={spec} tone="navy">
                       {spec}
                     </Badge>
@@ -591,11 +602,11 @@ export default function VendorDetailModal({
                 </div>
               </section>
             )}
-            {vendor.geographies.length > 0 && (
+            {(vendor.geographies ?? []).length > 0 && (
               <section>
                 <SectionTitle icon={<MapPin size={16} className="text-muted" aria-hidden="true" />}>Geographies</SectionTitle>
                 <div className="flex flex-wrap gap-1.5">
-                  {vendor.geographies.map((geo) => (
+                  {(vendor.geographies ?? []).map((geo) => (
                     <Badge key={geo}>{geo}</Badge>
                   ))}
                 </div>

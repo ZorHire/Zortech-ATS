@@ -1,300 +1,157 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import { Bell, Bookmark, Play, Search, Trash2 } from "lucide-react";
 import {
-  Bookmark,
-  Search,
-  Trash2,
-  Play,
-  Bell,
-  BellOff,
-  Loader2,
-  AlertCircle,
-} from "lucide-react";
-import Header from "../components/layout/Header";
+  Badge,
+  buttonClasses,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  TableSkeleton,
+  useConfirm,
+} from "../components/ui";
+import { useNotify } from "../hooks/useNotify";
+import { describeApiError } from "../store/api/baseApi";
 import {
   useGetSavedSearchesQuery,
   useDeleteSavedSearchMutation,
   type SavedSearch,
 } from "../store/api/savedSearchesApi";
+import { savedQueryToSearch, searchUrl, summarizeSearch } from "../components/resume-search/searchUrl";
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function buildSearchUrl(query: Record<string, unknown>) {
-  const params = new URLSearchParams();
-  if (query.q && typeof query.q === "string") params.set("q", query.q);
-  if (query.skills && Array.isArray(query.skills))
-    params.set("skills", (query.skills as string[]).join(","));
-  if (query.location && typeof query.location === "string")
-    params.set("location", query.location);
-  if (query.min_experience !== undefined)
-    params.set("min_experience", String(query.min_experience));
-  if (query.max_experience !== undefined)
-    params.set("max_experience", String(query.max_experience));
-  const qs = params.toString();
-  return `/search${qs ? `?${qs}` : ""}`;
-}
-
-function summarizeQuery(query: Record<string, unknown>): string {
-  const parts: string[] = [];
-  if (query.q) parts.push(`"${query.q}"`);
-  if (Array.isArray(query.skills) && query.skills.length)
-    parts.push(`Skills: ${(query.skills as string[]).join(", ")}`);
-  if (query.location) parts.push(`Location: ${query.location}`);
-  if (query.min_experience != null || query.max_experience != null) {
-    const min = query.min_experience ?? 0;
-    const max = query.max_experience;
-    parts.push(max ? `Exp: ${min}–${max} yrs` : `Exp: ${min}+ yrs`);
-  }
-  return parts.join(" · ") || "No filters";
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function SavedSearchesPage() {
-  const navigate = useNavigate();
-  const { data: searches = [], isLoading, isError, refetch } =
-    useGetSavedSearchesQuery();
-  const [deleteSearch, { isLoading: isDeleting }] = useDeleteSavedSearchMutation();
+  const { data: searches = [], isLoading, isError, error, refetch, isFetching } = useGetSavedSearchesQuery();
+  const [deleteSearch] = useDeleteSavedSearchMutation();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const confirm = useConfirm();
+  const notify = useNotify();
 
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [searchFilter, setSearchFilter] = useState("");
-  const [toast, setToast] = useState<{
-    msg: string;
-    type: "success" | "error";
-  } | null>(null);
+  const filtered = searches.filter((s) => !filter || s.name.toLowerCase().includes(filter.trim().toLowerCase()));
 
-  const showToast = (msg: string, type: "success" | "error" = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
-
-  const filtered = searches.filter((s) =>
-    !searchFilter || s.name.toLowerCase().includes(searchFilter.toLowerCase())
-  );
-
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (s: SavedSearch) => {
+    const ok = await confirm({
+      title: "Delete saved search?",
+      message: `"${s.name}" and any email alerts for it will be removed.`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    setDeletingId(s.id);
     try {
-      await deleteSearch(id).unwrap();
-      setConfirmDeleteId(null);
-      showToast("Saved search deleted");
-    } catch {
-      showToast("Failed to delete", "error");
+      await deleteSearch(s.id).unwrap();
+      notify.success("Saved search deleted");
+    } catch (err) {
+      notify.error(describeApiError(err, "Couldn't delete this search."));
+    } finally {
+      setDeletingId(null);
     }
   };
 
-  const handleRun = (s: SavedSearch) => {
-    navigate(buildSearchUrl(s.query));
-  };
-
   return (
-    <div className="min-h-screen bg-surface">
-      <Header title="Saved Searches" />
+    <>
+      <PageHeader
+        title="Saved searches"
+        subtitle="Re-run the resume searches you use often"
+        breadcrumbs={[{ label: "Resume search", to: "/search" }, { label: "Saved searches" }]}
+        actions={
+          <Link to="/search" className={buttonClasses("primary", "md")}>
+            <Search size={16} aria-hidden="true" />
+            New search
+          </Link>
+        }
+      />
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-        {/* Stats strip */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {[
-            {
-              label: "Total Saved",
-              value: searches.length,
-              icon: Bookmark,
-              color: "text-blue-600 bg-blue-50",
-            },
-            {
-              label: "Email Alerts On",
-              value: searches.filter((s) => s.email_alerts).length,
-              icon: Bell,
-              color: "text-amber-600 bg-amber-50",
-            },
-            {
-              label: "No Alerts",
-              value: searches.filter((s) => !s.email_alerts).length,
-              icon: BellOff,
-              color: "text-gray-500 bg-gray-100",
-            },
-          ].map(({ label, value, icon: Icon, color }) => (
-            <div
-              key={label}
-              className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4"
-            >
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}
-              >
-                <Icon size={18} strokeWidth={2.5} />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold text-ink">{value}</p>
-                <p className="text-xs text-gray-400 font-semibold">{label}</p>
-              </div>
+      <div className="space-y-4 p-4 sm:p-6 lg:p-8">
+        {searches.length > 0 && (
+          <div className="max-w-sm">
+            <label htmlFor="saved-filter" className="sr-only">
+              Filter saved searches by name
+            </label>
+            <div className="relative">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+              <input
+                id="saved-filter"
+                type="search"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter by name…"
+                className="zh-input py-2 pl-9"
+              />
             </div>
-          ))}
-        </div>
-
-        {/* Search filter + CTA */}
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="relative flex-1 max-w-sm">
-            <Search
-              size={15}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              type="text"
-              placeholder="Filter by name..."
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-            />
-          </div>
-          <button
-            onClick={() => navigate("/search")}
-            className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all shadow-sm flex-shrink-0"
-          >
-            <Search size={15} />
-            New Search
-          </button>
-        </div>
-
-        {/* Content */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={32} className="animate-spin text-gray-300" />
-          </div>
-        ) : isError ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-gray-400">
-            <AlertCircle size={32} />
-            <p className="text-sm font-medium">Failed to load saved searches</p>
-            <button
-              onClick={() => refetch()}
-              className="text-xs text-blue-600 hover:underline font-semibold"
-            >
-              Try again
-            </button>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-gray-400">
-            <Bookmark size={40} strokeWidth={1.5} />
-            <p className="text-sm font-medium">
-              {searches.length === 0
-                ? "No saved searches yet"
-                : "No searches match your filter"}
-            </p>
-            {searches.length === 0 && (
-              <button
-                onClick={() => navigate("/search")}
-                className="text-xs text-blue-600 hover:underline font-semibold"
-              >
-                Go to Resume Search to save one
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filtered.map((s) => (
-              <div
-                key={s.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all p-5 flex items-center gap-4"
-              >
-                {/* Icon */}
-                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-                  <Bookmark size={16} className="text-blue-600" strokeWidth={2.5} />
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-semibold text-ink truncate">
-                      {s.name}
-                    </h3>
-                    {s.email_alerts ? (
-                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-full font-bold">
-                        <Bell size={9} />
-                        Alerts on
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold">
-                        <BellOff size={9} />
-                        No alerts
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5 truncate">
-                    {summarizeQuery(s.query)}
-                  </p>
-                  <p className="text-xs text-gray-300 mt-1">
-                    Saved {fmtDate(s.created_at)}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={() => handleRun(s)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-ink bg-navy-600/5 hover:bg-navy-600 hover:text-white rounded-xl transition-all"
-                  >
-                    <Play size={12} />
-                    Run
-                  </button>
-                  <button
-                    onClick={() => setConfirmDeleteId(s.id)}
-                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
         )}
-      </div>
 
-      {/* Delete confirmation */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm animate-in fade-in zoom-in duration-150">
-            <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-5">
-              <Trash2 size={20} className="text-red-500" />
-            </div>
-            <h3 className="text-base font-semibold text-ink mb-2">
-              Delete Saved Search?
-            </h3>
-            <p className="text-sm text-gray-500 mb-6">
-              This will permanently remove this saved search and any associated
-              email alerts.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="flex-1 py-3 bg-gray-50 text-ink font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(confirmDeleteId)}
-                disabled={isDeleting}
-                className="flex-1 py-3 bg-red-500 text-white font-bold text-sm rounded-xl hover:bg-red-600 transition-all disabled:opacity-60"
-              >
-                {isDeleting ? "Deleting..." : "Delete"}
-              </button>
-            </div>
+        {isLoading ? (
+          <TableSkeleton rows={4} columns={3} />
+        ) : isError ? (
+          <div className="zh-card">
+            <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
           </div>
-        </div>
-      )}
-
-      {toast && (
-        <div
-          className={`fixed bottom-6 right-6 z-[100] px-5 py-3.5 rounded-2xl text-sm font-bold shadow-xl transition-all animate-in slide-in-from-bottom-4 ${
-            toast.type === "error"
-              ? "bg-red-500 text-white"
-              : "bg-navy-600 text-white"
-          }`}
-        >
-          {toast.msg}
-        </div>
-      )}
-    </div>
+        ) : filtered.length === 0 ? (
+          <div className="zh-card">
+            <EmptyState
+              icon={<Bookmark size={22} aria-hidden="true" />}
+              title={searches.length === 0 ? "No saved searches yet" : "No searches match your filter"}
+              description={
+                searches.length === 0 ? "Run a resume search and choose “Save search” to keep it here." : undefined
+              }
+              action={
+                searches.length === 0 ? (
+                  <Link to="/search" className={buttonClasses("secondary", "md")}>
+                    Go to resume search
+                  </Link>
+                ) : undefined
+              }
+            />
+          </div>
+        ) : (
+          <ul className="zh-card divide-y divide-line">
+            {filtered.map((s) => {
+              const search = savedQueryToSearch(s.query ?? {});
+              return (
+                <li key={s.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="truncate text-sm font-semibold text-ink">{s.name}</h2>
+                      {s.email_alerts && (
+                        <Badge tone="warning" icon={<Bell size={12} aria-hidden="true" />}>
+                          Alerts on
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="mt-0.5 truncate text-sm text-muted">{summarizeSearch(search)}</p>
+                    <p className="mt-0.5 text-xs text-muted">Saved {fmtDate(s.created_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={searchUrl(search)}
+                      className={buttonClasses("secondary", "sm")}
+                      aria-label={`Run saved search ${s.name}`}
+                    >
+                      <Play size={14} aria-hidden="true" />
+                      Run
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(s)}
+                      disabled={deletingId === s.id}
+                      aria-label={`Delete saved search ${s.name}`}
+                      className="rounded-lg p-2 text-muted transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </>
   );
 }

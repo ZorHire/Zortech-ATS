@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectCurrentUser } from "../../store/slices/authSlice";
 import NotificationBell from "../ui/NotificationBell";
+import { PALETTE_SHORTCUT_LABEL } from "./CommandPalette";
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Admin",
@@ -18,7 +19,7 @@ const ROLE_LABELS: Record<string, string> = {
  * profile link. Previously each page header rendered these itself, so they
  * disappeared on the 8 pages with a custom header.
  */
-export default function TopBar({ onMenu }: { onMenu: () => void }) {
+export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSearch?: () => void }) {
   const profile = useAppSelector(selectCurrentUser);
   const name = profile?.full_name || profile?.email || "User";
 
@@ -34,7 +35,23 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
       </button>
       <img src="/brand/zortech-icon.svg" alt="" className="h-7 w-7 lg:hidden" />
 
-      <div className="ml-auto flex items-center gap-1 sm:gap-3">
+      {onSearch && (
+        <button
+          type="button"
+          onClick={onSearch}
+          aria-label="Search"
+          aria-keyshortcuts="Control+K Meta+K /"
+          className="ml-auto flex h-9 items-center gap-2 rounded-lg p-2 text-ink-soft hover:bg-surface-sunken sm:ml-0 sm:w-64 sm:border sm:border-line sm:bg-surface sm:px-3 sm:text-muted sm:hover:border-line-strong md:w-80"
+        >
+          <Search size={18} aria-hidden="true" className="shrink-0 sm:h-4 sm:w-4" />
+          <span className="hidden flex-1 text-left text-sm sm:inline">Search…</span>
+          <kbd className="hidden rounded border border-line bg-white px-1.5 py-0.5 font-sans text-xs text-muted sm:inline">
+            {PALETTE_SHORTCUT_LABEL}
+          </kbd>
+        </button>
+      )}
+
+      <div className={`${onSearch ? "sm:ml-auto" : "ml-auto"} flex items-center gap-1 sm:gap-3`}>
         <NotificationBell />
         <Link
           to="/profile"

@@ -9,9 +9,18 @@ interface KanbanColumnProps {
   label?: string;
   applications: JobApplication[];
   onScreeningInvite?: (application: JobApplication) => void | Promise<unknown>;
+  onOpen?: (application: JobApplication) => void;
+  onStageChange?: (application: JobApplication, stage: PipelineStage) => void;
 }
 
-export default function KanbanColumn({ stage, label, applications, onScreeningInvite }: KanbanColumnProps) {
+export default function KanbanColumn({
+  stage,
+  label,
+  applications,
+  onScreeningInvite,
+  onOpen,
+  onStageChange,
+}: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const s = getStage(stage);
   const count = applications.length;
@@ -43,7 +52,13 @@ export default function KanbanColumn({ stage, label, applications, onScreeningIn
         }`}
       >
         {applications.map((app) => (
-          <CandidateCard key={app.id} application={app} onScreeningInvite={onScreeningInvite} />
+          <CandidateCard
+            key={app.id}
+            application={app}
+            onScreeningInvite={onScreeningInvite}
+            onOpen={onOpen}
+            onStageChange={onStageChange}
+          />
         ))}
 
         {count === 0 && (

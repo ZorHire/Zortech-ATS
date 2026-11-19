@@ -15,6 +15,7 @@ export interface ApplicationEntry {
   stage: string;
   notes?: string;
   ai_score?: number;
+  rejection_reason?: string | null;
   created_at: string;
   updated_at: string;
   job_id: string;

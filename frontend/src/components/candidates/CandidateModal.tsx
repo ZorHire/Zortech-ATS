@@ -1,12 +1,15 @@
 import React from 'react';
 import {
   X, Mail, Phone, MapPin, Clock, Calendar, Download, Eye,
-  FileText, Send, Trash2, ChevronRight, Loader2, Upload,
+  FileText, Send, Trash2, Loader2, Upload, Plus, TrendingUp,
   Video, PhoneCall, Users, Link, CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react';
 import { Candidate } from '../../types';
 import api, { ApiError } from '../../lib/api';
+import { Link as RouterLink } from 'react-router-dom';
 import ComposeEmailModal from './ComposeEmailModal';
+import StageSelect from '../pipeline/StageSelect';
+import AddToPipelineModal from '../resume-search/AddToPipelineModal';
 import { useNotify } from '../../hooks/useNotify';
 import { Badge, Button, EmptyState, ErrorState, Modal, Skeleton, StageBadge, buttonClasses } from '../ui';
 import type { BadgeTone } from '../ui';
@@ -21,10 +24,14 @@ const RESUME_API = import.meta.env.VITE_API_URL || '/v1';
 interface CandidateModalProps {
   candidate: Candidate;
   onClose: () => void;
-  onUpdate: (candidate: Candidate) => void;
-  onDelete: (id: string) => void;
+  onUpdate?: (candidate: Candidate) => void;
+  /** Omit to hide "Delete candidate" (e.g. when opened from the pipeline). */
+  onDelete?: (id: string) => void;
+  /** Open with this application selected (e.g. the pipeline card that was clicked). */
+  applicationId?: string;
 }
 
+// Order used for the progress bar only; any stage can be chosen in the StageSelect.
 const FORWARD_STAGES = [
   "new", "sourced", "screened", "shortlisted", "submitted_to_client",
   "client_interview_scheduled", "interview_completed", "selected",
@@ -52,7 +59,7 @@ const INTERVIEW_TYPE_LABELS: Record<string, string> = {
   in_person: "In-Person",
 };
 
-const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete, onUpdate }) => {
+const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete, onUpdate, applicationId }) => {
   const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity'>('overview');
   const [localCandidate, setLocalCandidate] = React.useState<Candidate>(candidate);
   const [resumeUploading, setResumeUploading] = React.useState(false);
@@ -63,7 +70,8 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   const [applications, setApplications] = React.useState<any[]>([]);
   const [appLoading, setAppLoading] = React.useState(true);
   const [selectedApp, setSelectedApp] = React.useState<any>(null);
-  const [stageSaving, setStageSaving] = React.useState(false);
+  const [stagePrompting, setStagePrompting] = React.useState(false);
+  const [showAddToJob, setShowAddToJob] = React.useState(false);
 
   // Compose email modal
   const [showCompose, setShowCompose] = React.useState(false);
@@ -71,10 +79,6 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   const notify = useNotify();
   const dispatch = useAppDispatch();
 
-  // Raw api.* calls bypass RTK Query — invalidate cached lists so Pipeline/Dashboard/Candidates refresh.
-  const invalidateCaches = () => {
-    dispatch(baseApi.util.invalidateTags(["Pipeline", "Dashboard", "Candidates", { type: "Candidate", id: candidate.id }]));
-  };
 
   // Schedule interview state
   const [showScheduler, setShowScheduler] = React.useState(false);
@@ -104,14 +108,16 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     }
   }, [activeTab, selectedApp?.id]);
 
-  const fetchApplications = async () => {
-    setAppLoading(true);
+  // `quiet` refreshes in place (after a stage move / add to job) without the skeleton.
+  const fetchApplications = async (quiet = false, preferId?: string) => {
+    if (!quiet) setAppLoading(true);
     setAppError(null);
     try {
       const data = await api.get(`/pipeline/candidates/${candidate.id}/applications`);
       const list = Array.isArray(data) ? data : [];
       setApplications(list);
-      if (list.length > 0) setSelectedApp(list[0]);
+      const wanted = preferId ?? applicationId;
+      setSelectedApp(list.find((a) => a.id === wanted) ?? list[0] ?? null);
     } catch (err) {
       // 404 means the candidate is not in any pipeline yet; anything else is a real failure
       if (!(err instanceof ApiError && err.status === 404)) {
@@ -143,28 +149,19 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     ? FORWARD_STAGES.indexOf(selectedApp.stage as any)
     : -1;
 
-  const nextStage = currentStageIndex >= 0 && currentStageIndex < FORWARD_STAGES.length - 1
-    ? FORWARD_STAGES[currentStageIndex + 1]
-    : null;
-
   const progressPct = currentStageIndex >= 0
     ? Math.round(((currentStageIndex + 1) / FORWARD_STAGES.length) * 100)
     : 0;
 
-  const handleMoveToNextStage = async () => {
-    if (!selectedApp || !nextStage) return;
-    setStageSaving(true);
-    try {
-      const updated = await api.patch(`/pipeline/applications/${selectedApp.id}/stage`, { to_stage: nextStage });
-      setSelectedApp({ ...selectedApp, stage: updated.stage });
-      setApplications(prev => prev.map(a => a.id === updated.id ? { ...a, stage: updated.stage } : a));
-      invalidateCaches();
-      notify.success(`Moved to ${getStage(updated.stage).label}`);
-    } catch (err) {
-      notify.error(getErrorMessage(err, "Failed to move stage"));
-    } finally {
-      setStageSaving(false);
-    }
+  // StageSelect saved through the RTK mutation (caches refresh there); mirror it locally.
+  const handleStageMoved = (stage: string) => {
+    if (!selectedApp) return;
+    const id = selectedApp.id;
+    setSelectedApp({ ...selectedApp, stage });
+    setApplications(prev => prev.map(a => (a.id === id ? { ...a, stage } : a)));
+    // Pick up the stored rejection reason, if any.
+    fetchApplications(true, id);
+    if (activeTab === 'activity') fetchActivity(id);
   };
 
 
@@ -297,7 +294,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       form.append('resume', file);
       const updated = await api.patch(`/candidates/${localCandidate.id}`, form);
       setLocalCandidate(updated);
-      onUpdate(updated);
+      onUpdate?.(updated);
       dispatch(baseApi.util.invalidateTags(["Candidates", { type: "Candidate", id: localCandidate.id }]));
       notify.success('Resume uploaded');
     } catch (err) {
@@ -318,8 +315,8 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       size="xl"
       hideHeader
       closeOnBackdrop
-      // The compose window on top handles Esc while it is open.
-      preventClose={showCompose}
+      // A dialog on top (compose, stage reason, add to job) handles Esc while it is open.
+      preventClose={showCompose || stagePrompting || showAddToJob}
       bodyClassName="!p-0 bg-surface"
     >
         {/* Header */}
@@ -443,7 +440,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   ) : appError ? (
                     <div className="space-y-2 rounded-lg bg-danger-50 p-4 text-center" role="alert">
                       <p className="text-xs font-medium text-danger-700">{appError}</p>
-                      <Button variant="link" size="sm" onClick={fetchApplications}>Try again</Button>
+                      <Button variant="link" size="sm" onClick={() => fetchApplications()}>Try again</Button>
                     </div>
                   ) : selectedApp ? (
                     <>
@@ -456,23 +453,58 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                           <div className="h-full rounded-full bg-navy-600 transition-all duration-500" style={{ width: `${progressPct}%` }} />
                         </div>
                         {selectedApp.job?.title && (
-                          <p className="mt-2 truncate text-xs text-muted">Job: {selectedApp.job.title}</p>
+                          <p className="mt-2 truncate text-xs text-muted">
+                            Job:{' '}
+                            <RouterLink
+                              to={`/jobs/${selectedApp.job_id}`}
+                              onClick={onClose}
+                              className="font-medium text-navy-600 hover:text-navy-800 hover:underline"
+                            >
+                              {selectedApp.job.title}
+                            </RouterLink>
+                          </p>
+                        )}
+                        {selectedApp.rejection_reason && ['disqualified', 'offer_rejected'].includes(selectedApp.stage) && (
+                          <p className="mt-1 text-xs text-muted">
+                            Reason: <span className="text-ink-soft">{selectedApp.rejection_reason}</span>
+                          </p>
                         )}
                       </div>
 
-                      <Button
-                        fullWidth
-                        onClick={handleMoveToNextStage}
-                        disabled={!nextStage}
-                        loading={stageSaving}
-                        icon={<ChevronRight size={16} />}
-                      >
-                        {nextStage ? `Move to ${getStage(nextStage).label}` : "Final stage"}
-                      </Button>
+                      <div>
+                        <span className="mb-1 block text-xs font-medium text-muted">Move to stage</span>
+                        <StageSelect
+                          key={selectedApp.id}
+                          value={selectedApp.stage}
+                          applicationId={selectedApp.id}
+                          candidateName={`${candidate.first_name} ${candidate.last_name}`}
+                          onMoved={handleStageMoved}
+                          onPromptingChange={setStagePrompting}
+                          label="Move to stage"
+                          className="w-full"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <RouterLink
+                          to={`/pipeline/${selectedApp.job_id}`}
+                          onClick={onClose}
+                          className={buttonClasses('link', 'sm', 'text-xs')}
+                        >
+                          <TrendingUp size={13} className="mr-1" aria-hidden="true" />
+                          Open pipeline
+                        </RouterLink>
+                        <Button variant="link" size="sm" className="text-xs" icon={<Plus size={13} />} onClick={() => setShowAddToJob(true)}>
+                          Add to another job
+                        </Button>
+                      </div>
                     </>
                   ) : (
-                    <div className="rounded-lg bg-surface p-4 text-center">
+                    <div className="space-y-3 rounded-lg bg-surface p-4 text-center">
                       <p className="text-xs text-muted">Not in any pipeline yet</p>
+                      <Button size="sm" icon={<Plus size={14} />} onClick={() => setShowAddToJob(true)}>
+                        Add to job
+                      </Button>
                     </div>
                   )}
 
@@ -585,16 +617,18 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   </div>
                 </div>
 
-                <Button
-                  fullWidth
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onDelete(candidate.id)}
-                  icon={<Trash2 size={14} />}
-                  className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
-                >
-                  Delete candidate
-                </Button>
+                {onDelete && (
+                  <Button
+                    fullWidth
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onDelete(candidate.id)}
+                    icon={<Trash2 size={14} />}
+                    className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
+                  >
+                    Delete candidate
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -866,6 +900,17 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
           )}
         </div>
     </Modal>
+
+    {showAddToJob && (
+      <AddToPipelineModal
+        candidates={[localCandidate]}
+        excludeJobIds={applications.map((a) => a.job_id)}
+        onAdded={(outcome) => {
+          if (outcome.added > 0) fetchApplications(true, selectedApp?.id);
+        }}
+        onClose={() => setShowAddToJob(false)}
+      />
+    )}
 
     {showCompose && (
       <ComposeEmailModal

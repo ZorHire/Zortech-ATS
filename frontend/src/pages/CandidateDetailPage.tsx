@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useCallback, useState } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAppSelector } from "../hooks/useAppSelector";
 import {
   Mail,
@@ -18,6 +18,8 @@ import {
   FileText,
   ExternalLink,
   UserX,
+  Plus,
+  TrendingUp,
 } from "lucide-react";
 import {
   useGetCandidateByIdQuery,
@@ -26,8 +28,10 @@ import {
 import type { ApplicationEntry, InterviewEntry } from "../store/api/candidateApi";
 import { useNotify } from "../hooks/useNotify";
 import { formatINR, getErrorStatus } from "../lib/format";
-import { Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton, StageBadge } from "../components/ui";
+import { Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton, buttonClasses } from "../components/ui";
 import { Avatar } from "../components/jobs/jobBadges";
+import StageSelect from "../components/pipeline/StageSelect";
+import AddToPipelineModal from "../components/resume-search/AddToPipelineModal";
 
 const INTERVIEW_TYPE_ICONS: Record<string, React.ReactNode> = {
   video: <Video size={12} />,
@@ -76,12 +80,18 @@ function InterviewRow({ interview }: { interview: InterviewEntry }) {
   );
 }
 
-function ApplicationCard({ entry }: { entry: ApplicationEntry }) {
+function ApplicationCard({ entry, candidateName }: { entry: ApplicationEntry; candidateName: string }) {
+  const showReason = !!entry.rejection_reason && (entry.stage === "disqualified" || entry.stage === "offer_rejected");
   return (
     <div className="zh-card p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink">{entry.job_title}</p>
+          <Link
+            to={`/jobs/${entry.job_id}`}
+            className="text-sm font-semibold text-ink hover:text-navy-600 hover:underline"
+          >
+            {entry.job_title}
+          </Link>
           {entry.job_location && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted">
               <MapPin size={12} aria-hidden="true" />
@@ -89,8 +99,27 @@ function ApplicationCard({ entry }: { entry: ApplicationEntry }) {
             </p>
           )}
         </div>
-        <StageBadge stage={entry.stage} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to={`/pipeline/${entry.job_id}`} className={buttonClasses("ghost", "sm")}>
+            <TrendingUp size={14} aria-hidden="true" />
+            Pipeline
+          </Link>
+          <StageSelect
+            size="sm"
+            value={entry.stage}
+            applicationId={entry.id}
+            candidateName={candidateName}
+            label={`Stage for ${entry.job_title}`}
+            className="w-48"
+          />
+        </div>
       </div>
+
+      {showReason && (
+        <p className="mb-3 text-xs text-muted">
+          Reason: <span className="text-ink-soft">{entry.rejection_reason}</span>
+        </p>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
         <span className="flex items-center gap-1">
@@ -102,10 +131,10 @@ function ApplicationCard({ entry }: { entry: ApplicationEntry }) {
 
       {entry.notes && <p className="mb-3 rounded-lg bg-surface px-3 py-2 text-sm italic text-ink-soft">{entry.notes}</p>}
 
-      {entry.interviews.length > 0 && (
+      {(entry.interviews ?? []).length > 0 && (
         <div className="mt-3 border-t border-line pt-3">
-          <p className="mb-1 text-xs font-medium text-muted">Interviews ({entry.interviews.length})</p>
-          {entry.interviews.map((iv) => (
+          <p className="mb-1 text-xs font-medium text-muted">Interviews ({(entry.interviews ?? []).length})</p>
+          {(entry.interviews ?? []).map((iv) => (
             <InterviewRow key={iv.id} interview={iv} />
           ))}
         </div>
@@ -131,6 +160,7 @@ export default function CandidateDetailPage() {
   const token = useAppSelector((s) => s.auth?.accessToken) ?? localStorage.getItem("jwt");
 
   const notify = useNotify();
+  const [showAddToJob, setShowAddToJob] = useState(false);
   const {
     data: candidate,
     isLoading: candidateLoading,
@@ -255,11 +285,16 @@ export default function CandidateDetailPage() {
         }
         breadcrumbs={breadcrumbs}
         actions={
-          candidate.resume_url ? (
-            <Button variant="secondary" onClick={openResume} icon={<FileText size={16} />} iconRight={<ExternalLink size={14} />}>
-              View resume
+          <>
+            {candidate.resume_url && (
+              <Button variant="secondary" onClick={openResume} icon={<FileText size={16} />} iconRight={<ExternalLink size={14} />}>
+                View resume
+              </Button>
+            )}
+            <Button icon={<Plus size={16} />} onClick={() => setShowAddToJob(true)}>
+              Add to job
             </Button>
-          ) : undefined
+          </>
         }
       />
 
@@ -366,18 +401,31 @@ export default function CandidateDetailPage() {
                   icon={<Briefcase size={22} aria-hidden="true" />}
                   title="No job applications yet"
                   description="When this candidate is added to a job, the application and its interviews show up here."
+                  action={
+                    <Button variant="secondary" icon={<Plus size={15} />} onClick={() => setShowAddToJob(true)}>
+                      Add to job
+                    </Button>
+                  }
                 />
               </div>
             ) : (
               <div className="space-y-3">
                 {timeline.map((entry) => (
-                  <ApplicationCard key={entry.id} entry={entry} />
+                  <ApplicationCard key={entry.id} entry={entry} candidateName={fullName} />
                 ))}
               </div>
             )}
           </section>
         </div>
       </div>
+
+      {showAddToJob && (
+        <AddToPipelineModal
+          candidates={[candidate]}
+          excludeJobIds={timeline.map((t) => t.job_id)}
+          onClose={() => setShowAddToJob(false)}
+        />
+      )}
     </>
   );
 }

@@ -37,6 +37,7 @@ const NewJobPage = lazy(() => import("./pages/NewJobPage"));
 const CandidatesPage = lazy(() => import("./pages/CandidatesPage"));
 const VendorsPage = lazy(() => import("./pages/VendorsPage"));
 const ResumeSearchPage = lazy(() => import("./pages/ResumeSearchPage"));
+const SavedSearchesPage = lazy(() => import("./pages/SavedSearchesPage"));
 const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const PipelinePage = lazy(() => import("./pages/PipelinePage"));
@@ -340,6 +341,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/search">
             <ResumeSearchPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/search/saved"
+        element={
+          <ProtectedRoute path="/search/saved">
+            <SavedSearchesPage />
           </ProtectedRoute>
         }
       />
