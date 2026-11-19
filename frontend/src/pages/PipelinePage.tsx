@@ -42,7 +42,9 @@ export default function PipelinePage() {
     refetch: refetchJob,
   } = useGetJobQuery(jobId!, { skip: !jobId });
   const {
-    data: appsData = [],
+    // No "= []" default here: a new array every render re-ran the effect below
+    // while loading and caused "Maximum update depth exceeded".
+    data: appsData,
     isLoading: appsLoading,
     error: appsError,
     isFetching: appsFetching,
@@ -64,6 +66,7 @@ export default function PipelinePage() {
   const loadError = jobError || appsError;
 
   useEffect(() => {
+    if (appsData === undefined) return;
     setApplications(Array.isArray(appsData) ? appsData : []);
   }, [appsData]);
 
