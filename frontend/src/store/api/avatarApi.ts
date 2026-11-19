@@ -4,11 +4,11 @@ export const avatarApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     uploadAvatar: builder.mutation<{ avatar_url: string }, FormData>({
       query: (formData) => ({
-        url: "/profiles/avatar",
+        url: "/profile/avatar",
         method: "POST",
         body: formData,
       }),
-      invalidatesTags: ["Profile"],
+      invalidatesTags: ["Profile", "Auth"],
     }),
   }),
   overrideExisting: false,
