@@ -256,7 +256,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     const load = async () => {
       setResumeLoading(true);
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('jwt');
         // Always go through the authenticated resume endpoint: it serves files
         // from local disk or the private R2 bucket, whichever resume_url points to.
         const r = await fetch(`${RESUME_API}/candidates/${localCandidate.id}/resume`, {
