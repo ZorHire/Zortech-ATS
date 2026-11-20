@@ -97,3 +97,5 @@ AI_AGENTS_SPEC.md
 /temp.txt
 .playwright-mcp/
 .playwright-test-results/
+# Database backups made on the VPS (ops/db-backup)
+backups/

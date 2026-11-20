@@ -13,6 +13,60 @@ services:
     volumes:
       - redis_data:/data
 
+  # ── PostgreSQL (self-hosted, replaces Neon) ─────────────────────────────────
+  # Off until ops/migrate-neon-to-local.sh switches it on by adding
+  # COMPOSE_PROFILES=localdb and POSTGRES_PASSWORD to /opt/zortech/.env.
+  # pgvector image = Postgres 17 (same major version as Neon) + the vector extension.
+  # Not published on any host port: only containers on this network can reach it.
+  postgres:
+    image: pgvector/pgvector:pg17
+    profiles: ["localdb"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zorhire
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      POSTGRES_DB: zorhire
+    # Sized for a small VPS shared with the backend: the whole DB is ~40 MB today.
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=384MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=60
+      -c wal_compression=on
+      -c log_min_duration_statement=2000
+    mem_limit: 768m
+    shm_size: 128m
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zorhire -d zorhire"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Nightly database backup to Cloudflare R2 ────────────────────────────────
+  # pg_dump every night at 02:30 IST; keeps 7 copies on the VPS and
+  # DB_BACKUP_KEEP_DAYS (default 30) in R2 under db-backups/. Same profile as postgres.
+  db-backup:
+    build:
+      context: ./ops/db-backup
+    image: zortech-db-backup
+    profiles: ["localdb"]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - PGHOST=postgres
+      - PGUSER=zorhire
+      - PGPASSWORD=${POSTGRES_PASSWORD:-}
+      - TZ=Asia/Kolkata
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # ── Backend API ─────────────────────────────────────────────────────────────
   backend:
     build:
@@ -44,3 +98,4 @@ services:
 
 volumes:
   redis_data:
+  postgres_data:
