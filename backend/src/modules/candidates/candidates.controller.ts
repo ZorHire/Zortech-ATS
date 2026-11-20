@@ -770,6 +770,7 @@ export const getCandidateTimeline = async (req: AuthRequest, res: Response) => {
          ja.stage,
          ja.notes,
          ja.ai_score,
+         ja.rejection_reason,
          ja.created_at,
          ja.updated_at,
          j.id        AS job_id,
@@ -1022,7 +1023,8 @@ export const getResume = async (req: AuthRequest, res: Response) => {
       const relativePart = resumeUrl.replace(/^\/uploads\//, "");
       const filePath = path.resolve(uploadRoot, relativePart);
 
-      if (!filePath.startsWith(uploadRoot)) {
+      // Require a path separator so a sibling folder like "uploads-old" can't match.
+      if (filePath !== uploadRoot && !filePath.startsWith(uploadRoot + path.sep)) {
         return res.status(400).json({ message: "Invalid file path" });
       }
 

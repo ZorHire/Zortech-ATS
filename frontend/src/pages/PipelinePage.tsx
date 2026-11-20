@@ -16,13 +16,15 @@ import KanbanColumn from "../components/pipeline/KanbanColumn";
 import CandidateCard from "../components/pipeline/CandidateCard";
 import { JobApplication, PipelineStage } from "../types";
 import { useGetJobQuery } from "../store/api/jobApi";
-import { useGetPipelineApplicationsQuery, useUpdateApplicationStageMutation } from "../store/api/pipelineApi";
+import { useGetPipelineApplicationsQuery } from "../store/api/pipelineApi";
+import { useStageMove } from "../components/pipeline/useStageMove";
+import CandidateModalById from "../components/candidates/CandidateModalById";
 import api from "../lib/api";
 import { useNotify } from "../hooks/useNotify";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { baseApi } from "../store/api/baseApi";
 import { getErrorMessage } from "../lib/format";
-import { STAGES as ALL_STAGES, getStage } from "../lib/stages";
+import { STAGES as ALL_STAGES } from "../lib/stages";
 import { Button, EmptyState, ErrorState, PageHeader, Skeleton, buttonClasses } from "../components/ui";
 
 // Board columns: shared stage order/labels from lib/stages. "Offer declined"
@@ -40,17 +42,20 @@ export default function PipelinePage() {
     refetch: refetchJob,
   } = useGetJobQuery(jobId!, { skip: !jobId });
   const {
-    data: appsData = [],
+    // No "= []" default here: a new array every render re-ran the effect below
+    // while loading and caused "Maximum update depth exceeded".
+    data: appsData,
     isLoading: appsLoading,
     error: appsError,
     isFetching: appsFetching,
     refetch: refetchPipeline,
   } = useGetPipelineApplicationsQuery(jobId!, { skip: !jobId });
-  const [updateStage] = useUpdateApplicationStageMutation();
+  const stageMove = useStageMove();
 
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [activeApplication, setActiveApplication] = useState<JobApplication | null>(null);
-  const [movingId, setMovingId] = useState<string | null>(null);
+  const [openApplication, setOpenApplication] = useState<JobApplication | null>(null);
+  const movingId = stageMove.savingId;
   // feat/agents: AI shortlisting state
   const [shortlisting, setShortlisting] = useState(false);
   const notify = useNotify();
@@ -61,6 +66,7 @@ export default function PipelinePage() {
   const loadError = jobError || appsError;
 
   useEffect(() => {
+    if (appsData === undefined) return;
     setApplications(Array.isArray(appsData) ? appsData : []);
   }, [appsData]);
 
@@ -101,34 +107,32 @@ export default function PipelinePage() {
     setActiveApplication(found ?? null);
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  // Shared by drag-and-drop and the card's stage dropdown: optimistic move, revert
+  // if the save fails or the reason prompt (Disqualified / Offer declined) is cancelled.
+  const moveApplication = async (application: JobApplication, newStage: PipelineStage) => {
+    if (application.stage === newStage) return;
+    const applicationId = application.id;
+    const prevStage = application.stage;
+    const name = application.candidate
+      ? `${application.candidate.first_name} ${application.candidate.last_name}`
+      : undefined;
+
+    setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: newStage } : a)));
+    const ok = await stageMove.move(applicationId, newStage, { candidateName: name });
+    if (!ok) {
+      setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: prevStage } : a)));
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveApplication(null);
 
     if (!over) return;
 
-    const applicationId = active.id as string;
-    const newStage = over.id as PipelineStage;
-    const application = applications.find((a) => a.id === applicationId);
-
-    if (!application || application.stage === newStage) return;
-
-    const prevStage = application.stage;
-
-    // Optimistic update
-    setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: newStage } : a)));
-    setMovingId(applicationId);
-
-    try {
-      await updateStage({ applicationId, stage: newStage }).unwrap();
-      notify.success(`Moved to ${getStage(newStage).label}`);
-    } catch (err) {
-      // Revert on failure. RTK unwrap() errors carry the server message in `data`, not `message`.
-      setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: prevStage } : a)));
-      notify.error(getErrorMessage(err, "Could not move candidate"));
-    } finally {
-      setMovingId(null);
-    }
+    const application = applications.find((a) => a.id === active.id);
+    if (!application) return;
+    void moveApplication(application, over.id as PipelineStage);
   };
 
   const byStage = (stage: PipelineStage) => applications.filter((a) => a.stage === stage);
@@ -183,7 +187,7 @@ export default function PipelinePage() {
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Pipeline"
-        subtitle={`${job?.title ? `${job.title} · ` : ""}${applications.length} candidate${applications.length !== 1 ? "s" : ""} · drag cards between stages`}
+        subtitle={`${job?.title ? `${job.title} · ` : ""}${applications.length} candidate${applications.length !== 1 ? "s" : ""} · drag cards between stages or click one to open it`}
         breadcrumbs={breadcrumbs}
         actions={
           <>
@@ -235,6 +239,8 @@ export default function PipelinePage() {
                   label={label}
                   applications={byStage(key as PipelineStage)}
                   onScreeningInvite={handleScreeningInvite}
+                  onOpen={setOpenApplication}
+                  onStageChange={moveApplication}
                 />
               ))}
             </div>
@@ -244,6 +250,21 @@ export default function PipelinePage() {
             </DragOverlay>
           </DndContext>
         </div>
+      )}
+
+      {stageMove.reasonModal}
+
+      {openApplication && (
+        <CandidateModalById
+          candidateId={openApplication.candidate_id}
+          applicationId={openApplication.id}
+          name={
+            openApplication.candidate
+              ? `${openApplication.candidate.first_name} ${openApplication.candidate.last_name}`
+              : undefined
+          }
+          onClose={() => setOpenApplication(null)}
+        />
       )}
 
       {movingId && (

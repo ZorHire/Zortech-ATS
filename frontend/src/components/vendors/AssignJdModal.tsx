@@ -4,6 +4,7 @@ import { ClipboardList, X } from "lucide-react";
 import type { Vendor } from "../../types";
 import { useGetJobsQuery, useUpdateJobMutation } from "../../store/api/jobApi";
 import { useGetUsersQuery } from "../../store/api/adminApi";
+import { useGetVendorsQuery } from "../../store/api/vendorApi";
 import {
   useAssignJdMutation,
   useAssignJdRecruiterMutation,
@@ -102,20 +103,27 @@ function LoadingRows() {
 }
 
 export default function AssignJdModal({
-  vendors,
+  vendors: vendorsProp,
   userRole,
   onClose,
+  jobId,
+  jobTitle,
 }: {
-  vendors: Vendor[];
+  /** Vendors to choose from; loaded here when omitted. */
+  vendors?: Vendor[];
   userRole: string;
   onClose: () => void;
+  /** Preselect this job and skip the job picker (e.g. from the job page). */
+  jobId?: string;
+  /** Title shown for the preselected job (avoids waiting for the jobs list). */
+  jobTitle?: string;
 }) {
   const navigate = useNavigate();
   const canAssignVendor = userRole === "super_admin" || userRole === "vendor_manager" || userRole === "accounts_manager";
   const canAssignRecruiter = userRole === "super_admin" || userRole === "accounts_manager";
 
   const [assignType, setAssignType] = useState<"recruiter" | "vendor">("vendor");
-  const [selectedJobId, setSelectedJobId] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState(jobId ?? "");
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [selectedRecruiterIds, setSelectedRecruiterIds] = useState<string[]>([]);
   const [deadlineDays, setDeadlineDays] = useState(3);
@@ -125,6 +133,11 @@ export default function AssignJdModal({
 
   // RTK Query — data
   const { data: jobs = [], isLoading: loadingJobs } = useGetJobsQuery();
+  const { data: fetchedVendors = [], isLoading: loadingVendors } = useGetVendorsQuery(undefined, {
+    skip: !!vendorsProp,
+  });
+  const vendors = vendorsProp ?? fetchedVendors;
+  const preselectedJob = jobId ? jobs.find((j) => j.id === jobId) : undefined;
   const { data: allUsers = [], isLoading: loadingRecruiters } = useGetUsersQuery(undefined, {
     skip: assignType !== "recruiter",
   });
@@ -287,28 +300,41 @@ export default function AssignJdModal({
           </div>
         )}
 
-        <div>
-          <label htmlFor="assign-jd-job" className="zh-label">
-            Select JD
-          </label>
-          {loadingJobs ? (
-            <Skeleton className="h-10 w-full" />
-          ) : (
-            <select
-              id="assign-jd-job"
-              value={selectedJobId}
-              onChange={(e) => setSelectedJobId(e.target.value)}
-              className="zh-input"
-            >
-              <option value="">Select a job description</option>
-              {jobs.map((j) => (
-                <option key={j.id} value={j.id}>
-                  {j.title}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+        {jobId ? (
+          <div>
+            <p className="zh-label">Job</p>
+            {loadingJobs && !jobTitle ? (
+              <Skeleton className="h-10 w-full" />
+            ) : (
+              <p className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink">
+                {preselectedJob?.title ?? jobTitle ?? "This job"}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="assign-jd-job" className="zh-label">
+              Select JD
+            </label>
+            {loadingJobs ? (
+              <Skeleton className="h-10 w-full" />
+            ) : (
+              <select
+                id="assign-jd-job"
+                value={selectedJobId}
+                onChange={(e) => setSelectedJobId(e.target.value)}
+                className="zh-input"
+              >
+                <option value="">Select a job description</option>
+                {jobs.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.title}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
 
         {assignType === "recruiter" && (
           <div>
@@ -344,13 +370,17 @@ export default function AssignJdModal({
                 <span className="ml-2 text-xs font-normal text-navy-600">{selectedVendorIds.length} selected</span>
               )}
             </p>
-            <MultiSelectList
-              label="Vendors"
-              items={vendorItems}
-              selected={selectedVendorIds}
-              onToggle={toggleVendor}
-              labelKey="company_name"
-            />
+            {!vendorsProp && loadingVendors ? (
+              <LoadingRows />
+            ) : (
+              <MultiSelectList
+                label="Vendors"
+                items={vendorItems}
+                selected={selectedVendorIds}
+                onToggle={toggleVendor}
+                labelKey="company_name"
+              />
+            )}
             <SelectedTags ids={selectedVendorIds} items={vendorItems} labelKey="company_name" onRemove={toggleVendor} />
           </div>
         )}

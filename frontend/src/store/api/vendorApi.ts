@@ -1,6 +1,11 @@
 import { baseApi } from "./baseApi";
 import type { Vendor } from "../../types";
 
+/** Onboarding paperwork summary returned with the vendor list (NDA + service agreement). */
+export type VendorDocsStatus = "onboarded" | "pending" | "expired";
+
+export type VendorListItem = Vendor & { docs_status?: VendorDocsStatus | null };
+
 export interface VendorScorecardJob {
   job_id: string;
   title: string;
@@ -71,7 +76,7 @@ export interface VendorScorecard {
 
 export const vendorApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    getVendors: builder.query<Vendor[], void>({
+    getVendors: builder.query<VendorListItem[], void>({
       query: () => "/vendors",
       providesTags: ["Vendors"],
     }),

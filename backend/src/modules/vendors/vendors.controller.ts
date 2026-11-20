@@ -62,10 +62,44 @@ export const getVendors = async (req: AuthRequest, res: Response) => {
     const tenantId = req.user?.tenant_id;
     const pageLimit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "500"), 10) || 500));
     const pageOffset = Math.max(0, parseInt(String(req.query.offset ?? "0"), 10) || 0);
-    const result = await pool.query(
-      'SELECT * FROM vendors WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY company_name ASC LIMIT $2 OFFSET $3',
-      [tenantId, pageLimit, pageOffset]
-    );
+    // docs_status: onboarding paperwork summary for the list view, so the UI does not
+    // need one documents request per vendor. Required docs = NDA + service agreement.
+    //   onboarded -> both present, active and not past expiry
+    //   expired   -> a required doc has only expired copies
+    //   pending   -> anything else (missing / revoked)
+    let result;
+    try {
+      result = await pool.query(
+        `SELECT v.*, ds.docs_status
+         FROM vendors v
+         LEFT JOIN LATERAL (
+           SELECT CASE
+                    WHEN COUNT(*) FILTER (WHERE t.valid) = 2 THEN 'onboarded'
+                    WHEN COUNT(*) FILTER (WHERE NOT t.valid AND t.expired) > 0 THEN 'expired'
+                    ELSE 'pending'
+                  END AS docs_status
+           FROM (
+             SELECT vd.document_type,
+                    bool_or(vd.status = 'active' AND (vd.expiry_date IS NULL OR vd.expiry_date >= CURRENT_DATE)) AS valid,
+                    bool_or(vd.status = 'expired' OR (vd.status = 'active' AND vd.expiry_date < CURRENT_DATE)) AS expired
+             FROM vendor_documents vd
+             WHERE vd.vendor_id = v.id AND vd.tenant_id = v.tenant_id
+               AND vd.document_type IN ('nda', 'service_agreement')
+             GROUP BY vd.document_type
+           ) t
+         ) ds ON true
+         WHERE v.tenant_id = $1 AND v.deleted_at IS NULL
+         ORDER BY v.company_name ASC LIMIT $2 OFFSET $3`,
+        [tenantId, pageLimit, pageOffset]
+      );
+    } catch (docsErr) {
+      // Never let the paperwork summary take the vendor list down (e.g. table missing).
+      console.error('Get vendors docs_status error:', docsErr);
+      result = await pool.query(
+        'SELECT * FROM vendors WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY company_name ASC LIMIT $2 OFFSET $3',
+        [tenantId, pageLimit, pageOffset]
+      );
+    }
     res.json(result.rows);
   } catch (error) {
     console.error('Get vendors error:', error);

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import type { MouseEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import {
+  Bookmark,
   Search,
   MapPin,
   Clock,
@@ -16,7 +19,7 @@ import {
   Tag,
 } from "lucide-react";
 import { useLazySearchCandidatesQuery, buildSearchQueryString } from "../store/api/candidateApi";
-import type { SearchParams, SearchSort } from "../store/api/candidateApi";
+import type { SearchSort } from "../store/api/candidateApi";
 import { Candidate } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
 import { useNotify } from "../hooks/useNotify";
@@ -24,7 +27,11 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import EmailToast from "../components/ui/EmailToast";
 import AddToPipelineModal from "../components/resume-search/AddToPipelineModal";
 import BulkEmailModal from "../components/resume-search/BulkEmailModal";
-import { Badge, Button, EmptyState, ErrorState, PageHeader, TableSkeleton } from "../components/ui";
+import CandidatePreviewDrawer from "../components/resume-search/CandidatePreviewDrawer";
+import SaveSearchModal from "../components/resume-search/SaveSearchModal";
+import { highlightTermsFor, paramsToSearch, searchToParams } from "../components/resume-search/searchUrl";
+import type { ResumeSearch } from "../components/resume-search/searchUrl";
+import { Badge, Button, buttonClasses, EmptyState, ErrorState, PageHeader, TableSkeleton } from "../components/ui";
 import type { BadgeTone } from "../components/ui";
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -111,10 +118,12 @@ function TopMatchCard({
   candidate,
   score,
   onAddToPipeline,
+  onPreview,
 }: {
   candidate: Candidate;
   score: number;
   onAddToPipeline: (c: Candidate) => void;
+  onPreview: (c: Candidate) => void;
 }) {
   const color = avatarColor(candidate.first_name + candidate.last_name);
 
@@ -126,9 +135,13 @@ function TopMatchCard({
         </div>
         <Badge tone={matchTone(score)}>{score}% match</Badge>
       </div>
-      <p className="truncate text-sm font-semibold leading-tight text-ink">
+      <button
+        type="button"
+        onClick={() => onPreview(candidate)}
+        className="truncate text-left text-sm font-semibold leading-tight text-ink hover:text-navy-600 hover:underline"
+      >
         {candidate.first_name} {candidate.last_name}
-      </p>
+      </button>
       <p className="mt-0.5 truncate text-xs text-muted">{candidate.current_title}</p>
       <div className="mt-2 flex items-center gap-2 text-xs text-muted">
         <span className="flex items-center gap-1">
@@ -172,6 +185,7 @@ function CandidateRow({
   onSendEmail,
   emailSending,
   updatedAt,
+  onPreview,
 }: {
   candidate: Candidate;
   score: number;
@@ -181,6 +195,7 @@ function CandidateRow({
   onSendEmail: (c: Candidate) => void;
   emailSending: boolean;
   updatedAt?: string;
+  onPreview: (c: Candidate) => void;
 }) {
   const color = avatarColor(candidate.first_name + candidate.last_name);
   const name = `${candidate.first_name} ${candidate.last_name}`;
@@ -188,8 +203,19 @@ function CandidateRow({
     ? new Date(updatedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : "—";
 
+  // Clicking anywhere on the row previews the candidate, except on the
+  // checkbox, buttons and links (and while the user is selecting text).
+  const onRowClick = (e: MouseEvent<HTMLTableRowElement>) => {
+    if ((e.target as HTMLElement).closest("input, button, a, label, select, textarea")) return;
+    if (window.getSelection()?.toString()) return;
+    onPreview(candidate);
+  };
+
   return (
-    <tr className={`border-b border-line transition-colors last:border-0 hover:bg-surface ${isSelected ? "bg-navy-50/60" : ""}`}>
+    <tr
+      onClick={onRowClick}
+      className={`cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface ${isSelected ? "bg-navy-50/60" : ""}`}
+    >
       <td className="w-10 px-4 py-3">
         <input
           type="checkbox"
@@ -206,7 +232,14 @@ function CandidateRow({
             <span className="text-xs font-semibold">{initials(candidate)}</span>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink">{name}</p>
+            <button
+              type="button"
+              onClick={() => onPreview(candidate)}
+              className="block max-w-full truncate text-left text-sm font-semibold text-ink hover:text-navy-600 hover:underline"
+              aria-label={`Preview ${name}`}
+            >
+              {name}
+            </button>
             <p className="truncate text-xs text-muted">{candidate.email}</p>
           </div>
         </div>
@@ -388,7 +421,7 @@ const DEFAULT_FILTERS: FilterForm = {
   source: "All",
 };
 
-type ActiveSearch = Omit<SearchParams, "page" | "limit">;
+type ActiveSearch = ResumeSearch;
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
@@ -413,6 +446,11 @@ export default function ResumeSearchPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [wizardCandidates, setWizardCandidates] = useState<Candidate[] | null>(null);
   const [emailCandidates, setEmailCandidates] = useState<Candidate[] | null>(null);
+  const [preview, setPreview] = useState<{ candidate: Candidate; score: number } | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  // The search lives in the URL so back/forward, refresh and shared links restore it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlKey = searchParams.toString();
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
   const notify = useNotify();
   const accessToken = useAppSelector((s) => s.auth.accessToken);
@@ -486,16 +524,58 @@ export default function ResumeSearchPage() {
     }
   }, [activeSearch, status, loadingMore, page, totalPages, triggerSearch]);
 
-  const handleSearch = () => runSearch(formToSearch(query));
+  /** Clears results and selection (the URL is handled by the caller). */
+  const resetResults = useCallback(() => {
+    requestIdRef.current++;
+    setActiveSearch(null);
+    setResults([]);
+    setStatus("idle");
+    setSearchError(null);
+    setLoadingMore(false);
+    setLoadMoreError(null);
+    setSelectedIds(new Set());
+    setPage(1);
+    setTotalPages(1);
+    setTotal(0);
+  }, []);
+
+  // URL -> form + results. Runs on first load, back/forward and links (e.g. saved searches).
+  useEffect(() => {
+    const s = paramsToSearch(new URLSearchParams(urlKey));
+    if (!s) {
+      resetResults();
+      return;
+    }
+    setQuery(s.query);
+    setFilters({
+      location: s.location || "All",
+      experience: s.experience || "All",
+      noticePeriod: s.noticePeriod || "Any",
+      skills: s.skills ?? [],
+      role: s.role ?? "",
+      source: s.source || "All",
+    });
+    setSort(s.sort ?? "relevance");
+    runSearch(s);
+  }, [urlKey, runSearch, resetResults]);
+
+  /** Push a search into the URL (the effect above runs it); re-runs if unchanged. */
+  const commitSearch = (s: ActiveSearch, replace = false) => {
+    const next = searchToParams(s);
+    if (next.toString() === urlKey) runSearch(s);
+    else setSearchParams(next, { replace });
+  };
+
+  const handleSearch = () => commitSearch(formToSearch(query));
 
   const handleQuickSearch = (q: string) => {
     setQuery(q);
-    runSearch(formToSearch(q));
+    commitSearch(formToSearch(q));
   };
 
   const handleSortChange = (value: SearchSort) => {
     setSort(value);
-    if (activeSearch) runSearch({ ...activeSearch, sort: value });
+    if (activeSearch) commitSearch({ ...activeSearch, sort: value }, true);
   };
 
   const handleExport = useCallback(async () => {
@@ -528,20 +608,11 @@ export default function ResumeSearchPage() {
   }, [activeSearch, exporting, accessToken, notify]);
 
   const handleClearAll = () => {
-    requestIdRef.current++;
     setFilters({ ...DEFAULT_FILTERS });
     setQuery("");
     setSort("relevance");
-    setActiveSearch(null);
-    setResults([]);
-    setStatus("idle");
-    setSearchError(null);
-    setLoadingMore(false);
-    setLoadMoreError(null);
-    setSelectedIds(new Set());
-    setPage(1);
-    setTotalPages(1);
-    setTotal(0);
+    resetResults();
+    if (urlKey) setSearchParams(new URLSearchParams());
   };
 
   const topMatches = results.filter((r) => r.score >= 75).slice(0, 8);
@@ -601,7 +672,19 @@ export default function ResumeSearchPage() {
                 Add to pipeline
               </Button>
             </>
-          ) : null
+          ) : (
+            <>
+              <Link to="/search/saved" className={buttonClasses("ghost", "md")}>
+                <Bookmark size={16} aria-hidden="true" />
+                Saved searches
+              </Link>
+              {activeSearch && (
+                <Button variant="secondary" icon={<BookmarkPlus size={16} />} onClick={() => setSaveOpen(true)}>
+                  Save search
+                </Button>
+              )}
+            </>
+          )
         }
       />
 
@@ -823,6 +906,7 @@ export default function ResumeSearchPage() {
                       candidate={candidate}
                       score={score}
                       onAddToPipeline={(c) => setWizardCandidates([c])}
+                      onPreview={(c) => setPreview({ candidate: c, score })}
                     />
                   ))}
                 </div>
@@ -883,6 +967,7 @@ export default function ResumeSearchPage() {
                           onSendEmail={(c) => sendEmail(c.email, { firstName: c.first_name })}
                           emailSending={emailSending}
                           updatedAt={(candidate as Candidate & { updated_at?: string }).updated_at}
+                          onPreview={(c) => setPreview({ candidate: c, score })}
                         />
                       ))}
                     </tbody>
@@ -927,6 +1012,23 @@ export default function ResumeSearchPage() {
         <AddToPipelineModal candidates={wizardCandidates} onClose={() => setWizardCandidates(null)} />
       )}
       {emailCandidates && <BulkEmailModal candidates={emailCandidates} onClose={() => setEmailCandidates(null)} />}
+      {preview && (
+        <CandidatePreviewDrawer
+          candidate={preview.candidate}
+          score={preview.score}
+          highlightTerms={highlightTermsFor(activeSearch?.query ?? "", activeSearch?.skills)}
+          onClose={() => setPreview(null)}
+          onAddToJob={(c) => {
+            setPreview(null);
+            setWizardCandidates([c]);
+          }}
+          onEmail={(c) => {
+            setPreview(null);
+            setEmailCandidates([c]);
+          }}
+        />
+      )}
+      {saveOpen && activeSearch && <SaveSearchModal search={activeSearch} onClose={() => setSaveOpen(false)} />}
       {emailToast && <EmailToast {...emailToast} />}
     </>
   );

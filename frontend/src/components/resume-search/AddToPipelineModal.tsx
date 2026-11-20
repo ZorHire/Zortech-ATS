@@ -15,13 +15,18 @@ const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = STAGES.filter((
 
 const DEFAULT_STAGE: PipelineStage = "shortlisted";
 
-interface Outcome {
+export interface AddToPipelineOutcome {
   added: number;
   skipped: number;
   failed: { name: string; reason: string }[];
 }
 
-function fullName(c: Candidate) {
+type Outcome = AddToPipelineOutcome;
+
+/** The modal only needs these fields, so callers can pass partial candidate rows. */
+export type PipelineCandidate = Pick<Candidate, "id" | "first_name" | "last_name">;
+
+function fullName(c: PipelineCandidate) {
   return `${c.first_name} ${c.last_name}`.trim();
 }
 
@@ -36,15 +41,22 @@ function errorMessage(err: unknown): string {
 
 /**
  * Single-step "Add to Pipeline": pick an open job and a stage on one screen.
- * Each candidate is added independently (allSettled) so one duplicate does not
- * mask the others; the result screen reports added / skipped / failed.
+ * Works for one candidate or many. Each candidate is added independently
+ * (allSettled) so one duplicate does not mask the others; the result screen
+ * reports added / skipped / failed.
  */
 export default function AddToPipelineModal({
   candidates,
   onClose,
+  onAdded,
+  excludeJobIds,
 }: {
-  candidates: Candidate[];
+  candidates: PipelineCandidate[];
   onClose: () => void;
+  /** Called once the adds settle (before the result screen), e.g. to clear a selection. */
+  onAdded?: (outcome: AddToPipelineOutcome) => void;
+  /** Jobs to leave out of the list, e.g. ones the candidate is already in. */
+  excludeJobIds?: string[];
 }) {
   const [jobSearch, setJobSearch] = useState("");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
@@ -60,13 +72,14 @@ export default function AddToPipelineModal({
     const q = jobSearch.trim().toLowerCase();
     return jobs
       .filter((j) => j.status === "active")
+      .filter((j) => !excludeJobIds?.includes(j.id))
       .filter(
         (j) =>
           !q ||
           j.title.toLowerCase().includes(q) ||
           (j.client?.name ?? "").toLowerCase().includes(q),
       );
-  }, [jobs, jobSearch]);
+  }, [jobs, jobSearch, excludeJobIds]);
 
   const handleAdd = async () => {
     if (!selectedJob || submitting) return;
@@ -84,6 +97,7 @@ export default function AddToPipelineModal({
     });
     setSubmitting(false);
     setOutcome(result);
+    onAdded?.(result);
 
     const summary = `Added ${result.added}, skipped ${result.skipped} already in pipeline, failed ${result.failed.length}`;
     if (result.failed.length > 0) notify.error(summary);

@@ -102,6 +102,11 @@ export function visibleGroups(role: string | undefined, isPlatformOwner: boolean
   })).filter((g) => g.items.length > 0);
 }
 
+/** Flat list of the pages this user can open (used by the command palette). */
+export function visibleNavItems(role: string | undefined, isPlatformOwner: boolean): (NavItem & { group: string })[] {
+  return visibleGroups(role, isPlatformOwner).flatMap((g) => g.items.map((item) => ({ ...item, group: g.label })));
+}
+
 /** Longest matching path wins, so /vendors/leaderboard doesn't also light up /vendors. */
 export function activePath(pathname: string, groups: NavGroup[]): string | null {
   let best: string | null = null;

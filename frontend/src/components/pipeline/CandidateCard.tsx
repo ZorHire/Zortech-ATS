@@ -2,21 +2,36 @@ import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Briefcase, MapPin, Clock, Send, Loader2 } from "lucide-react";
-import { JobApplication } from "../../types";
+import type { KeyboardEvent, MouseEvent } from "react";
+import { JobApplication, PipelineStage } from "../../types";
 import { Badge, useConfirm } from "../ui";
 import { Avatar } from "../jobs/jobBadges";
+import StageSelect from "./StageSelect";
 
 interface CandidateCardProps {
   application: JobApplication;
   isOverlay?: boolean;
   /** May return a promise; the button shows a pending state until it settles. */
   onScreeningInvite?: (application: JobApplication) => void | Promise<unknown>;
+  /** Open the candidate (card click or Enter). */
+  onOpen?: (application: JobApplication) => void;
+  /** Move to another stage from the card's stage dropdown. */
+  onStageChange?: (application: JobApplication, stage: PipelineStage) => void;
+}
+
+/** Clicks on the card's own controls (or inside a portal, e.g. a modal) don't open it. */
+function isOwnControl(e: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>): boolean {
+  const target = e.target as HTMLElement;
+  if (!e.currentTarget.contains(target)) return true;
+  return !!target.closest("button, a, select, input, textarea, label");
 }
 
 export default function CandidateCard({
   application,
   isOverlay = false,
   onScreeningInvite,
+  onOpen,
+  onStageChange,
 }: CandidateCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: application.id });
@@ -37,16 +52,35 @@ export default function CandidateCard({
   const title = candidate?.current_title ?? "";
   const location = candidate?.current_location ?? "";
 
+  const interactive = !!onOpen && !isOverlay;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`group select-none rounded-lg border bg-white p-3 transition-all ${
+      {...(interactive
+        ? {
+            tabIndex: 0,
+            role: "group",
+            title: "Open candidate (Enter)",
+            "aria-label": `${fullName}, open candidate`,
+            onClick: (e: MouseEvent<HTMLDivElement>) => {
+              if (isOwnControl(e)) return;
+              onOpen?.(application);
+            },
+            onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+              if (e.key !== "Enter" || e.target !== e.currentTarget) return;
+              e.preventDefault();
+              onOpen?.(application);
+            },
+          }
+        : {})}
+      className={`group select-none rounded-lg border bg-white p-3 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-300 ${
         isDragging && !isOverlay ? "border-navy-300 opacity-30 shadow-none" : ""
       } ${
         isOverlay
           ? "rotate-1 cursor-grabbing border-navy-400 shadow-pop ring-2 ring-navy-200"
-          : "cursor-grab border-line shadow-card hover:border-line-strong hover:shadow-md"
+          : `${interactive ? "cursor-pointer" : "cursor-grab"} border-line shadow-card hover:border-line-strong hover:shadow-md`
       }`}
     >
       {/* Drag handle + name */}
@@ -117,6 +151,16 @@ export default function CandidateCard({
                 </span>
               )}
             </div>
+          )}
+
+          {onStageChange && !isOverlay && (
+            <StageSelect
+              size="sm"
+              value={application.stage}
+              candidateName={fullName}
+              onChange={(stage) => onStageChange(application, stage)}
+              className="mt-2 w-full"
+            />
           )}
 
           {/* Screening invite trigger — dark by default (SCREENING_CHAT_ENABLED gate) */}

@@ -10,12 +10,18 @@ export const pipelineApi = baseApi.injectEndpoints({
 
     updateApplicationStage: builder.mutation<
       void,
-      { applicationId: string; stage: PipelineStage; note?: string }
+      {
+        applicationId: string;
+        stage: PipelineStage;
+        note?: string;
+        /** Stored on the application when moving to "disqualified" / "offer_rejected". */
+        rejectionReason?: string;
+      }
     >({
-      query: ({ applicationId, stage, note }) => ({
+      query: ({ applicationId, stage, note, rejectionReason }) => ({
         url: `/pipeline/applications/${applicationId}/stage`,
         method: "PATCH",
-        body: { to_stage: stage, note },
+        body: { to_stage: stage, note, rejection_reason: rejectionReason },
       }),
       invalidatesTags: ["Pipeline", "Dashboard", "Candidates", "Candidate"],
     }),
@@ -34,7 +40,8 @@ export const pipelineApi = baseApi.injectEndpoints({
         method: "POST",
         body: { candidate_id: candidateId, stage },
       }),
-      invalidatesTags: ["Pipeline", "Dashboard", "Candidates", "Candidate"],
+      // "Job" too: the job header shows the pipeline count.
+      invalidatesTags: ["Pipeline", "Dashboard", "Candidates", "Candidate", "Job"],
     }),
   }),
   overrideExisting: false,

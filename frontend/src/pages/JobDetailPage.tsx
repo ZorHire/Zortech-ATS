@@ -15,8 +15,12 @@ import {
   Sparkles,
   Globe,
   IndianRupee,
+  Plus,
+  Check,
 } from 'lucide-react';
 import { useGetJobQuery, useUpdateJobMutation } from '../store/api/jobApi';
+import { useAddApplicationToJobMutation } from '../store/api/pipelineApi';
+import AssignJdModal from '../components/vendors/AssignJdModal';
 import { useAppSelector } from '../hooks/useAppSelector';
 import { selectCurrentUser } from '../store/slices/authSlice';
 import AddCandidateModal from '../components/candidates/AddCandidateModal';
@@ -81,6 +85,11 @@ export default function JobDetailPage() {
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
+  const [isAssignVendorsOpen, setIsAssignVendorsOpen] = useState(false);
+  // Matching results: which ones are in this job's pipeline (added now or already there) / being added.
+  const [inPipeline, setInPipeline] = useState<Set<string>>(new Set());
+  const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [addApplicationToJob] = useAddApplicationToJobMutation();
   const notify = useNotify();
   const confirm = useConfirm();
 
@@ -91,11 +100,55 @@ export default function JobDetailPage() {
     try {
       const data = await api.post(`/jobs/${id}/matches`, {});
       setMatches(data.matches ?? []);
+      setInPipeline(new Set());
     } catch (err: unknown) {
       setMatchesError(getErrorMessage(err, 'Failed to find matching candidates'));
     } finally {
       setMatchesLoading(false);
     }
+  };
+
+  // Adds matches to this job's pipeline as "Shortlisted" (same API as Add to pipeline elsewhere).
+  // A 409 means the candidate is already in the pipeline, which counts as done.
+  const addMatchesToPipeline = async (list: CandidateMatch[]) => {
+    if (!id) return;
+    const todo = list.filter((c) => !inPipeline.has(c.id) && !addingIds.has(c.id));
+    if (todo.length === 0) return;
+    setAddingIds((prev) => new Set([...prev, ...todo.map((c) => c.id)]));
+    const settled = await Promise.allSettled(
+      todo.map((c) => addApplicationToJob({ jobId: id, candidateId: c.id, stage: 'shortlisted' }).unwrap()),
+    );
+    let added = 0;
+    let already = 0;
+    const done: string[] = [];
+    const failed: string[] = [];
+    settled.forEach((res, i) => {
+      if (res.status === 'fulfilled') {
+        added++;
+        done.push(todo[i].id);
+      } else if (getErrorStatus(res.reason) === 409) {
+        already++;
+        done.push(todo[i].id);
+      } else {
+        failed.push(`${todo[i].first_name} ${todo[i].last_name}`);
+      }
+    });
+    setInPipeline((prev) => new Set([...prev, ...done]));
+    setAddingIds((prev) => {
+      const next = new Set(prev);
+      todo.forEach((c) => next.delete(c.id));
+      return next;
+    });
+    if (todo.length === 1) {
+      const name = `${todo[0].first_name} ${todo[0].last_name}`;
+      if (added) notify.success(`${name} added to the pipeline as Shortlisted`);
+      else if (already) notify.info(`${name} is already in this pipeline`);
+      else notify.error(`Could not add ${name} to the pipeline`);
+      return;
+    }
+    const summary = `Added ${added}, ${already} already in pipeline${failed.length ? `, failed ${failed.length}` : ''}`;
+    if (failed.length) notify.error(summary);
+    else notify.success(summary);
   };
 
   const canEditStatus =
@@ -195,17 +248,12 @@ export default function JobDetailPage() {
           <>
             <Link to={`/pipeline/${id}`} className={buttonClasses('secondary')}>
               <TrendingUp size={16} />
-              Pipeline
+              Pipeline ({job.application_count ?? 0})
             </Link>
             {canAssignVendors && (
-              <Link
-                to="/vendors"
-                title="Open Vendors and use “Assign JD” to send this job to vendors"
-                className={buttonClasses('secondary')}
-              >
-                <Mail size={16} />
+              <Button variant="secondary" icon={<Mail size={16} />} onClick={() => setIsAssignVendorsOpen(true)}>
                 Send to vendors
-              </Link>
+              </Button>
             )}
             {canEditStatus && (
               <Button variant="secondary" icon={<Globe size={16} />} onClick={() => setIsPublishBoardsOpen(true)}>
@@ -351,28 +399,74 @@ export default function JobDetailPage() {
             )}
 
             {matches && matches.length > 0 && (
-              <ul className="space-y-1.5">
-                {matches.map((c) => (
-                  <li
-                    key={c.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2"
-                  >
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <Avatar name={`${c.first_name} ${c.last_name}`} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ink">
-                          {c.first_name} {c.last_name}
-                        </p>
-                        <p className="truncate text-xs text-muted">
-                          {c.current_title || 'No title'}
-                          {c.current_location ? ` · ${c.current_location}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <Badge tone="success">{Math.round(c.similarity * 100)}% match</Badge>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {canEditStatus && (
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted">
+                      {matches.length} match{matches.length !== 1 ? 'es' : ''} · added as Shortlisted
+                    </p>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<Plus size={14} />}
+                      onClick={() => addMatchesToPipeline(matches)}
+                      disabled={matches.every((c) => inPipeline.has(c.id))}
+                      loading={addingIds.size > 1}
+                      loadingText="Adding…"
+                    >
+                      Add all
+                    </Button>
+                  </div>
+                )}
+                <ul className="space-y-1.5">
+                  {matches.map((c) => {
+                    const name = `${c.first_name} ${c.last_name}`;
+                    const added = inPipeline.has(c.id);
+                    return (
+                      <li
+                        key={c.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <Avatar name={name} />
+                          <div className="min-w-0">
+                            <Link
+                              to={`/candidates/${c.id}`}
+                              className="block truncate text-sm font-medium text-ink hover:text-navy-600 hover:underline"
+                            >
+                              {name}
+                            </Link>
+                            <p className="truncate text-xs text-muted">
+                              {c.current_title || 'No title'}
+                              {c.current_location ? ` · ${c.current_location}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge tone="success">{Math.round(c.similarity * 100)}% match</Badge>
+                          {canEditStatus &&
+                            (added ? (
+                              <Badge tone="navy" icon={<Check size={12} aria-hidden="true" />}>
+                                In pipeline
+                              </Badge>
+                            ) : (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={<Plus size={14} />}
+                                loading={addingIds.has(c.id)}
+                                onClick={() => addMatchesToPipeline([c])}
+                                aria-label={`Add ${name} to pipeline`}
+                              >
+                                Add to pipeline
+                              </Button>
+                            ))}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
             )}
           </Section>
 
@@ -417,6 +511,15 @@ export default function JobDetailPage() {
           jobId={id}
           onClose={() => setIsAddCandidateOpen(false)}
           onSuccess={() => { refetch(); }}
+        />
+      )}
+
+      {isAssignVendorsOpen && id && profile && (
+        <AssignJdModal
+          jobId={id}
+          jobTitle={job.title}
+          userRole={profile.role}
+          onClose={() => setIsAssignVendorsOpen(false)}
         />
       )}
 

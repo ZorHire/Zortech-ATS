@@ -3,10 +3,7 @@ import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { createNotification } from "../notifications/notifications.controller";
 
-// NOTE (known adjacent bug, out of scope for A4 shortlisting): the DB CHECK constraint
-// on job_applications.stage also allows 'offer_rejected', but this array omits it, so
-// normalizeStage() would silently reset that stage to 'new' if ever hit. Irrelevant here
-// since 'shortlisted' (A4's target stage) is present below.
+// Must match the CHECK constraint on job_applications.stage (db/schema.sql).
 const allowedStages = [
   "new",
   "sourced",
@@ -18,11 +15,19 @@ const allowedStages = [
   "selected",
   "offer_extended",
   "offer_accepted",
+  "offer_rejected",
   "joined",
   "disqualified",
 ] as const;
 
 type Stage = (typeof allowedStages)[number];
+
+const isStage = (value: unknown): value is Stage =>
+  typeof value === "string" && (allowedStages as readonly string[]).includes(value);
+
+/** Stages where a recruiter may record why the candidate dropped out. */
+const reasonStages: readonly Stage[] = ["disqualified", "offer_rejected"];
+const MAX_REASON_LENGTH = 1000;
 
 const normalizeStage = (value: any): Stage => {
   if (allowedStages.includes(value)) {
@@ -151,11 +156,26 @@ export const createApplication = async (req: AuthRequest, res: Response) => {
 
 export const moveApplicationStage = async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
-  const { to_stage, note } = req.body;
+  const { to_stage, note, rejection_reason } = req.body;
   const tenantId = req.user?.tenant_id;
   const changedBy = req.user?.id;
 
-  const targetStage = normalizeStage(to_stage);
+  if (!isStage(to_stage)) {
+    return res.status(400).json({ message: "Invalid stage" });
+  }
+  const targetStage = to_stage;
+
+  if (
+    rejection_reason !== undefined &&
+    rejection_reason !== null &&
+    typeof rejection_reason !== "string"
+  ) {
+    return res.status(400).json({ message: "rejection_reason must be text" });
+  }
+  const reason =
+    typeof rejection_reason === "string" && rejection_reason.trim()
+      ? rejection_reason.trim().slice(0, MAX_REASON_LENGTH)
+      : null;
 
   try {
     const applicationResult = await pool.query(
@@ -173,15 +193,25 @@ export const moveApplicationStage = async (req: AuthRequest, res: Response) => {
         .json({ message: "Candidate is already in the requested stage" });
     }
 
+    // Moving into a "lost" stage stores the (optional) reason; moving anywhere
+    // else clears a stale one so a re-activated candidate doesn't keep it.
+    const storeReason = reasonStages.includes(targetStage);
     const updateResult = await pool.query(
-      `UPDATE job_applications SET stage = $1, updated_at = now() WHERE id = $2 RETURNING *`,
-      [targetStage, id],
+      `UPDATE job_applications
+          SET stage = $1,
+              rejection_reason = CASE WHEN $4::boolean THEN $5::text ELSE NULL END,
+              updated_at = now()
+        WHERE id = $2 AND tenant_id = $3
+        RETURNING *`,
+      [targetStage, id, tenantId, storeReason, storeReason ? reason : null],
     );
 
+    const eventNote =
+      [note, storeReason && reason ? `Reason: ${reason}` : null].filter(Boolean).join(" | ") || null;
     await pool.query(
       `INSERT INTO pipeline_events (tenant_id, application_id, from_stage, to_stage, changed_by, note, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, now())`,
-      [tenantId, id, currentStage, targetStage, changedBy, note || null],
+      [tenantId, id, currentStage, targetStage, changedBy, eventNote],
     );
 
     res.json(updateResult.rows[0]);

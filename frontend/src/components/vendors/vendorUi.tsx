@@ -1,7 +1,8 @@
 import type { ElementType } from "react";
-import { Award, CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, Award, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { Badge } from "../ui";
 import type { BadgeTone } from "../ui";
+import type { VendorDocsStatus } from "../../store/api/vendorApi";
 
 /** Internal vendor tiers. Staff-facing only: never show these in the vendor portal. */
 export const tierConfig: Record<string, { label: string; tone: BadgeTone; icon: ElementType }> = {
@@ -64,6 +65,25 @@ export function VendorAvatar({ name, size = "md" }: { name: string; size?: "sm" 
   return (
     <span className={`flex shrink-0 items-center justify-center bg-navy-600 font-semibold text-white ${cls}`} aria-hidden="true">
       {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+const docsStatusConfig: Record<VendorDocsStatus, { label: string; tone: BadgeTone; icon: ElementType; hint: string }> = {
+  onboarded: { label: "Onboarded", tone: "success", icon: CheckCircle2, hint: "NDA and service agreement on file" },
+  pending: { label: "Docs pending", tone: "warning", icon: Clock, hint: "NDA or service agreement missing" },
+  expired: { label: "Expired", tone: "danger", icon: AlertTriangle, hint: "A required document has expired" },
+};
+
+/** Onboarding paperwork pill: Onboarded / Docs pending / Expired. */
+export function DocsStatusBadge({ status, className = "" }: { status: VendorDocsStatus | null | undefined; className?: string }) {
+  const c = docsStatusConfig[status ?? "pending"] ?? docsStatusConfig.pending;
+  const Icon = c.icon;
+  return (
+    <span title={c.hint} className="inline-flex">
+      <Badge tone={c.tone} icon={<Icon size={12} aria-hidden="true" />} className={className}>
+        {c.label}
+      </Badge>
     </span>
   );
 }
