@@ -11,6 +11,7 @@ import { ServerUnreachableBanner } from "./AppStatusScreens";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectSidebarCollapsed, setSidebarCollapsed } from "../../store/slices/uiSlice";
+import HelpPanel from "../help/HelpPanel";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -62,6 +63,7 @@ export default function Layout({ children }: LayoutProps) {
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <ResumeDropZone />
+      <HelpPanel />
       <ToastContainer />
     </div>
   );

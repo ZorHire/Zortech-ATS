@@ -80,9 +80,11 @@ export async function claudeStructured<S extends z.ZodType>(
         format: betaZodOutputFormat(params.schema),
       },
       // If a safety classifier declines, the API re-runs the request on a suitable
-      // fallback model inside the same call (no client-side retry needed).
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
+      // fallback model inside the same call (no client-side retry needed). Haiku has no
+      // server-side fallback, so it's not requested there; a refusal returns null below.
+      ...(model.startsWith("claude-haiku")
+        ? {}
+        : { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
       system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
       messages: params.messages,
     });
