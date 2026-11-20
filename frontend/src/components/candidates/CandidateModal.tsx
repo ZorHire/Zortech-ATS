@@ -5,6 +5,7 @@ import {
   Video, PhoneCall, Users, Link, CheckCircle2, XCircle, AlertCircle, Sparkles,
 } from 'lucide-react';
 import AiInsightsTab from '../agents/AiInsightsTab';
+import WhatsAppTab from '../whatsapp/WhatsAppTab';
 import { Candidate } from '../../types';
 import api, { ApiError } from '../../lib/api';
 import { Link as RouterLink } from 'react-router-dom';
@@ -61,7 +62,7 @@ const INTERVIEW_TYPE_LABELS: Record<string, string> = {
 };
 
 const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onDelete, onUpdate, applicationId }) => {
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity' | 'ai'>('overview');
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'resume' | 'activity' | 'ai' | 'whatsapp'>('overview');
   const [localCandidate, setLocalCandidate] = React.useState<Candidate>(candidate);
   const [resumeUploading, setResumeUploading] = React.useState(false);
   const [resumeBlobUrl, setResumeBlobUrl] = React.useState<string | null>(null);
@@ -353,10 +354,10 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
         {/* Tabs */}
         <div className="sticky top-0 z-10 border-b border-line bg-white px-5 sm:px-6">
           <div role="tablist" className="flex gap-6 overflow-x-auto">
-            {(['overview', 'resume', 'activity', 'ai'] as const).map((tab) => (
+            {(['overview', 'resume', 'activity', 'ai', 'whatsapp'] as const).map((tab) => (
               <button key={tab} role="tab" aria-selected={activeTab === tab} onClick={() => setActiveTab(tab)}
                 className={`whitespace-nowrap border-b-2 py-3 text-sm font-medium transition-colors ${
-                  tab === 'ai' ? '' : 'capitalize'
+                  tab === 'ai' || tab === 'whatsapp' ? '' : 'capitalize'
                 } ${
                   activeTab === tab ? 'border-navy-600 text-navy-700' : 'border-transparent text-muted hover:text-ink'
                 }`}>
@@ -365,7 +366,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                     <Sparkles size={14} aria-hidden="true" />
                     AI insights
                   </span>
-                ) : tab}
+                ) : tab === 'whatsapp' ? 'WhatsApp' : tab}
                 {tab === 'activity' && interviews.length > 0 && (
                   <span className="ml-2 rounded-full bg-navy-50 px-1.5 py-0.5 text-xs font-medium text-navy-700">
                     {interviews.length}
@@ -907,6 +908,11 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                 </>
               )}
             </div>
+          )}
+
+          {/* ── WhatsApp Tab ── */}
+          {activeTab === 'whatsapp' && (
+            <WhatsAppTab candidateId={candidate.id} firstName={candidate.first_name} jobTitle={selectedApp?.job?.title ?? null} />
           )}
 
           {/* ── AI insights Tab ── */}

@@ -2,6 +2,7 @@ import cron from "node-cron";
 import pool from "./db";
 import { dispatchScheduledCampaign } from "./modules/email/campaigns.controller";
 import { agentTick } from "./modules/agents/orchestrator";
+import { processNewProspects } from "./modules/linkedin-agent/linkedinAi";
 
 export function startScheduler(): void {
   // Nightly at 00:05 — expire overdue jobs and vendor contracts
@@ -41,6 +42,7 @@ export function startScheduler(): void {
   // Every minute — AI recruiting agents (autopilot sweep + task worker). See docs/ai-agents.md.
   cron.schedule("* * * * *", () => {
     void agentTick();
+    void processNewProspects();
   });
 
   cron.schedule('*/5 * * * *', async () => {

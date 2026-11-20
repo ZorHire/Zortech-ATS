@@ -1,3 +1,4 @@
+import { resolveStoredUpload } from "../lib/uploadPaths";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -132,3 +133,36 @@ export async function deleteResumeFromR2(resumeUrl: string | null | undefined): 
     new DeleteObjectCommand({ Bucket: env.R2_BUCKET, Key: resumeUrl.slice(R2_PREFIX.length) }),
   );
 }
+
+/**
+ * Read a stored resume into memory, wherever it lives (R2 "r2:" key or local "/uploads/..." file).
+ * Used by features that need the file contents (AI client profiles, email attachments).
+ * Only files under this tenant's R2 prefix are returned.
+ */
+export async function readResumeBuffer(
+  tenantId: string,
+  resumeUrl: string | null | undefined,
+): Promise<{ buffer: Buffer; filename: string; mimetype: string } | null> {
+  if (!resumeUrl) return null;
+  const mimeFor = (name: string) =>
+    /\.pdf$/i.test(name) ? "application/pdf"
+      : /\.docx$/i.test(name) ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      : /\.doc$/i.test(name) ? "application/msword" : "text/plain";
+  if (resumeUrl.startsWith(R2_PREFIX)) {
+    if (!resumeUrl.startsWith(`${R2_PREFIX}resumes/${tenantId}/`)) return null;
+    const stored = await getResumeFromR2(resumeUrl);
+    if (!stored) return null;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stored.stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const filename = resumeUrl.split("/").pop()?.replace(/^[0-9a-f]{16}-/, "") || "resume";
+    return { buffer: Buffer.concat(chunks), filename, mimetype: stored.contentType || mimeFor(filename) };
+  }
+  if (resumeUrl.startsWith("/uploads/")) {
+    const file = resolveStoredUpload(resumeUrl);
+    if (!file) return null;
+    const filename = path.basename(file).replace(/^\d+-/, "");
+    return { buffer: await fs.promises.readFile(file), filename, mimetype: mimeFor(filename) };
+  }
+  return null;
+}
+

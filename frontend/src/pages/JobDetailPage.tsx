@@ -17,6 +17,8 @@ import {
   IndianRupee,
   Plus,
   Check,
+  Megaphone,
+  Linkedin,
 } from 'lucide-react';
 import { useGetJobQuery, useUpdateJobMutation } from '../store/api/jobApi';
 import { useAddApplicationToJobMutation } from '../store/api/pipelineApi';
@@ -30,6 +32,7 @@ import JdApprovalPanel from '../components/jobs/JdApprovalPanel';
 import JdVersionHistory from '../components/jobs/JdVersionHistory';
 import JobBoardStatusSection from '../components/jobs/JobBoardStatusSection';
 import JobBoardPublishModal from '../components/jobs/JobBoardPublishModal';
+import FreeJobBoardsModal from '../components/jobs/FreeJobBoardsModal';
 import { useNotify } from '../hooks/useNotify';
 import { formatINR, getErrorMessage, getErrorStatus } from '../lib/format';
 import {
@@ -86,6 +89,7 @@ export default function JobDetailPage() {
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
+  const [isFreeBoardsOpen, setIsFreeBoardsOpen] = useState(false);
   const [isAssignVendorsOpen, setIsAssignVendorsOpen] = useState(false);
   // Matching results: which ones are in this job's pipeline (added now or already there) / being added.
   const [inPipeline, setInPipeline] = useState<Set<string>>(new Set());
@@ -258,6 +262,17 @@ export default function JobDetailPage() {
             {canAssignVendors && (
               <Button variant="secondary" icon={<Mail size={16} />} onClick={() => setIsAssignVendorsOpen(true)}>
                 Send to vendors
+              </Button>
+            )}
+            {canUseAgents && (
+              <Link to={`/linkedin-agent?newFor=${id}`} className={buttonClasses('secondary')}>
+                <Linkedin size={16} />
+                Source on LinkedIn
+              </Link>
+            )}
+            {canUseAgents && (
+              <Button variant="secondary" icon={<Megaphone size={16} />} onClick={() => setIsFreeBoardsOpen(true)}>
+                Post free
               </Button>
             )}
             {canEditStatus && (
@@ -531,6 +546,7 @@ export default function JobDetailPage() {
         />
       )}
 
+      {id && <FreeJobBoardsModal jobId={id} open={isFreeBoardsOpen} onClose={() => setIsFreeBoardsOpen(false)} />}
       {isPublishBoardsOpen && id && (
         <JobBoardPublishModal
           jobId={id}

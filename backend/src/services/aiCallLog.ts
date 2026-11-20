@@ -64,7 +64,8 @@ export type AiCallEntityType =
   | "job"
   | "job_application"
   | "screening_session"
-  | "interview_booking";
+  | "interview_booking"
+  | "linkedin_campaign";
 
 export interface LogAiCallParams {
   tenantId: string;

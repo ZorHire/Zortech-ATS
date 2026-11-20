@@ -21,7 +21,7 @@ function getEncryptionKey(): Buffer {
   return Buffer.from(hex.slice(0, 64), "hex");
 }
 
-function encrypt(plaintext: string): string {
+export function encrypt(plaintext: string): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
@@ -30,7 +30,7 @@ function encrypt(plaintext: string): string {
   return `${iv.toString("hex")}:${tag.toString("hex")}:${ct.toString("hex")}`;
 }
 
-function decrypt(stored: string): string {
+export function decrypt(stored: string): string {
   const key = getEncryptionKey();
   const parts = stored.split(":");
   if (parts.length !== 3) throw new Error("Malformed encrypted value");

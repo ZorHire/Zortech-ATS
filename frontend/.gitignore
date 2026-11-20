@@ -21,3 +21,6 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Built from ../extension by scripts/package-extension.mjs
+public/downloads/

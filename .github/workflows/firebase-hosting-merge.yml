@@ -23,6 +23,7 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - 'extension/**'
               - '.env.production'
             backend:
               - 'backend/**'
