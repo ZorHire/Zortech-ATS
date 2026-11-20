@@ -11,7 +11,10 @@ export type AgentId =
   | "boolean_search_builder"
   | "candidate_shortlister"
   | "screening_interviewer"
-  | "screening_evaluator";
+  | "screening_evaluator"
+  | "linkedin_search_builder"
+  | "linkedin_prospect_scorer"
+  | "submission_writer";
 
 interface AgentModelConfig {
   model: string;
@@ -67,6 +70,11 @@ const MODEL_CONFIG: Record<AgentId, AgentModelConfig> = {
   candidate_shortlister: { model: "claude-opus-5-5", capUsdMonth: 60 },
   screening_interviewer: { model: "claude-opus-5-5", capUsdMonth: 120 },
   screening_evaluator: { model: "claude-opus-5-5", capUsdMonth: 40 },
+  // LinkedIn agent (modules/linkedin-agent): search builder per campaign, batch scorer + note writer.
+  linkedin_search_builder: { model: "claude-opus-5-5", capUsdMonth: 15 },
+  linkedin_prospect_scorer: { model: "claude-opus-5-5", capUsdMonth: 60 },
+  // Client submission pack (modules/submissions).
+  submission_writer: { model: "claude-opus-5-5", capUsdMonth: 40 },
 };
 
 export const getAgentModelConfig = (agentId: AgentId): AgentModelConfig =>

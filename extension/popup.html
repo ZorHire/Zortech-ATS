@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ZorHire Assistant</title>
+<style>
+  *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body{margin:0;width:340px;color:#1f2937;font-size:13px;background:#fff}
+  header{background:#1A4277;color:#fff;padding:12px 14px;display:flex;align-items:center;gap:8px}
+  header img{width:22px;height:22px}
+  header b{font-size:15px}
+  main{padding:14px}
+  h2{font-size:13px;margin:0 0 6px;color:#1A4277}
+  p{margin:0 0 10px;color:#4b5563;line-height:1.45}
+  label{display:block;font-weight:600;margin:8px 0 4px}
+  input,select{width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:13px}
+  button{border:0;border-radius:8px;padding:9px 12px;font-weight:600;cursor:pointer;font-size:13px}
+  button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #F7911E;outline-offset:1px}
+  .primary{background:#F7911E;color:#fff;width:100%;margin-top:10px}
+  .ghost{background:#f3f4f6;color:#1f2937}
+  .row{display:flex;gap:8px;align-items:center}
+  .card{border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-bottom:10px}
+  .status{background:#f9fafb;border-radius:8px;padding:8px;color:#374151;margin-bottom:10px}
+  .pill{display:inline-block;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:600;background:#e8eef7;color:#1A4277;margin-right:4px}
+  .pill.ok{background:#d1fae5;color:#065f46}.pill.warn{background:#fef3c7;color:#92400e}
+  .switch{display:flex;justify-content:space-between;align-items:center;margin:6px 0}
+  .muted{color:#6b7280;font-size:12px}
+  .err{color:#b91c1c;min-height:16px;margin-top:6px}
+  a{color:#1A4277}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header><img src="icons/icon32.png" alt=""><b>ZorHire Assistant</b></header>
+<main>
+  <section id="connect" class="hidden">
+    <h2>Connect to ZorHire</h2>
+    <p>In ZorHire, open <b>LinkedIn agent</b> and click <b>Connect extension</b>. Paste the code here. Stay signed in to LinkedIn in this browser; ZorHire never sees your LinkedIn password.</p>
+    <label for="server">ZorHire server</label>
+    <select id="server">
+      <option value="https://zorhire.zortechs.in/v1">zorhire.zortechs.in</option>
+      <option value="http://localhost:5000/v1">Local development (localhost:5000)</option>
+    </select>
+    <label for="code">Connection code</label>
+    <input id="code" autocomplete="off" spellcheck="false" placeholder="zhli_…">
+    <button class="primary" id="go">Connect</button>
+    <div class="err" id="err" role="alert"></div>
+  </section>
+
+  <section id="main" class="hidden">
+    <div class="status" id="status" role="status" aria-live="polite">…</div>
+    <div class="card" id="acct"></div>
+    <div class="card">
+      <div class="switch"><label for="running" style="margin:0">LinkedIn agent running</label><input type="checkbox" id="running" style="width:auto"></div>
+      <div class="row" style="margin-top:6px">
+        <label for="ws" style="margin:0;font-weight:400">Working hours</label>
+        <input id="ws" type="time" style="width:auto"> – <input id="we" type="time" style="width:auto">
+      </div>
+      <p class="muted" style="margin-top:6px">Invitations go out Mon–Sat in these hours, 2–5 minutes apart, within the limits set in ZorHire. Keep Chrome open.</p>
+    </div>
+    <button class="primary" id="capture" style="margin:0 0 10px">Save this page to ZorHire</button>
+    <div class="err" id="cerr" role="alert"></div>
+    <div class="row">
+      <button class="ghost" id="run">Run now</button>
+      <button class="ghost" id="open">Open ZorHire</button>
+      <button class="ghost" id="disc" style="margin-left:auto">Disconnect</button>
+    </div>
+  </section>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>

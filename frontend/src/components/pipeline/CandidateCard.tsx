@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Briefcase, MapPin, Clock, Send, Loader2 } from "lucide-react";
+import { GripVertical, Briefcase, MapPin, Clock, Send, Loader2, FileText } from "lucide-react";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { JobApplication, PipelineStage } from "../../types";
 import { Badge, useConfirm } from "../ui";
@@ -180,6 +181,16 @@ export default function CandidateCard({
               onChange={(stage) => onStageChange(application, stage)}
               className="mt-2 w-full"
             />
+          )}
+
+          {!isOverlay && application.stage !== "disqualified" && (
+            <Link
+              to={`/submission/${application.id}`}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted transition-colors hover:text-navy-600"
+              title="Client-ready profile to print or email"
+            >
+              <FileText size={12} aria-hidden="true" /> Client profile
+            </Link>
           )}
 
           {/* Screening invite trigger — dark by default (SCREENING_CHAT_ENABLED gate) */}

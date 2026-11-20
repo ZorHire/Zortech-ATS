@@ -1,0 +1,75 @@
+{
+  "manifest_version": 3,
+  "name": "ZorHire Assistant",
+  "short_name": "ZorHire",
+  "version": "1.0.0",
+  "description": "ZorHire's LinkedIn sourcing agent and free job-board posting, running in your own signed-in browser. ZorHire never sees your passwords.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "ZorHire Assistant",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs",
+    "scripting",
+    "notifications",
+    "tabGroups",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://zorhire.zortechs.in/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.indeed.com/*",
+    "https://*.naukri.com/*",
+    "https://unstop.com/*",
+    "https://*.unstop.com/*",
+    "https://hiremee.co.in/*",
+    "https://*.hiremee.co.in/*",
+    "https://internshala.com/*",
+    "https://*.internshala.com/*",
+    "https://*.apna.co/*",
+    "https://cutshort.io/*",
+    "https://*.cutshort.io/*",
+    "https://wellfound.com/*",
+    "https://*.wellfound.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/search/results/people/*",
+        "https://www.linkedin.com/talent/*"
+      ],
+      "js": [
+        "linkedin-import.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/in/*",
+        "https://resdex.naukri.com/*",
+        "https://recruit.naukri.com/*"
+      ],
+      "js": [
+        "capture.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -11,7 +11,9 @@ import {
   FileBarChart2,
   Globe,
   LayoutGrid,
+  Linkedin,
   Mail,
+  MessageCircle,
   Network,
   Rocket,
   Search,
@@ -54,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Offers", path: "/offers", icon: TrendingUp, roles: ["super_admin", "accounts_manager", "recruiter"] },
       { label: "Campaigns", path: "/campaigns", icon: Send, roles: ["super_admin", "accounts_manager", "recruiter"] },
       { label: "AI agents", path: "/agents", icon: Bot, roles: ["super_admin", "accounts_manager", "recruiter", "vendor_manager"] },
+      { label: "LinkedIn agent", path: "/linkedin-agent", icon: Linkedin, roles: STAFF },
     ],
   },
   {
@@ -84,6 +87,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Admin", path: "/admin", icon: Settings, roles: ADMINS },
       { label: "Email settings", path: "/settings/email", icon: Mail, roles: ["super_admin", "accounts_manager", "recruiter"] },
+      { label: "WhatsApp", path: "/settings/whatsapp", icon: MessageCircle, roles: STAFF },
       { label: "Job boards", path: "/settings/job-boards", icon: Globe, roles: ADMINS },
       { label: "Subscription", path: "/subscription", icon: CreditCard, roles: ADMINS },
       { label: "Companies", path: "/companies", icon: Network, roles: ["super_admin"], platformOwnerOnly: true },

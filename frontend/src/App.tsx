@@ -51,6 +51,10 @@ const AssignedJDsPage = lazy(() => import("./pages/AssignedJDsPage"));
 const ScreeningChatPage = lazy(() => import("./pages/ScreeningChatPage"));
 const ScheduleInterviewPage = lazy(() => import("./pages/ScheduleInterviewPage"));
 const AgentsPage = lazy(() => import("./pages/AgentsPage"));
+const LinkedInAgentPage = lazy(() => import("./pages/LinkedInAgentPage"));
+const LinkedInCampaignPage = lazy(() => import("./pages/LinkedInCampaignPage"));
+const SubmissionPackPage = lazy(() => import("./pages/SubmissionPackPage"));
+const WhatsAppSettingsPage = lazy(() => import("./pages/WhatsAppSettingsPage"));
 const InterviewsPage = lazy(() => import("./pages/InterviewsPage"));
 const OffersPage = lazy(() => import("./pages/OffersPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
@@ -440,6 +444,38 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/interviews">
             <InterviewsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/whatsapp"
+        element={
+          <ProtectedRoute path="/settings/whatsapp">
+            <WhatsAppSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/submission/:applicationId"
+        element={
+          <ProtectedRoute path="/submission" noLayout>
+            <SubmissionPackPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/linkedin-agent"
+        element={
+          <ProtectedRoute path="/linkedin-agent">
+            <LinkedInAgentPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/linkedin-agent/campaigns/:id"
+        element={
+          <ProtectedRoute path="/linkedin-agent">
+            <LinkedInCampaignPage />
           </ProtectedRoute>
         }
       />

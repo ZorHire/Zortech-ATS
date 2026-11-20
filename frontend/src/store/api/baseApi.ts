@@ -121,6 +121,12 @@ export const baseApi = createApi({
     "Autopilot",
     "AgentActivity",
     "AgentInsights",
+    "LinkedInAccount",
+    "LinkedInCampaigns",
+    "LinkedInProspects",
+    "FreeJobBoards",
+    "Submission",
+    "WhatsApp",
   ],
   endpoints: () => ({}),
 });

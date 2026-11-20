@@ -19,6 +19,7 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - 'extension/**'
 
   # ── TypeScript validation — runs on every PR ─────────────────────────────────
   validate:

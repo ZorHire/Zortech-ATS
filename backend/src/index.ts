@@ -10,6 +10,9 @@ import env from "./config/env";
 import authRoutes from "./modules/auth/auth.routes";
 import demoRequestRoutes from "./modules/demo-requests/demo-requests.routes";
 import { agentsRouter, schedulingRouter } from "./modules/agents/agents.routes";
+import { extensionRouter, freeJobBoardsRouter, linkedinAgentRouter } from "./modules/linkedin-agent/linkedin.routes";
+import submissionRoutes from "./modules/submissions/submissions.routes";
+import { whatsappRouter, whatsappWebhookRouter } from "./modules/whatsapp/whatsapp.routes";
 import clientRoutes from "./modules/clients/clients.routes";
 import jobRoutes from "./modules/jobs/jobs.routes";
 import candidateRoutes from "./modules/candidates/candidates.routes";
@@ -67,6 +70,10 @@ app.use(
       // Null/undefined origin (server-to-server, curl) rejected when credentials=true
       // to prevent CSRF from non-browser callers that forge a null Origin.
       if (!origin) return callback(null, false);
+      // The ZorHire Chrome extension calls /v1/extension with its own bearer token (no
+      // cookies). Extensions with host permission aren't subject to CORS, so just don't add
+      // CORS headers for them rather than failing the request.
+      if (origin.startsWith("chrome-extension://")) return callback(null, false);
       const allowed = allowedOrigins.some((o) =>
         typeof o === "string" ? o === origin : o.test(origin),
       );
@@ -94,6 +101,15 @@ const forgotPasswordLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later." },
+});
+
+// Chrome extension: one request every few seconds per browser is normal; cap abuse of a leaked token.
+const extensionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests from the extension, slow down." },
 });
 
 // Public candidate scheduling links: token-guarded, but rate-limit guessing and spam.
@@ -139,6 +155,10 @@ const screeningLimiter = rateLimit({
   message: { message: "Too many requests. Please slow down." },
 });
 app.use("/v1/screening", screeningLimiter);
+
+// WhatsApp webhook needs the raw body to check Meta's signature, so it's mounted before express.json().
+const whatsappWebhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 600, standardHeaders: true, legacyHeaders: false });
+app.use("/v1/whatsapp/webhook", whatsappWebhookLimiter, whatsappWebhookRouter);
 
 app.use(express.json());
 app.use(morgan("dev"));
@@ -211,6 +231,11 @@ v1Router.use("/onboarding", onboardingRoutes);
 v1Router.use("/screening", screeningRoutes);
 v1Router.use("/agents", agentsRouter);
 v1Router.use("/scheduling", schedulingLimiter, schedulingRouter);
+v1Router.use("/linkedin-agent", linkedinAgentRouter);
+v1Router.use("/free-job-boards", freeJobBoardsRouter);
+v1Router.use("/submissions", submissionRoutes);
+v1Router.use("/whatsapp", whatsappRouter);
+v1Router.use("/extension", extensionLimiter, extensionRouter);
 v1Router.use("/vendor-portal", vendorPortalRoutes);
 v1Router.use("/client-portal", clientPortalRoutes);
 v1Router.use("/jd-lifecycle", jdLifecycleRoutes);
