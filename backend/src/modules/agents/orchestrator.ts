@@ -14,6 +14,7 @@ import { runShortlister } from "./shortlister";
 import { runScreeningInvite, runScreeningEvaluation } from "./screener";
 import { runScheduler } from "./schedulerAgent";
 import { isClaudeConfigured } from "../../lib/ai/claudeClient";
+import { AllowanceExceededError, tenantsWithoutRoom } from "../../services/aiAllowance";
 
 /**
  * Autopilot is a sweep, not a set of hooks: every minute we look at autopilot
@@ -33,8 +34,8 @@ const RUNNERS: Record<AgentName, Runner> = {
   scheduler: runScheduler,
 };
 
-async function queueRows(agent: AgentName, sql: string): Promise<number> {
-  const r = await pool.query(sql, [SWEEP_LIMIT]);
+async function queueRows(agent: AgentName, sql: string, skipTenants: string[] = []): Promise<number> {
+  const r = await pool.query(sql, sql.includes("$2") ? [SWEEP_LIMIT, skipTenants] : [SWEEP_LIMIT]);
   let n = 0;
   for (const row of r.rows) {
     if (await enqueueTask({ tenantId: row.tenant_id, jobId: row.job_id, applicationId: row.application_id, agent })) n++;
@@ -51,13 +52,19 @@ export async function sweep(): Promise<void> {
 
   // Shortlisting and evaluation need Claude; without a key those steps simply don't run.
   const claude = isClaudeConfigured();
+  // Companies that have used this month's AI allowance are left alone; their candidates are
+  // picked up again after a top-up or when the allowance resets on the 1st.
+  const noShortlists = await tenantsWithoutRoom("shortlists");
+  const noScreenings = await tenantsWithoutRoom("screenings");
+  const notBlocked = `NOT (ja.tenant_id = ANY($2::uuid[]))`;
 
   // 1. Score new candidates
   if (claude) await queueRows(
     "shortlister",
     `SELECT ja.tenant_id, ja.job_id, ja.id AS application_id ${base}
-      WHERE ja.stage IN ('new','sourced') AND ja.ai_shortlist IS NULL AND ${notQueued("shortlister")}
+      WHERE ja.stage IN ('new','sourced') AND ja.ai_shortlist IS NULL AND ${notQueued("shortlister")} AND ${notBlocked}
       ORDER BY ja.created_at LIMIT $1`,
+    noShortlists,
   );
   // 2. Invite shortlisted candidates to the screening interview
   await queueRows(
@@ -65,8 +72,9 @@ export async function sweep(): Promise<void> {
     `SELECT ja.tenant_id, ja.job_id, ja.id AS application_id ${base}
       WHERE ap.auto_screen AND ja.stage = 'shortlisted'
         AND NOT EXISTS (SELECT 1 FROM screening_sessions s WHERE s.application_id = ja.id)
-        AND ${notQueued("screener")}
+        AND ${notQueued("screener")} AND ${notBlocked}
       ORDER BY ja.updated_at LIMIT $1`,
+    noScreenings,
   );
   // 3. Evaluate finished screening interviews
   if (claude) await queueRows(
@@ -95,6 +103,19 @@ async function runTask(task: AgentTaskRow): Promise<void> {
     const outcome = await RUNNERS[task.agent]({ tenantId: task.tenant_id, applicationId: task.application_id, manual: task.manual });
     await finishTask(task.id, outcome);
   } catch (err) {
+    if (err instanceof AllowanceExceededError) {
+      // Not a failure: drop the task so the sweep queues it again once there is allowance.
+      await pool.query(`DELETE FROM agent_tasks WHERE id = $1`, [task.id]);
+      await recordEvent({
+        tenantId: task.tenant_id,
+        jobId: task.job_id,
+        applicationId: task.application_id,
+        agent: task.agent === "screen_evaluator" ? "screener" : task.agent,
+        action: "skipped",
+        summary: `Paused: ${err.message}`,
+      });
+      return;
+    }
     const message = err instanceof Error ? err.message : String(err);
     const willRetry = await failTask(task, message);
     if (!willRetry) {

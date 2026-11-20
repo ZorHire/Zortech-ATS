@@ -1,6 +1,7 @@
 import { z } from "zod";
 import pool from "../../db";
 import { claudeStructured } from "../../lib/ai/claudeClient";
+import { consumeAllowance } from "../../services/aiAllowance";
 import { fitNote, noteLimit, normalizeFilters, RecruiterSearchSchema } from "./linkedinSearch";
 import type { SearchFilters, RecruiterSearch } from "./linkedinSearch";
 
@@ -189,7 +190,23 @@ export interface ScoredProspect {
 
 const firstName = (full: string | null) => (full ?? "").trim().split(/\s+/)[0]?.replace(/[^\p{L}'-]/gu, "") || "there";
 
+/**
+ * Scores prospects with Claude while the company has LinkedIn-agent allowance left this
+ * month; the rest get the keyword score and template note (no AI cost).
+ */
 export async function scoreProspects(ctx: CampaignContext, prospects: ProspectForScoring[]): Promise<{ results: ScoredProspect[]; ai: boolean }> {
+  const withAi: ProspectForScoring[] = [];
+  const without: ProspectForScoring[] = [];
+  for (const p of prospects) ((await consumeAllowance(ctx.tenantId, "linkedin_prospects", p.id)).ok ? withAi : without).push(p);
+  const scored = withAi.length ? await scoreWithClaude(ctx, withAi) : { results: [], ai: false };
+  const byId = new Map(scored.results.map((r) => [r.id, r]));
+  return {
+    ai: scored.ai,
+    results: prospects.map((p) => byId.get(p.id) ?? fallbackScore(ctx, p)),
+  };
+}
+
+async function scoreWithClaude(ctx: CampaignContext, prospects: ProspectForScoring[]): Promise<{ results: ScoredProspect[]; ai: boolean }> {
   const limit = noteLimit(ctx.hasPremium);
   if (!prospects.length) return { results: [], ai: false };
   const res = await claudeStructured({

@@ -55,6 +55,7 @@ const LinkedInAgentPage = lazy(() => import("./pages/LinkedInAgentPage"));
 const LinkedInCampaignPage = lazy(() => import("./pages/LinkedInCampaignPage"));
 const SubmissionPackPage = lazy(() => import("./pages/SubmissionPackPage"));
 const WhatsAppSettingsPage = lazy(() => import("./pages/WhatsAppSettingsPage"));
+const AiUsagePage = lazy(() => import("./pages/AiUsagePage"));
 const InterviewsPage = lazy(() => import("./pages/InterviewsPage"));
 const OffersPage = lazy(() => import("./pages/OffersPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
@@ -452,6 +453,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/settings/whatsapp">
             <WhatsAppSettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings/ai-usage"
+        element={
+          <ProtectedRoute path="/settings/ai-usage">
+            <AiUsagePage />
           </ProtectedRoute>
         }
       />

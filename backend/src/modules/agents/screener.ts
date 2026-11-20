@@ -2,6 +2,7 @@ import { z } from "zod";
 import pool from "../../db";
 import env from "../../config/env";
 import { claudeStructured } from "../../lib/ai/claudeClient";
+import { consumeAllowance, requireAllowance } from "../../services/aiAllowance";
 import { generateScreeningToken, hashScreeningToken } from "../../services/screeningChat";
 import { esc, getAgentMailer, getSettings, outreachSentToday, recordEvent, enqueueTask } from "./agentStore";
 
@@ -47,6 +48,10 @@ export async function runScreeningInvite(task: {
 
   const mail = await getAgentMailer(task.tenantId, row.job_id);
   if (!mail) return skip("no company mailbox or recruiter mailbox configured in Email Settings");
+
+  // One screening interview = one action of the monthly AI allowance, counted at invite time
+  // so a candidate who has started is never cut off mid-interview.
+  await requireAllowance(task.tenantId, "screenings", row.id);
 
   const token = generateScreeningToken();
   const session = await pool.query(
@@ -129,6 +134,9 @@ export async function runScreeningEvaluation(task: { tenantId: string; applicati
     .map((m: { role: string; content: string }) => `${m.role === "candidate" ? "Candidate" : "Interviewer"}: ${m.content}`)
     .join("\n")
     .slice(0, 30000);
+
+  // Part of the screening already counted at invite time; counted here only for older sessions. Never blocks.
+  await consumeAllowance(task.tenantId, "screenings", task.applicationId, { force: true });
 
   const result = await claudeStructured({
     agentId: "screening_evaluator",

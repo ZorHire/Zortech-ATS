@@ -4,6 +4,7 @@ import { z } from "zod";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { claudeStructured } from "../../lib/ai/claudeClient";
+import { allowanceErrorBody, consumeAllowance } from "../../services/aiAllowance";
 import { extractFileText } from "../parse/parse.utils";
 import { readResumeBuffer } from "../../services/resumeStorage";
 import { getTenantTransporter, getUserTransporter } from "../email/email.controller";
@@ -176,6 +177,9 @@ export const generateSubmission = async (req: AuthRequest, res: Response) => {
     const tenantId = req.user!.tenant_id;
     const row = await load(tenantId, String(req.params.id));
     if (!row) return res.status(404).json({ message: "Application not found" });
+    // One client profile = one action of the monthly AI allowance (rewriting the same one is free).
+    const allowance = await consumeAllowance(tenantId, "client_profiles", row.application_id);
+    if (!allowance.ok) return res.status(402).json(allowanceErrorBody("client_profiles"));
     const text = (await resumeText(tenantId, row.resume_url)).slice(0, 30000);
     const f = facts(row);
     const ai = await claudeStructured({

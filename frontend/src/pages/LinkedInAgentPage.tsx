@@ -7,6 +7,7 @@ import ConnectExtensionCard from "../components/linkedin/ConnectExtensionCard";
 import CampaignFormModal from "../components/linkedin/CampaignFormModal";
 import { useGetLinkedInAccountQuery, useGetLinkedInCampaignsQuery, useGetLinkedInSummaryQuery } from "../store/api/linkedinApi";
 import type { CampaignStatus } from "../types/linkedin";
+import AiUsageBanner from "../components/ai/AiUsageBanner";
 
 export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; tone: BadgeTone }> = {
   draft: { label: "Draft", tone: "neutral" },
@@ -35,6 +36,7 @@ export default function LinkedInAgentPage() {
         actions={<Button icon={<Plus size={16} />} onClick={() => setCreating(true)}>New campaign</Button>}
       />
       <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        <AiUsageBanner meters={["linkedin_prospects"]} />
         <ConnectExtensionCard />
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

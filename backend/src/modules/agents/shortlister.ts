@@ -1,6 +1,7 @@
 import { z } from "zod";
 import pool from "../../db";
 import { claudeStructured } from "../../lib/ai/claudeClient";
+import { requireAllowance } from "../../services/aiAllowance";
 import { buildBiasStrippedCandidate } from "../../services/scoring";
 import { applyAiStageMove } from "../pipeline/pipeline.controller";
 import { getSettings, recordEvent } from "./agentStore";
@@ -76,6 +77,9 @@ ${String(candidate.summary || "").slice(0, 4000)}
 </candidate_profile>
 
 Assess this candidate for this job.`;
+
+  // Counts against the company's monthly AI allowance (re-running the same candidate is free).
+  await requireAllowance(task.tenantId, "shortlists", row.id);
 
   const result = await claudeStructured({
     agentId: "candidate_shortlister",

@@ -1,6 +1,7 @@
 import { query } from "../db";
 import redis from "../lib/redis";
 import { AgentId, getAgentModelConfig } from "./modelRouter";
+import { scaledCapUsd } from "./aiAllowance";
 
 /**
  * Bump whenever a Gemini prompt template changes, so cost/quality can be tracked
@@ -123,7 +124,9 @@ export const logAiCall = async (params: LogAiCallParams): Promise<void> => {
 };
 
 /**
- * Month-to-date spend check against the agent's cap in modelRouter.
+ * Month-to-date spend check against the agent's cap in modelRouter. For agents
+ * covered by an AI allowance (services/aiAllowance.ts) the cap grows with the
+ * company's allowance, so the allowance is what limits a large customer.
  *
  * Fails open: an agent with no cap, a Redis outage, or a DB error all allow the
  * call through. A billing safeguard must never be the reason a recruiter's
@@ -133,8 +136,9 @@ export const checkBudget = async (
   agentId: AgentId,
   tenantId: string,
 ): Promise<boolean> => {
-  const cap = getAgentModelConfig(agentId)?.capUsdMonth;
-  if (!cap) return true;
+  const baseCap = getAgentModelConfig(agentId)?.capUsdMonth;
+  if (!baseCap) return true;
+  const cap = await scaledCapUsd(tenantId, agentId, baseCap);
 
   const month = new Date().toISOString().slice(0, 7);
   const cacheKey = `budget:${tenantId}:${agentId}:${month}`;

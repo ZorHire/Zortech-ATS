@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { allowanceErrorBody, consumeAllowance } from "../../services/aiAllowance";
 import crypto from "crypto";
 import { AuthRequest } from "../../middleware/auth";
 import pool from "../../db";
@@ -47,6 +48,10 @@ export const createScreeningInvite = async (req: AuthRequest, res: Response) => 
     if (!application.email) {
       return res.status(400).json({ message: "Candidate has no email on file" });
     }
+
+    // One screening interview = one action of the monthly AI allowance.
+    const allowance = await consumeAllowance(tenantId, "screenings", application.id);
+    if (!allowance.ok) return res.status(402).json(allowanceErrorBody("screenings"));
 
     const token = generateScreeningToken();
     const tokenHash = hashScreeningToken(token);
@@ -204,6 +209,9 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
       [id],
     );
     const history: ScreeningHistoryTurn[] = historyResult.rows;
+
+    // Counted when the invite was sent; this only covers older sessions and never cuts a candidate off.
+    await consumeAllowance(session.tenant_id, "screenings", session.application_id, { force: true });
 
     const turnResult = await runScreeningTurn({
       tenantId: session.tenant_id,
