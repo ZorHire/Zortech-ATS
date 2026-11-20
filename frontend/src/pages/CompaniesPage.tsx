@@ -12,9 +12,10 @@ import {
   Calendar,
   AlertCircle,
   Trash2,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Power,
 } from "lucide-react";
 import {
   useGetTenantsQuery,
@@ -23,117 +24,58 @@ import {
   useOnboardTenantMutation,
   type Tenant,
 } from "../store/api/adminApi";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  Modal,
+  PageHeader,
+  Skeleton,
+  StatCard,
+  useConfirm,
+} from "../components/ui";
+import type { BadgeTone } from "../components/ui";
+import { useNotify } from "../hooks/useNotify";
 
 // ─── Badge helpers ────────────────────────────────────────────────────────────
 
 function SubBadge({ status, planType }: { status: string | null; planType: string | null }) {
   if (!status || status === "cancelled" || status === "expired") {
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-100">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-        No Plan
-      </span>
-    );
+    return <Badge tone="warning">No plan</Badge>;
   }
   const label = planType
-    ? planType.charAt(0).toUpperCase() + planType.slice(1) + " Plan"
-    : "Active Plan";
-  const colorMap: Record<string, string> = {
-    growth: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    starter: "bg-blue-50 text-blue-700 border-blue-100",
-    enterprise: "bg-violet-50 text-violet-700 border-violet-100",
+    ? planType.charAt(0).toUpperCase() + planType.slice(1) + " plan"
+    : "Active plan";
+  const toneMap: Record<string, BadgeTone> = {
+    growth: "success",
+    starter: "navy",
+    enterprise: "brand",
   };
-  const cls = colorMap[planType?.toLowerCase() ?? ""] ?? "bg-gray-100 text-gray-600 border-gray-200";
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${cls}`}>
-      <Crown size={10} />
+    <Badge tone={toneMap[planType?.toLowerCase() ?? ""] ?? "neutral"} icon={<Crown size={10} aria-hidden="true" />}>
       {label}
-    </span>
+    </Badge>
   );
 }
 
 function StatusBadge({ active }: { active: boolean }) {
   return active ? (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
-      <CheckCircle2 size={13} className="text-emerald-500" /> Active
-    </span>
+    <Badge tone="success" icon={<CheckCircle2 size={12} aria-hidden="true" />}>Active</Badge>
   ) : (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600">
-      <XCircle size={13} className="text-red-400" /> Inactive
-    </span>
+    <Badge tone="danger" icon={<XCircle size={12} aria-hidden="true" />}>Inactive</Badge>
   );
 }
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {
   const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
-  const color = pct > 80 ? "bg-red-400" : pct > 60 ? "bg-amber-400" : "bg-blue-500";
+  const color = pct > 80 ? "bg-danger-600" : pct > 60 ? "bg-brand-500" : "bg-navy-500";
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-gray-700">Users {used} / {limit || 20}</span>
+      <p className="mb-1 whitespace-nowrap text-xs text-ink-soft">Users {used} / {limit || 20}</p>
+      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-surface-sunken">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
-// ─── Row action menu ──────────────────────────────────────────────────────────
-
-function RowMenu({
-  tenant,
-  loading,
-  onToggle,
-  onDelete,
-}: {
-  tenant: Tenant;
-  loading: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-      >
-        <MoreVertical size={15} />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1 overflow-hidden">
-            <button
-              onClick={() => { setOpen(false); onToggle(); }}
-              disabled={loading}
-              className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors hover:bg-gray-50 ${tenant.is_active ? "text-red-600" : "text-emerald-700"}`}
-            >
-              {loading ? "…" : tenant.is_active ? "Deactivate Company" : "Activate Company"}
-            </button>
-            <hr className="border-gray-100 my-0.5" />
-            <button
-              onClick={() => { setOpen(false); onDelete(); }}
-              disabled={loading}
-              className="w-full text-left px-4 py-2.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
-            >
-              <Trash2 size={12} /> Delete Company
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Toast ────────────────────────────────────────────────────────────────────
-
-function Toast({ msg, ok }: { msg: string; ok: boolean }) {
-  return (
-    <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3 rounded-2xl shadow-xl text-sm font-semibold text-white ${ok ? "bg-emerald-600" : "bg-red-600"}`}>
-      {ok ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-      {msg}
     </div>
   );
 }
@@ -142,11 +84,51 @@ function Toast({ msg, ok }: { msg: string; ok: boolean }) {
 
 const PAGE_SIZE = 10;
 
+const EMPTY_FORM = {
+  company_name: "", admin_full_name: "", admin_email: "", admin_password: "",
+  company_email: "", company_phone: "", company_address: "", gst_number: "", country: "India",
+};
+
+type OnboardForm = typeof EMPTY_FORM;
+
+function FormField({
+  label, field, form, setForm, required, type = "text", placeholder,
+}: {
+  label: string;
+  field: keyof OnboardForm;
+  form: OnboardForm;
+  setForm: React.Dispatch<React.SetStateAction<OnboardForm>>;
+  required?: boolean;
+  type?: string;
+  placeholder?: string;
+}) {
+  const id = `onboard-${field}`;
+  return (
+    <div>
+      <label htmlFor={id} className="zh-label">
+        {label}
+        {required && <span className="ml-0.5 text-danger-600">*</span>}
+      </label>
+      <input
+        id={id}
+        required={required}
+        type={type}
+        value={form[field]}
+        onChange={(e) => setForm((f) => ({ ...f, [field]: e.target.value }))}
+        className="zh-input"
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
 export default function CompaniesPage() {
-  const { data: allTenants = [], isLoading: loading } = useGetTenantsQuery();
+  const { data: allTenants = [], isLoading: loading, isError, error, isFetching, refetch } = useGetTenantsQuery();
   const [bulkDeleteTenants] = useBulkDeleteTenantsMutation();
   const [toggleTenantStatus] = useToggleTenantStatusMutation();
   const [onboardTenant] = useOnboardTenantMutation();
+  const notify = useNotify();
+  const confirm = useConfirm();
 
   const tenants = allTenants.filter((t) => !t.is_platform_owner);
 
@@ -159,19 +141,10 @@ export default function CompaniesPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
-  const [form, setForm] = useState({
-    company_name: "", admin_full_name: "", admin_email: "", admin_password: "",
-    company_email: "", company_phone: "", company_address: "", gst_number: "", country: "India",
-  });
+  const [form, setForm] = useState<OnboardForm>(EMPTY_FORM);
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
-
-  const showToast = (msg: string, ok: boolean) => {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 4000);
-  };
 
   // ── Filtering + sorting ──
   const filtered = tenants
@@ -212,48 +185,70 @@ export default function CompaniesPage() {
   const subscribedCount = tenants.filter((t) => t.subscription_status === "active").length;
 
   // ── Selection ──
-  const toggleSelect = (id: string) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelect = (id: string) => setSelected((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleSelectAll = () => setSelected((p) => p.size === paginated.length ? new Set() : new Set(paginated.map((t) => t.id)));
 
   const handleBulkDelete = async () => {
     const ids = Array.from(selected);
-    if (!window.confirm(`Permanently delete ${ids.length} compan${ids.length === 1 ? "y" : "ies"}?\n\nThis cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Permanently delete ${ids.length} compan${ids.length === 1 ? "y" : "ies"}?`,
+      message: "This cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     setDeleteLoading(true);
     try {
       await bulkDeleteTenants(ids).unwrap();
       setSelected(new Set());
-      showToast(`${ids.length} compan${ids.length === 1 ? "y" : "ies"} deleted`, true);
+      notify.success(`${ids.length} compan${ids.length === 1 ? "y" : "ies"} deleted`);
     } catch (err: any) {
-      showToast(err?.data?.message || "Failed to delete", false);
+      notify.error(err?.data?.message || "Failed to delete");
     } finally {
       setDeleteLoading(false);
     }
   };
 
   const handleSingleDelete = async (t: Tenant) => {
-    if (!window.confirm(`Permanently delete "${t.name}"?\n\nThis removes ALL their data and cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Permanently delete "${t.name}"?`,
+      message: "This removes ALL their data and cannot be undone.",
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     setActionLoading(t.id);
     try {
       await bulkDeleteTenants([t.id]).unwrap();
-      showToast(`"${t.name}" deleted`, true);
+      notify.success(`"${t.name}" deleted`);
     } catch (err: any) {
-      showToast(err?.data?.message || "Failed to delete", false);
+      notify.error(err?.data?.message || "Failed to delete");
     } finally {
       setActionLoading(null);
     }
   };
 
   const toggleStatus = async (t: Tenant) => {
-    if (!window.confirm(`${t.is_active ? "Deactivate" : "Activate"} "${t.name}"?`)) return;
+    const ok = await confirm({
+      title: `${t.is_active ? "Deactivate" : "Activate"} "${t.name}"?`,
+      confirmText: t.is_active ? "Deactivate" : "Activate",
+      danger: t.is_active,
+    });
+    if (!ok) return;
     setActionLoading(t.id);
     try {
       await toggleTenantStatus({ id: t.id, is_active: !t.is_active }).unwrap();
-      showToast(`${t.name} ${!t.is_active ? "activated" : "deactivated"}`, true);
+      notify.success(`${t.name} ${!t.is_active ? "activated" : "deactivated"}`);
     } catch (err: any) {
-      showToast(err?.data?.message || "Failed to update status", false);
+      notify.error(err?.data?.message || "Failed to update status");
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setFormError("");
   };
 
   const handleOnboard = async (e: React.FormEvent) => {
@@ -263,8 +258,8 @@ export default function CompaniesPage() {
     try {
       await onboardTenant(form).unwrap();
       setShowModal(false);
-      setForm({ company_name: "", admin_full_name: "", admin_email: "", admin_password: "", company_email: "", company_phone: "", company_address: "", gst_number: "", country: "India" });
-      showToast(`${form.company_name} onboarded — welcome email sent`, true);
+      setForm(EMPTY_FORM);
+      notify.success(`${form.company_name} onboarded — welcome email sent`);
     } catch (err: any) {
       setFormError(err?.data?.message || "Failed to onboard company");
     } finally {
@@ -281,395 +276,356 @@ export default function CompaniesPage() {
     return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   };
 
+  const selectCls = "zh-input appearance-none pr-8 sm:w-auto";
+  const HEADERS = ["Company", "Contact", "Subscription", "Status", "Onboarded", "Usage", "Actions"];
+
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
-        <div>
-          <h1 className="text-xl font-black text-gray-900">Company Management</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Onboard and manage all client companies on ZorHire</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {selected.size > 0 && (
-            <button
-              onClick={handleBulkDelete}
-              disabled={deleteLoading}
-              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-700 transition-all disabled:opacity-60"
-            >
-              {deleteLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Trash2 size={15} />}
-              Delete {selected.size}
-            </button>
-          )}
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all"
-          >
-            <Plus size={16} /> Onboard Company
-          </button>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Company management"
+        subtitle="Onboard and manage all client companies on ZorHire"
+        actions={
+          <>
+            {selected.size > 0 && (
+              <Button variant="danger" icon={<Trash2 size={15} />} loading={deleteLoading} onClick={handleBulkDelete}>
+                Delete {selected.size}
+              </Button>
+            )}
+            <Button icon={<Plus size={16} />} onClick={() => setShowModal(true)}>
+              Onboard company
+            </Button>
+          </>
+        }
+      />
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         {/* ── Stats Cards ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          {[
-            { label: "Total Companies", value: tenants.length, icon: Building2, color: "text-blue-600", bg: "bg-blue-50", sub: "All onboarded companies" },
-            { label: "Active", value: activeCount, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50", sub: "Currently active companies" },
-            { label: "Inactive", value: inactiveCount, icon: XCircle, color: "text-red-500", bg: "bg-red-50", sub: "Companies not active" },
-            { label: "Subscribed", value: subscribedCount, icon: Crown, color: "text-violet-600", bg: "bg-violet-50", sub: "Companies with active plans" },
-          ].map((s) => (
-            <div key={s.label} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-9 h-9 ${s.bg} rounded-xl flex items-center justify-center`}>
-                  <s.icon size={17} className={s.color} />
-                </div>
-              </div>
-              <p className="text-2xl font-black text-gray-900">{loading ? "—" : s.value}</p>
-              <p className="text-sm font-medium text-gray-700 mt-0.5">{s.label}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{s.sub}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <StatCard label="Total companies" value={tenants.length} hint="All onboarded companies" icon={<Building2 size={18} />} loading={loading} />
+          <StatCard label="Active" value={activeCount} hint="Currently active" icon={<CheckCircle2 size={18} />} tone="success" loading={loading} />
+          <StatCard label="Inactive" value={inactiveCount} hint="Not active" icon={<XCircle size={18} />} tone="danger" loading={loading} />
+          <StatCard label="Subscribed" value={subscribedCount} hint="With an active plan" icon={<Crown size={18} />} tone="brand" loading={loading} />
         </div>
 
         {/* ── Search + Filters ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex-1 min-w-[200px] relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by name, slug, or email…"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              />
-            </div>
+        <div className="zh-card flex flex-col gap-3 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:p-4">
+          <div className="relative min-w-0 sm:min-w-[220px] sm:flex-1">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input
+              type="search"
+              aria-label="Search companies"
+              placeholder="Search by name, slug, or email…"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+              className="zh-input pl-9"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
             {[
-              { value: statusFilter, set: setStatusFilter, options: ["All Status", "Active", "Inactive"] },
-              { value: subFilter, set: setSubFilter, options: ["All Subscription", "With Plan", "No Plan"] },
-            ].map((f, i) => (
-              <div key={i} className="relative">
+              { label: "Filter by status", value: statusFilter, set: setStatusFilter, options: ["All Status", "Active", "Inactive"] },
+              { label: "Filter by subscription", value: subFilter, set: setSubFilter, options: ["All Subscription", "With Plan", "No Plan"] },
+            ].map((f) => (
+              <div key={f.label} className="relative">
                 <select
+                  aria-label={f.label}
                   value={f.value}
                   onChange={(e) => { f.set(e.target.value); setCurrentPage(1); }}
-                  className="appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className={selectCls}
                 >
                   {f.options.map((o) => <option key={o}>{o}</option>)}
                 </select>
-                <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+                <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
               </div>
             ))}
-            <div className="relative ml-auto">
+            <div className="relative col-span-2 sm:col-span-1">
               <select
+                aria-label="Sort companies"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className={selectCls}
               >
                 {["Onboarded: Newest", "Onboarded: Oldest", "Name A-Z", "Name Z-A"].map((o) => <option key={o}>{o}</option>)}
               </select>
-              <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="12" height="12" viewBox="0 0 12 12"><path d="M2 4l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
+              <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
             </div>
           </div>
         </div>
 
         {/* ── Table ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-gray-50/60 border-b border-gray-100">
-                  <th className="px-4 py-3.5 w-10">
-                    <input
-                      type="checkbox"
-                      checked={paginated.length > 0 && selected.size === paginated.length}
-                      ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < paginated.length; }}
-                      onChange={toggleSelectAll}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-                    />
-                  </th>
-                  {["COMPANY", "CONTACT", "SUBSCRIPTION", "STATUS", "ONBOARDED", "USAGE", "ACTIONS"].map((h) => (
-                    <th key={h} className="px-4 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td className="px-4 py-4 w-10"><div className="w-4 h-4 bg-gray-200 rounded" /></td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-gray-200 rounded-xl" />
-                          <div>
-                            <div className="h-3 bg-gray-200 rounded w-28 mb-1.5" />
-                            <div className="h-2.5 bg-gray-200 rounded w-16" />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-24" /></td>
-                      <td className="px-4 py-4"><div className="h-5 bg-gray-200 rounded w-16" /></td>
-                      <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-14" /></td>
-                      <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-20" /></td>
-                      <td className="px-4 py-4"><div className="h-3 bg-gray-200 rounded w-16" /></td>
-                      <td className="px-4 py-4"><div className="h-6 bg-gray-200 rounded w-8" /></td>
-                    </tr>
-                  ))
-                ) : paginated.length === 0 ? (
+        {isError && !allTenants.length ? (
+          <div className="zh-card">
+            <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
+          </div>
+        ) : (
+          <div className="zh-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+                <caption className="sr-only">Companies</caption>
+                <thead className="bg-surface">
                   <tr>
-                    <td colSpan={8} className="px-6 py-14 text-center">
-                      <div className="flex flex-col items-center gap-3">
-                        <Building2 size={32} className="text-gray-200" />
-                        <p className="text-sm text-gray-400 font-medium">
-                          {tenants.length === 0 ? "No companies onboarded yet" : "No results match your filters"}
-                        </p>
-                      </div>
-                    </td>
+                    <th scope="col" className="w-10 border-b border-line px-4 py-2.5">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all companies on this page"
+                        checked={paginated.length > 0 && selected.size === paginated.length}
+                        ref={(el) => { if (el) el.indeterminate = selected.size > 0 && selected.size < paginated.length; }}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 cursor-pointer rounded accent-navy-600"
+                      />
+                    </th>
+                    {HEADERS.map((h) => (
+                      <th key={h} scope="col" className="whitespace-nowrap border-b border-line px-4 py-2.5 text-xs font-medium text-muted">
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ) : (
-                  paginated.map((t) => (
-                    <tr
-                      key={t.id}
-                      className={`transition-colors group ${selected.has(t.id) ? "bg-blue-50/40" : "hover:bg-gray-50/40"}`}
-                    >
-                      <td className="px-4 py-4 w-10">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(t.id)}
-                          onChange={() => toggleSelect(t.id)}
-                          className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                </thead>
+                <tbody>
+                  {loading ? (
+                    [...Array(5)].map((_, i) => (
+                      <tr key={i} className="border-b border-line last:border-0">
+                        <td className="w-10 px-4 py-4"><Skeleton className="h-4 w-4" /></td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="h-9 w-9 rounded-lg" />
+                            <div className="space-y-1.5">
+                              <Skeleton className="h-3 w-28" />
+                              <Skeleton className="h-2.5 w-16" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4"><Skeleton className="h-3 w-24" /></td>
+                        <td className="px-4 py-4"><Skeleton className="h-5 w-16" /></td>
+                        <td className="px-4 py-4"><Skeleton className="h-3 w-14" /></td>
+                        <td className="px-4 py-4"><Skeleton className="h-3 w-20" /></td>
+                        <td className="px-4 py-4"><Skeleton className="h-3 w-16" /></td>
+                        <td className="px-4 py-4"><Skeleton className="h-6 w-16" /></td>
+                      </tr>
+                    ))
+                  ) : paginated.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>
+                        <EmptyState
+                          compact
+                          icon={<Building2 size={22} aria-hidden="true" />}
+                          title={tenants.length === 0 ? "No companies onboarded yet" : "No results match your filters"}
+                          description={tenants.length === 0 ? "Onboard a company to give its team access to ZorHire." : "Try a different search or clear the filters."}
                         />
                       </td>
+                    </tr>
+                  ) : (
+                    paginated.map((t) => (
+                      <tr
+                        key={t.id}
+                        className={`border-b border-line transition-colors last:border-0 ${selected.has(t.id) ? "bg-navy-50/60" : "hover:bg-surface"}`}
+                      >
+                        <td className="w-10 px-4 py-4 align-top">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${t.name}`}
+                            checked={selected.has(t.id)}
+                            onChange={() => toggleSelect(t.id)}
+                            className="h-4 w-4 cursor-pointer rounded accent-navy-600"
+                          />
+                        </td>
 
-                      {/* Company */}
-                      <td className="px-4 py-4 min-w-[180px]">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                            {t.name.charAt(0).toUpperCase()}
+                        {/* Company */}
+                        <td className="min-w-[200px] px-4 py-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              aria-hidden="true"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-navy-600 text-sm font-semibold text-white"
+                            >
+                              {t.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-ink">{t.name}</p>
+                              <p className="flex items-center gap-1 text-xs text-muted">
+                                <Globe size={11} aria-hidden="true" />{t.slug}
+                              </p>
+                              {t.industry && <Badge className="mt-1">{t.industry}</Badge>}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
-                            <p className="text-xs text-gray-400 flex items-center gap-1">
-                              <Globe size={9} />{t.slug}
-                            </p>
-                            {t.industry && (
-                              <span className="mt-0.5 inline-block text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                                {t.industry}
-                              </span>
+                        </td>
+
+                        {/* Contact */}
+                        <td className="min-w-[180px] px-4 py-4">
+                          <div className="space-y-0.5">
+                            {t.company_email && (
+                              <p className="flex items-center gap-1 text-xs text-ink-soft">
+                                <Mail size={11} className="shrink-0 text-muted" aria-hidden="true" />
+                                <span className="max-w-[160px] truncate">{t.company_email}</span>
+                              </p>
                             )}
+                            {t.company_phone && (
+                              <p className="flex items-center gap-1 text-xs text-ink-soft">
+                                <Phone size={11} className="shrink-0 text-muted" aria-hidden="true" />{t.company_phone}
+                              </p>
+                            )}
+                            {t.country && <p className="text-xs text-muted">{t.country}</p>}
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Contact */}
-                      <td className="px-4 py-4 min-w-[180px]">
-                        <div className="space-y-0.5">
-                          {t.company_email && (
-                            <p className="text-xs text-gray-500 flex items-center gap-1">
-                              <Mail size={10} className="text-gray-400 flex-shrink-0" />
-                              <span className="truncate max-w-[140px]">{t.company_email}</span>
-                            </p>
+                        {/* Subscription */}
+                        <td className="min-w-[140px] px-4 py-4">
+                          <SubBadge status={t.subscription_status} planType={t.plan_type} />
+                          {t.subscription_end_date && t.subscription_status === "active" && (
+                            <p className="mt-1 text-xs text-muted">Renews on {fmtDate(t.subscription_end_date)}</p>
                           )}
-                          {t.company_phone && (
-                            <p className="text-xs text-gray-500 flex items-center gap-1">
-                              <Phone size={10} className="text-gray-400 flex-shrink-0" />{t.company_phone}
-                            </p>
-                          )}
-                          {t.country && <p className="text-[11px] text-gray-400">{t.country}</p>}
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Subscription */}
-                      <td className="px-4 py-4 min-w-[140px]">
-                        <SubBadge status={t.subscription_status} planType={t.plan_type} />
-                        {t.subscription_end_date && t.subscription_status === "active" && (
-                          <p className="text-[10px] text-gray-400 mt-1">
-                            Renews on {fmtDate(t.subscription_end_date)}
-                          </p>
-                        )}
-                      </td>
+                        {/* Status */}
+                        <td className="px-4 py-4">
+                          <StatusBadge active={t.is_active} />
+                        </td>
 
-                      {/* Status */}
-                      <td className="px-4 py-4">
-                        <StatusBadge active={t.is_active} />
-                      </td>
-
-                      {/* Onboarded */}
-                      <td className="px-4 py-4 min-w-[150px]">
-                        <div>
-                          <p className="text-xs text-gray-700 font-medium flex items-center gap-1">
-                            <Calendar size={10} className="text-gray-400" />
+                        {/* Onboarded */}
+                        <td className="min-w-[160px] px-4 py-4">
+                          <p className="flex items-center gap-1 text-xs text-ink">
+                            <Calendar size={11} className="text-muted" aria-hidden="true" />
                             {fmtDateTime(t.onboarded_at)}
                           </p>
-                          {t.onboarded_by && (
-                            <p className="text-[11px] text-gray-400 mt-0.5">by {t.onboarded_by}</p>
-                          )}
-                        </div>
-                      </td>
+                          {t.onboarded_by && <p className="mt-0.5 text-xs text-muted">by {t.onboarded_by}</p>}
+                        </td>
 
-                      {/* Usage */}
-                      <td className="px-4 py-4 min-w-[100px]">
-                        <UsageBar
-                          used={t.user_count ?? 0}
-                          limit={t.user_limit ?? 20}
-                        />
-                      </td>
+                        {/* Usage */}
+                        <td className="min-w-[110px] px-4 py-4">
+                          <UsageBar used={t.user_count ?? 0} limit={t.user_limit ?? 20} />
+                        </td>
 
-                      {/* Actions */}
-                      <td className="px-4 py-4">
-                        <RowMenu
-                          tenant={t}
-                          loading={actionLoading === t.id}
-                          onToggle={() => toggleStatus(t)}
-                          onDelete={() => handleSingleDelete(t)}
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {filtered.length > 0 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t border-gray-50">
-              <p className="text-xs text-gray-500">
-                Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, filtered.length)} to{" "}
-                {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} companies
-              </p>
-              <div className="flex items-center gap-1.5">
-                <button
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage((p) => p - 1)}
-                  className="p-1.5 border border-gray-200 rounded-lg text-gray-500 disabled:opacity-40 hover:bg-gray-50"
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setCurrentPage(p)}
-                    className={`w-7 h-7 text-xs font-medium rounded-lg transition-colors ${p === currentPage ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                {totalPages > 5 && <span className="text-xs text-gray-400">…{totalPages}</span>}
-                <button
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage((p) => p + 1)}
-                  className="p-1.5 border border-gray-200 rounded-lg text-gray-500 disabled:opacity-40 hover:bg-gray-50"
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
+                        {/* Actions */}
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={<Power size={13} />}
+                              loading={actionLoading === t.id}
+                              onClick={() => toggleStatus(t)}
+                              className={t.is_active ? "text-danger-600 hover:text-danger-700" : "text-success-700"}
+                            >
+                              {t.is_active ? "Deactivate" : "Activate"}
+                            </Button>
+                            <button
+                              type="button"
+                              onClick={() => handleSingleDelete(t)}
+                              disabled={actionLoading === t.id}
+                              aria-label={`Delete ${t.name}`}
+                              title="Delete company"
+                              className="rounded-lg p-2 text-muted transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:opacity-40"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-          )}
-        </div>
+
+            {/* Pagination */}
+            {filtered.length > 0 && (
+              <div className="flex flex-col gap-3 border-t border-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted">
+                  Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, filtered.length)} to{" "}
+                  {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} companies
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label="Previous page"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => p - 1)}
+                    className="rounded-lg border border-line p-1.5 text-muted hover:bg-surface disabled:opacity-40"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      aria-current={p === currentPage ? "page" : undefined}
+                      onClick={() => setCurrentPage(p)}
+                      className={`h-7 w-7 rounded-lg text-xs font-medium transition-colors ${p === currentPage ? "bg-navy-600 text-white" : "text-muted hover:bg-surface-sunken"}`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                  {totalPages > 5 && <span className="text-xs text-muted">…{totalPages}</span>}
+                  <button
+                    type="button"
+                    aria-label="Next page"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => p + 1)}
+                    className="rounded-lg border border-line p-1.5 text-muted hover:bg-surface disabled:opacity-40"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {toast && <Toast msg={toast.msg} ok={toast.ok} />}
-
       {/* ── Onboard Modal ── */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-blue-50/40 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
-                  <Building2 size={18} />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">Onboard New Company</h2>
-                  <p className="text-xs text-gray-500">A welcome email will be sent to the admin</p>
-                </div>
-              </div>
-              <button onClick={() => { setShowModal(false); setFormError(""); }} className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-600">
-                <XCircle size={18} />
-              </button>
+      <Modal
+        open={showModal}
+        onClose={closeModal}
+        title="Onboard new company"
+        description="A welcome email will be sent to the admin"
+        preventClose={formLoading}
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModal} disabled={formLoading}>
+              Cancel
+            </Button>
+            <Button type="submit" form="onboard-company-form" icon={<Building2 size={15} />} loading={formLoading}>
+              Onboard company
+            </Button>
+          </>
+        }
+      >
+        <form id="onboard-company-form" onSubmit={handleOnboard} className="space-y-4">
+          {formError && (
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-danger-600/20 bg-danger-50 p-3 text-sm text-danger-700">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
+              {formError}
             </div>
+          )}
 
-            <form onSubmit={handleOnboard} className="p-5 space-y-4 overflow-y-auto">
-              {formError && (
-                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex gap-2 items-start">
-                  <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />{formError}
-                </div>
-              )}
+          <h3 className="text-sm font-semibold text-ink">Company details</h3>
 
-              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Company Details</p>
+          <FormField label="Company name" field="company_name" form={form} setForm={setForm} required placeholder="Acme Staffing Pvt Ltd" />
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Company Name *</label>
-                <input required value={form.company_name} onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Acme Staffing Pvt Ltd" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Company Email</label>
-                  <input type="email" value={form.company_email} onChange={(e) => setForm((f) => ({ ...f, company_email: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="hr@acme.com" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Phone</label>
-                  <input value={form.company_phone} onChange={(e) => setForm((f) => ({ ...f, company_phone: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="+91 98765 43210" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Country</label>
-                  <input value={form.country} onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="India" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">GST Number</label>
-                  <input value={form.gst_number} onChange={(e) => setForm((f) => ({ ...f, gst_number: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="29ABCDE1234F1Z5" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Address</label>
-                <input value={form.company_address} onChange={(e) => setForm((f) => ({ ...f, company_address: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="123 MG Road, Bangalore" />
-              </div>
-
-              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider pt-1">Admin Account</p>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Admin Full Name *</label>
-                <input required value={form.admin_full_name} onChange={(e) => setForm((f) => ({ ...f, admin_full_name: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Priya Sharma" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Admin Email *</label>
-                <input required type="email" value={form.admin_email} onChange={(e) => setForm((f) => ({ ...f, admin_email: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="priya@acme.com" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Temporary Password *</label>
-                <input required type="text" value={form.admin_password} onChange={(e) => setForm((f) => ({ ...f, admin_password: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Admin will be asked to change this on first login" />
-              </div>
-
-              <div className="pt-3 flex gap-3">
-                <button type="button" onClick={() => { setShowModal(false); setFormError(""); }}
-                  className="flex-1 py-3 bg-gray-50 text-gray-700 font-semibold text-sm rounded-xl hover:bg-gray-100">Cancel</button>
-                <button type="submit" disabled={formLoading}
-                  className="flex-1 py-3 bg-blue-600 text-white font-semibold text-sm rounded-xl hover:bg-blue-700 flex items-center justify-center gap-2 disabled:opacity-60">
-                  {formLoading
-                    ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    : <><Building2 size={15} /> Onboard Company</>}
-                </button>
-              </div>
-            </form>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Company email" field="company_email" type="email" form={form} setForm={setForm} placeholder="hr@acme.com" />
+            <FormField label="Phone" field="company_phone" form={form} setForm={setForm} placeholder="+91 98765 43210" />
           </div>
-        </div>
-      )}
-    </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Country" field="country" form={form} setForm={setForm} placeholder="India" />
+            <FormField label="GST number" field="gst_number" form={form} setForm={setForm} placeholder="29ABCDE1234F1Z5" />
+          </div>
+
+          <FormField label="Address" field="company_address" form={form} setForm={setForm} placeholder="123 MG Road, Bangalore" />
+
+          <h3 className="border-t border-line pt-4 text-sm font-semibold text-ink">Admin account</h3>
+
+          <FormField label="Admin full name" field="admin_full_name" form={form} setForm={setForm} required placeholder="Priya Sharma" />
+          <FormField label="Admin email" field="admin_email" type="email" form={form} setForm={setForm} required placeholder="priya@acme.com" />
+          <FormField
+            label="Temporary password"
+            field="admin_password"
+            form={form}
+            setForm={setForm}
+            required
+            placeholder="Admin will be asked to change this on first login"
+          />
+        </form>
+      </Modal>
+    </>
   );
 }

@@ -5,6 +5,8 @@ import {
   useMarkNotificationReadMutation,
   useMarkAllNotificationsReadMutation,
 } from "../../store/api/notificationsApi";
+import { useAppSelector } from "../../hooks/useAppSelector";
+import { selectServerUnreachable } from "../../store/slices/connectionSlice";
 import type { NotificationItem } from "../../store/api/notificationsApi";
 
 const TYPE_STYLES: Record<
@@ -14,22 +16,22 @@ const TYPE_STYLES: Record<
   info: {
     icon: <Info size={13} />,
     bar: "bg-blue-500",
-    iconColor: "text-blue-500",
+    iconColor: "text-navy-500",
   },
   success: {
     icon: <CheckCircle2 size={13} />,
     bar: "bg-emerald-500",
-    iconColor: "text-emerald-500",
+    iconColor: "text-success-600",
   },
   warning: {
     icon: <AlertTriangle size={13} />,
     bar: "bg-amber-500",
-    iconColor: "text-amber-500",
+    iconColor: "text-warning-600",
   },
   error: {
     icon: <XCircle size={13} />,
     bar: "bg-red-500",
-    iconColor: "text-red-500",
+    iconColor: "text-danger-600",
   },
 };
 
@@ -47,9 +49,11 @@ export default function NotificationBell() {
   const [open, setOpen] = React.useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Don't keep polling a server that is down; resume once it's reachable.
+  const serverDown = useAppSelector(selectServerUnreachable);
   const { data: notifications = [], isLoading } = useGetNotificationsQuery(
     undefined,
-    { pollingInterval: 30_000 },
+    { pollingInterval: serverDown ? 0 : 30_000 },
   );
   const [markRead] = useMarkNotificationReadMutation();
   const [markAllRead] = useMarkAllNotificationsReadMutation();
@@ -63,8 +67,13 @@ export default function NotificationBell() {
         setOpen(false);
       }
     };
+    const handleKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [open]);
 
   const handleMarkRead = (id: string) => {
@@ -78,81 +87,85 @@ export default function NotificationBell() {
   return (
     <div className="relative" ref={panelRef}>
       <button
+        type="button"
         onClick={() => setOpen((v) => !v)}
-        className="relative p-2 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-        title="Notifications"
+        className="relative rounded-lg p-2 text-ink-soft transition-colors hover:bg-surface-sunken hover:text-ink"
+        aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+        aria-expanded={open}
+        aria-haspopup="true"
       >
-        <Bell size={18} />
+        <Bell size={18} aria-hidden="true" />
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center leading-none">
+          <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold leading-none text-ink">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-line bg-white shadow-pop">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50">
+          <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <div className="flex items-center gap-2">
-              <Bell size={14} className="text-gray-500" />
-              <span className="text-sm font-semibold text-gray-900">Notifications</span>
+              <span className="text-sm font-semibold text-ink">Notifications</span>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full">
+                <span className="rounded-full bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-800">
                   {unreadCount} new
                 </span>
               )}
             </div>
             {unreadCount > 0 && (
               <button
+                type="button"
                 onClick={handleMarkAllRead}
-                className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium"
+                className="flex items-center gap-1 text-xs font-medium text-navy-600 hover:text-navy-800"
               >
-                <CheckCheck size={11} />
+                <CheckCheck size={13} aria-hidden="true" />
                 Mark all read
               </button>
             )}
           </div>
 
           {/* List */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+          <div className="max-h-96 divide-y divide-line overflow-y-auto">
             {isLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 size={18} className="animate-spin text-gray-400" />
+                <Loader2 size={18} className="animate-spin text-muted" />
               </div>
             ) : notifications.length === 0 ? (
               <div className="py-10 text-center">
-                <Bell size={24} className="mx-auto text-gray-200 mb-2" />
-                <p className="text-xs text-gray-400">No notifications yet</p>
+                <Bell size={24} className="mx-auto mb-2 text-line-strong" aria-hidden="true" />
+                <p className="text-sm text-muted">You're all caught up</p>
               </div>
             ) : (
               notifications.map((n) => {
                 const style = TYPE_STYLES[n.type] ?? TYPE_STYLES.info;
                 const isUnread = !n.read_at;
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={n.id}
                     onClick={() => isUnread && handleMarkRead(n.id)}
-                    className={`flex items-start gap-3 px-4 py-3 transition-colors cursor-pointer ${
-                      isUnread ? "bg-blue-50/40 hover:bg-blue-50/70" : "hover:bg-gray-50"
+                    className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors ${
+                      isUnread ? "bg-navy-50/60 hover:bg-navy-50" : "hover:bg-surface"
                     }`}
                   >
                     <div className={`mt-0.5 flex-shrink-0 ${style.iconColor}`}>
                       {style.icon}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs leading-snug ${isUnread ? "font-semibold text-gray-900" : "font-medium text-gray-600"}`}>
+                      <p className={`text-sm leading-snug ${isUnread ? "font-semibold text-ink" : "text-ink-soft"}`}>
                         {n.title}
                       </p>
                       {n.body && (
-                        <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
+                        <p className="mt-0.5 line-clamp-2 text-xs text-muted">{n.body}</p>
                       )}
-                      <p className="text-[10px] text-gray-300 mt-1">{timeAgo(n.created_at)}</p>
+                      <p className="mt-1 text-xs text-muted/80">{timeAgo(n.created_at)}</p>
                     </div>
                     {isUnread && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
+                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" aria-label="Unread" />
                     )}
-                  </div>
+                  </button>
                 );
               })
             )}

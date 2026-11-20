@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Calendar,
   CreditCard,
-  Loader2,
   RefreshCw,
   AlertTriangle,
   Zap,
@@ -18,6 +17,9 @@ import {
   PLANS,
   PlanType,
 } from "../services/billing.service";
+import { useNotify } from "../hooks/useNotify";
+import { Badge, Button, EmptyState, PageHeader, Skeleton, useConfirm } from "../components/ui";
+import type { BadgeTone } from "../components/ui";
 
 const PLAN_LABELS: Record<PlanType, string> = {
   starter: "Starter",
@@ -39,12 +41,22 @@ function daysLeft(dateStr: string) {
   );
 }
 
+function statusTone(status: string): BadgeTone {
+  if (status === "active" || status === "captured") return "success";
+  if (status === "cancelled" || status === "failed") return "danger";
+  if (status === "pending") return "warning";
+  return "neutral";
+}
+
+const th = "whitespace-nowrap px-5 py-3 text-left text-xs font-medium text-muted";
+
 export default function SubscriptionPage() {
   const navigate = useNavigate();
+  const notify = useNotify();
+  const confirm = useConfirm();
   const [sub, setSub] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
 
   useEffect(() => {
@@ -58,13 +70,22 @@ export default function SubscriptionPage() {
   }, []);
 
   const handleCancel = async () => {
+    const ok = await confirm({
+      title: "Cancel your subscription?",
+      message: sub?.end_date
+        ? `Your team keeps access until ${fmt(sub.end_date)}. You can reactivate a plan later from Pricing.`
+        : "You can reactivate a plan later from Pricing.",
+      confirmText: "Yes, Cancel",
+      cancelText: "Keep Plan",
+      danger: true,
+    });
+    if (!ok) return;
     setCancelling(true);
     try {
       await billingService.cancelSubscription();
       setSub((prev) => (prev ? { ...prev, status: "cancelled" } : null));
-      setConfirmCancel(false);
     } catch (err: any) {
-      alert(err?.message || "Failed to cancel subscription.");
+      notify.error(err?.message || "Failed to cancel subscription.");
     } finally {
       setCancelling(false);
     }
@@ -78,92 +99,75 @@ export default function SubscriptionPage() {
         : planMeta.price_monthly
       : null;
   const renewDays = sub?.end_date ? daysLeft(sub.end_date) : null;
-
-  const statusBadge = sub
-    ? sub.status === "active"
-      ? { label: "Active", cls: "bg-emerald-50 text-emerald-700" }
-      : sub.status === "cancelled"
-        ? { label: "Cancelled", cls: "bg-red-50 text-red-600" }
-        : { label: sub.status, cls: "bg-gray-100 text-gray-600" }
-    : null;
+  // Savings come from the plan's own prices rather than a fixed claim.
+  const yearlySaving =
+    planMeta && planMeta.price_monthly > 0
+      ? Math.round(((planMeta.price_monthly - planMeta.price_yearly) / planMeta.price_monthly) * 100)
+      : 0;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <>
+      <PageHeader
+        title="Subscription"
+        subtitle="Your ZorHire plan, billing cycle, and renewal details"
+        actions={
+          <>
+            {sub && (
+              <Badge tone={statusTone(sub.status)} className="capitalize">
+                {sub.status}
+              </Badge>
+            )}
+            <Button onClick={() => navigate("/pricing")} icon={<ArrowRight size={14} aria-hidden="true" />}>
+              View Plans
+            </Button>
+          </>
+        }
+      />
 
-      {/* ── Page Header ── */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
-        <div>
-          <h1 className="text-xl font-black text-gray-900">Subscription</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Your ZorHire plan, billing cycle, and renewal details</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {statusBadge && (
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusBadge.cls}`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
-              {statusBadge.label}
-            </span>
-          )}
-          <button
-            onClick={() => navigate("/pricing")}
-            className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-black transition-all"
-          >
-            <ArrowRight size={14} /> View Plans
-          </button>
-        </div>
-      </div>
-
-      {/* ── Scrollable content ── */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-5">
-
+      <div className="space-y-5 p-4 sm:p-6 lg:p-8">
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 size={28} className="animate-spin text-gray-300" />
+          <div className="zh-card space-y-4 p-6" role="status" aria-label="Loading subscription">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-3.5 w-64" />
+            <Skeleton className="h-3.5 w-56" />
           </div>
         ) : sub && sub.status === "active" ? (
 
           /* ── Active Plan Card ── */
-          <div className="relative rounded-[28px] overflow-hidden shadow-lg bg-white border border-gray-100">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2">
-              <div className="flex items-center gap-1.5 bg-amber-200 text-[#111111] text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-b-2xl">
-                <Zap size={10} className="fill-[#111111]" />
-                Active Plan
-              </div>
+          <div className="zh-card overflow-hidden">
+            <div className="flex items-center gap-1.5 bg-navy-600 px-5 py-2 text-xs font-semibold text-white">
+              <Zap size={12} aria-hidden="true" className="fill-brand-400 text-brand-400" />
+              Active Plan
             </div>
 
-            <div className="p-7 pt-11">
-              {/* Top row */}
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+            <div className="p-5 sm:p-7">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
                 {/* Plan name + price */}
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-[0.25em] px-3 py-1.5 rounded-full bg-gray-100 text-gray-600">
-                      {PLAN_LABELS[sub.plan_type]}
-                    </span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700">
-                      Active
-                    </span>
-                    <span className="text-[10px] font-bold capitalize px-3 py-1.5 rounded-full bg-blue-50 text-blue-700">
-                      {sub.billing_cycle}
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="navy">{PLAN_LABELS[sub.plan_type]}</Badge>
+                    <Badge tone="success">Active</Badge>
+                    <Badge tone="neutral" className="capitalize">{sub.billing_cycle}</Badge>
                   </div>
 
                   {price && (
                     <div>
                       <div className="flex items-end gap-1.5">
-                        <span className="text-4xl font-black tracking-tight text-[#111111]">
+                        <span className="text-4xl font-semibold tracking-tight text-ink">
                           ₹{price.toLocaleString("en-IN")}
                         </span>
-                        <span className="text-sm font-bold mb-1.5 text-gray-400">
-                          /user/mo
-                        </span>
+                        <span className="mb-1.5 text-sm font-medium text-muted">/user/mo</span>
                       </div>
                       {sub.billing_cycle === "yearly" && (
-                        <p className="text-[11px] font-bold mt-0.5 text-emerald-600">
-                          Annual billing · ~15% savings applied
+                        <p className="mt-0.5 text-xs font-semibold text-success-700">
+                          {yearlySaving > 0
+                            ? `Annual billing · ${yearlySaving}% savings applied`
+                            : "Annual billing"}
                         </p>
                       )}
                       {planMeta && (
-                        <p className="text-[11px] font-medium mt-1 text-gray-400">
+                        <p className="mt-1 text-xs text-muted">
                           {planMeta.user_max
                             ? `${planMeta.user_min}–${planMeta.user_max} users`
                             : `${planMeta.user_min}+ users`}
@@ -174,158 +178,99 @@ export default function SubscriptionPage() {
                 </div>
 
                 {/* Dates */}
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-2.5 text-sm text-gray-500">
-                    <Calendar size={14} className="flex-shrink-0" />
-                    <span className="font-medium w-24">Member since</span>
-                    <span className="font-bold text-right text-[#111111]">
-                      {fmt(sub.start_date)}
-                    </span>
+                <dl className="flex flex-col gap-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2.5 text-muted">
+                    <Calendar size={14} aria-hidden="true" className="shrink-0" />
+                    <dt className="w-24 font-medium">Member since</dt>
+                    <dd className="font-semibold text-ink">{fmt(sub.start_date)}</dd>
                   </div>
 
                   {sub.end_date && (
-                    <div className="flex items-center gap-2.5 text-sm text-gray-500">
-                      <RefreshCw size={14} className="flex-shrink-0" />
-                      <span className="font-medium w-24">Renews on</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-amber-600">
-                          {fmt(sub.end_date)}
-                        </span>
+                    <div className="flex flex-wrap items-center gap-2.5 text-muted">
+                      <RefreshCw size={14} aria-hidden="true" className="shrink-0" />
+                      <dt className="w-24 font-medium">Renews on</dt>
+                      <dd className="flex items-center gap-2">
+                        <span className="font-semibold text-ink">{fmt(sub.end_date)}</span>
                         {renewDays !== null && renewDays > 0 && (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
-                            {renewDays}d left
-                          </span>
+                          <Badge tone="warning">{renewDays}d left</Badge>
                         )}
                         {renewDays !== null && renewDays <= 0 && (
-                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-50 text-red-600">
-                            Expired
-                          </span>
+                          <Badge tone="danger">Expired</Badge>
                         )}
-                      </div>
+                      </dd>
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2.5 text-sm text-gray-500">
-                    <CreditCard size={14} className="flex-shrink-0" />
-                    <span className="font-medium w-24">Next charge</span>
-                    <span className="font-bold text-[#111111]">
-                      {sub.end_date ? fmt(sub.end_date) : "—"}
-                    </span>
+                  <div className="flex flex-wrap items-center gap-2.5 text-muted">
+                    <CreditCard size={14} aria-hidden="true" className="shrink-0" />
+                    <dt className="w-24 font-medium">Next charge</dt>
+                    <dd className="font-semibold text-ink">{sub.end_date ? fmt(sub.end_date) : "—"}</dd>
                   </div>
-                </div>
+                </dl>
               </div>
 
               {/* Action row */}
-              <div
-                className="flex flex-wrap items-center gap-3 mt-6 pt-5 border-t border-dashed"
-                style={{ borderColor: "#f3f4f6" }}
-              >
-                <button
-                  onClick={() => navigate("/pricing")}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-black transition-all hover:scale-[1.02] active:scale-100 bg-[#111111] text-white shadow-xl shadow-gray-200"
-                >
-                  <ArrowRight size={14} />
+              <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-dashed border-line pt-5">
+                <Button onClick={() => navigate("/pricing")} icon={<ArrowRight size={14} aria-hidden="true" />}>
                   Change Plan
-                </button>
-
-                {!confirmCancel ? (
-                  <button
-                    onClick={() => setConfirmCancel(true)}
-                    className="px-5 py-2.5 rounded-2xl text-sm font-bold transition-all text-red-500 hover:bg-red-50"
-                  >
-                    Cancel subscription
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-red-600">
-                      Sure?
-                    </span>
-                    <button
-                      onClick={handleCancel}
-                      disabled={cancelling}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition-all"
-                    >
-                      {cancelling && (
-                        <Loader2 size={11} className="animate-spin" />
-                      )}
-                      Yes, Cancel
-                    </button>
-                    <button
-                      onClick={() => setConfirmCancel(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-black transition-all bg-gray-100 text-gray-600"
-                    >
-                      Keep Plan
-                    </button>
-                  </div>
-                )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
+                  onClick={handleCancel}
+                  loading={cancelling}
+                  loadingText="Cancelling…"
+                >
+                  Cancel subscription
+                </Button>
               </div>
             </div>
           </div>
 
         ) : sub && sub.status === "cancelled" ? (
           /* ── Cancelled state ── */
-          <div className="bg-white border border-gray-100 rounded-[28px] p-8 shadow-sm text-center space-y-4">
-            <div className="w-12 h-12 mx-auto rounded-full bg-red-50 flex items-center justify-center">
-              <AlertTriangle size={20} className="text-red-500" />
-            </div>
-            <div>
-              <h3 className="font-black text-[#111111] text-lg">
-                Subscription Cancelled
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Your {PLAN_LABELS[sub.plan_type]} plan was cancelled
-                {sub.end_date
-                  ? `. Access continues until ${fmt(sub.end_date)}`
-                  : ""}
-                .
-              </p>
-            </div>
-            <button
-              onClick={() => navigate("/pricing")}
-              className="inline-flex items-center gap-2 px-7 py-3 rounded-2xl bg-[#111111] text-white text-sm font-black hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
-            >
-              Reactivate Plan
-            </button>
+          <div className="zh-card">
+            <EmptyState
+              icon={<AlertTriangle size={22} aria-hidden="true" className="text-danger-600" />}
+              title="Subscription Cancelled"
+              description={`Your ${PLAN_LABELS[sub.plan_type]} plan was cancelled${
+                sub.end_date ? `. Access continues until ${fmt(sub.end_date)}` : ""
+              }.`}
+              action={<Button onClick={() => navigate("/pricing")}>Reactivate Plan</Button>}
+            />
           </div>
         ) : (
           /* ── No subscription ── */
-          <div className="bg-white border border-gray-100 rounded-[28px] p-10 shadow-sm text-center space-y-4">
-            <div className="w-14 h-14 mx-auto rounded-full bg-amber-50 flex items-center justify-center">
-              <CreditCard size={24} className="text-amber-600" />
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-[#111111]">
-                No Active Subscription
-              </h3>
-              <p className="text-sm text-gray-500 mt-1 max-w-xs mx-auto">
-                Choose a plan to unlock the full power of ZorHire for your
-                team.
-              </p>
-            </div>
-            <button
-              onClick={() => navigate("/pricing")}
-              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-[#111111] text-white text-sm font-black hover:scale-[1.02] transition-all shadow-xl shadow-gray-200"
-            >
-              View Plans
-            </button>
+          <div className="zh-card">
+            <EmptyState
+              icon={<CreditCard size={22} aria-hidden="true" />}
+              title="No Active Subscription"
+              description="Choose a plan to unlock the full power of ZorHire for your team."
+              action={<Button onClick={() => navigate("/pricing")}>View Plans</Button>}
+            />
           </div>
         )}
 
         {/* ── Plan Features ── */}
         {sub && sub.status === "active" && planMeta && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[
-              { icon: Users, label: "User Seats", value: planMeta.user_max ? `Up to ${planMeta.user_max}` : `${planMeta.user_min}+`, color: "text-blue-600", bg: "bg-blue-50" },
-              { icon: Zap,   label: "Plan Tier",  value: PLAN_LABELS[sub.plan_type], color: "text-amber-600", bg: "bg-amber-50" },
-              { icon: CheckCircle2, label: "Billing", value: sub.billing_cycle === "yearly" ? "Annual · 15% off" : "Monthly", color: "text-emerald-600", bg: "bg-emerald-50" },
-            ].map(({ icon: Icon, label, value, color, bg }) => (
-              <div key={label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-                  <Icon size={18} className={color} />
+              { icon: Users, label: "User Seats", value: planMeta.user_max ? `Up to ${planMeta.user_max}` : `${planMeta.user_min}+`, cls: "bg-navy-50 text-navy-600" },
+              { icon: Zap, label: "Plan Tier", value: PLAN_LABELS[sub.plan_type], cls: "bg-brand-50 text-brand-700" },
+              {
+                icon: CheckCircle2,
+                label: "Billing",
+                value: sub.billing_cycle === "yearly" ? (yearlySaving > 0 ? `Annual · ${yearlySaving}% off` : "Annual") : "Monthly",
+                cls: "bg-success-50 text-success-600",
+              },
+            ].map(({ icon: Icon, label, value, cls }) => (
+              <div key={label} className="zh-card flex items-center gap-4 p-5">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${cls}`}>
+                  <Icon size={18} aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</p>
-                  <p className="text-base font-black text-gray-900 mt-0.5">{value}</p>
+                  <p className="text-xs font-medium text-muted">{label}</p>
+                  <p className="mt-0.5 text-base font-semibold text-ink">{value}</p>
                 </div>
               </div>
             ))}
@@ -334,17 +279,17 @@ export default function SubscriptionPage() {
 
         {/* ── Billing Details Table ── */}
         {sub && (
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-black text-gray-900">Current Subscription</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Active plan record</p>
+          <div className="zh-card overflow-hidden">
+            <div className="border-b border-line px-5 py-4 sm:px-6">
+              <h2 className="text-sm font-semibold text-ink">Current Subscription</h2>
+              <p className="mt-0.5 text-xs text-muted">Active plan record</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50/60 border-b border-gray-100">
+                  <tr className="border-b border-line bg-surface">
                     {["Plan", "Cycle", "Period", "Status"].map((h) => (
-                      <th key={h} className="px-6 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      <th key={h} scope="col" className={th}>
                         {h}
                       </th>
                     ))}
@@ -352,27 +297,19 @@ export default function SubscriptionPage() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="px-6 py-4">
-                      <span className="font-bold text-[#111111]">{PLAN_LABELS[sub.plan_type]}</span>
+                    <td className="whitespace-nowrap px-5 py-4">
+                      <span className="font-semibold text-ink">{PLAN_LABELS[sub.plan_type]}</span>
                       {price && (
-                        <span className="ml-2 text-xs text-gray-400 font-medium">
-                          ₹{price.toLocaleString("en-IN")}/user/mo
-                        </span>
+                        <span className="ml-2 text-xs text-muted">₹{price.toLocaleString("en-IN")}/user/mo</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 capitalize text-gray-600 font-medium">{sub.billing_cycle}</td>
-                    <td className="px-6 py-4 text-gray-600 font-medium text-[13px]">
+                    <td className="px-5 py-4 capitalize text-ink-soft">{sub.billing_cycle}</td>
+                    <td className="whitespace-nowrap px-5 py-4 text-ink-soft">
                       {fmt(sub.start_date)}
-                      {sub.end_date && <span className="text-gray-400"> → {fmt(sub.end_date)}</span>}
+                      {sub.end_date && <span className="text-muted"> → {fmt(sub.end_date)}</span>}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                        sub.status === "active" ? "bg-emerald-50 text-emerald-700"
-                          : sub.status === "cancelled" ? "bg-red-50 text-red-600"
-                          : "bg-gray-100 text-gray-500"
-                      }`}>
-                        {sub.status}
-                      </span>
+                    <td className="px-5 py-4">
+                      <Badge tone={statusTone(sub.status)} className="capitalize">{sub.status}</Badge>
                     </td>
                   </tr>
                 </tbody>
@@ -383,49 +320,42 @@ export default function SubscriptionPage() {
 
         {/* ── Payment Transaction History ── */}
         {transactions.length > 0 && (
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-black text-gray-900">Payment History</h3>
-              <p className="text-xs text-gray-400 mt-0.5">All Razorpay transactions for your account</p>
+          <div className="zh-card overflow-hidden">
+            <div className="border-b border-line px-5 py-4 sm:px-6">
+              <h2 className="text-sm font-semibold text-ink">Payment History</h2>
+              <p className="mt-0.5 text-xs text-muted">All Razorpay transactions for your account</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50/60 border-b border-gray-100">
+                  <tr className="border-b border-line bg-surface">
                     {["Date", "Plan", "Cycle", "Amount", "Payment ID", "Status"].map((h) => (
-                      <th key={h} className="px-5 py-3.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                      <th key={h} scope="col" className={th}>
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-line">
                   {transactions.map((txn) => (
-                    <tr key={txn.id} className="hover:bg-gray-50/40 transition-colors">
-                      <td className="px-5 py-3.5 text-[13px] text-gray-500 whitespace-nowrap">
+                    <tr key={txn.id} className="transition-colors hover:bg-surface">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-muted">
                         {new Date(txn.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="font-bold text-[#111111] capitalize">{txn.plan_type}</span>
+                        <span className="font-semibold capitalize text-ink">{txn.plan_type}</span>
                       </td>
-                      <td className="px-5 py-3.5 capitalize text-gray-600 text-[13px]">{txn.billing_cycle}</td>
-                      <td className="px-5 py-3.5 font-bold text-[#111111] whitespace-nowrap">
+                      <td className="px-5 py-3.5 capitalize text-ink-soft">{txn.billing_cycle}</td>
+                      <td className="whitespace-nowrap px-5 py-3.5 font-semibold text-ink">
                         ₹{(txn.amount / 100).toLocaleString("en-IN")}
                       </td>
-                      <td className="px-5 py-3.5 text-[12px] font-mono text-gray-400">
+                      <td className="px-5 py-3.5 font-mono text-xs text-muted">
                         {txn.razorpay_payment_id
                           ? <span title={txn.razorpay_payment_id}>{txn.razorpay_payment_id.slice(0, 18)}…</span>
-                          : <span className="text-gray-300">—</span>}
+                          : <span>—</span>}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
-                          txn.status === "captured" ? "bg-emerald-50 text-emerald-700"
-                            : txn.status === "pending" ? "bg-amber-50 text-amber-700"
-                            : txn.status === "failed" ? "bg-red-50 text-red-600"
-                            : "bg-gray-100 text-gray-500"
-                        }`}>
-                          {txn.status}
-                        </span>
+                        <Badge tone={statusTone(txn.status)} className="capitalize">{txn.status}</Badge>
                       </td>
                     </tr>
                   ))}
@@ -435,6 +365,6 @@ export default function SubscriptionPage() {
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

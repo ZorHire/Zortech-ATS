@@ -1,66 +1,70 @@
 import { useState } from 'react';
-import { Globe, CheckCircle2, Clock, AlertCircle, XCircle, MinusCircle, Loader2, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Globe, CheckCircle2, Clock, AlertCircle, XCircle, MinusCircle, Trash2 } from 'lucide-react';
 import { useGetJobPostingsQuery, useWithdrawFromBoardMutation } from '../../store/api/jobBoardsApi';
 import type { JobPosting } from '../../store/api/jobBoardsApi';
 import JobBoardPublishModal from './JobBoardPublishModal';
 import { useAppSelector } from '../../hooks/useAppSelector';
 import { selectCurrentUser } from '../../store/slices/authSlice';
+import { Badge, Button, Skeleton, Spinner, useConfirm } from '../ui';
+import type { BadgeTone } from '../ui';
 
 interface Props {
   jobId: string;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
-  not_posted:  { label: 'Not Posted',  icon: <MinusCircle size={13} />,   className: 'bg-gray-100 text-gray-500' },
-  pending:     { label: 'Pending',     icon: <Clock size={13} />,         className: 'bg-amber-100 text-amber-700' },
-  active:      { label: 'Live',        icon: <CheckCircle2 size={13} />,  className: 'bg-emerald-100 text-emerald-700' },
-  expired:     { label: 'Expired',     icon: <XCircle size={13} />,       className: 'bg-orange-100 text-orange-600' },
-  error:       { label: 'Error',       icon: <AlertCircle size={13} />,   className: 'bg-red-100 text-red-600' },
-  withdrawn:   { label: 'Withdrawn',   icon: <MinusCircle size={13} />,   className: 'bg-slate-100 text-slate-500' },
+const STATUS_CONFIG: Record<string, { label: string; icon: ReactNode; tone: BadgeTone }> = {
+  not_posted:  { label: 'Not posted',  icon: <MinusCircle size={12} />,   tone: 'neutral' },
+  pending:     { label: 'Pending',     icon: <Clock size={12} />,         tone: 'warning' },
+  active:      { label: 'Live',        icon: <CheckCircle2 size={12} />,  tone: 'success' },
+  expired:     { label: 'Expired',     icon: <XCircle size={12} />,       tone: 'neutral' },
+  error:       { label: 'Error',       icon: <AlertCircle size={12} />,   tone: 'danger' },
+  withdrawn:   { label: 'Withdrawn',   icon: <MinusCircle size={12} />,   tone: 'neutral' },
 };
 
 function PostingCard({ posting, jobId, canEdit }: { posting: JobPosting; jobId: string; canEdit: boolean }) {
   const [withdraw, { isLoading }] = useWithdrawFromBoardMutation();
   const cfg = STATUS_CONFIG[posting.status] ?? STATUS_CONFIG.not_posted;
+  const confirm = useConfirm();
 
   const handleWithdraw = async () => {
-    if (!confirm(`Remove this job from ${posting.board_name}?`)) return;
+    const ok = await confirm({ title: `Remove this job from ${posting.board_name}?`, danger: true, confirmText: 'Withdraw' });
+    if (!ok) return;
     await withdraw({ jobId, boardKey: posting.board_key });
   };
 
   return (
-    <div className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-2.5 last:border-0">
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${posting.board_color}`} />
-        <span className="text-sm font-medium text-gray-800 truncate">{posting.board_name}</span>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${posting.board_color}`} />
+        <span className="truncate text-sm font-medium text-ink">{posting.board_name}</span>
       </div>
 
-      <div className="flex items-center gap-3 flex-shrink-0">
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
         {posting.application_count > 0 && (
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted">
             {posting.application_count} app{posting.application_count !== 1 ? 's' : ''}
           </span>
         )}
 
-        <span className={`flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cfg.className}`}>
-          {cfg.icon}
-          {cfg.label}
-        </span>
+        <Badge tone={cfg.tone} icon={cfg.icon}>{cfg.label}</Badge>
 
         {posting.error_message && (
-          <span className="text-xs text-red-500 max-w-[140px] truncate" title={posting.error_message}>
+          <span className="max-w-[140px] truncate text-xs text-danger-600" title={posting.error_message}>
             {posting.error_message}
           </span>
         )}
 
         {canEdit && posting.status === 'active' && (
           <button
+            type="button"
             onClick={handleWithdraw}
             disabled={isLoading}
-            className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-danger-50 hover:text-danger-600 disabled:opacity-50"
             title={`Withdraw from ${posting.board_name}`}
+            aria-label={`Withdraw from ${posting.board_name}`}
           >
-            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            {isLoading ? <Spinner size={14} /> : <Trash2 size={14} />}
           </button>
         )}
       </div>
@@ -81,56 +85,50 @@ export default function JobBoardStatusSection({ jobId }: Props) {
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Globe size={16} className="text-blue-600" />
-            <h3 className="text-sm font-semibold text-gray-900">Job Board Distribution</h3>
+      <section className="zh-card p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Globe size={16} className="text-navy-600" />
+            <h3 className="text-base font-semibold text-ink">Job board distribution</h3>
             {postedCount > 0 && (
-              <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-                {postedCount} live
-              </span>
+              <Badge tone="success">{postedCount} live</Badge>
             )}
             {errorCount > 0 && (
-              <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">
-                {errorCount} error
-              </span>
+              <Badge tone="danger">{errorCount} error</Badge>
             )}
           </div>
 
           {canEdit && (
-            <button
-              onClick={() => setPublishOpen(true)}
-              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              <Globe size={12} />
-              Publish to Boards
-            </button>
+            <Button variant="secondary" size="sm" icon={<Globe size={14} />} onClick={() => setPublishOpen(true)}>
+              Publish to boards
+            </Button>
           )}
         </div>
 
         {isLoading ? (
-          <div className="flex justify-center py-4">
-            <Loader2 size={18} className="animate-spin text-gray-400" />
+          <div className="space-y-3 py-1" role="status" aria-label="Loading job boards">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
           </div>
         ) : (
           <>
-            <div className="divide-y-0">
+            <div>
               {data?.postings.map((posting) => (
                 <PostingCard key={posting.board_key} posting={posting} jobId={jobId} canEdit={canEdit} />
               ))}
             </div>
 
             {totalApps > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="text-xs text-gray-500">
-                  <span className="font-semibold text-gray-800">{totalApps}</span> total applications ingested from job boards
+              <div className="mt-3 border-t border-line pt-3">
+                <p className="text-xs text-muted">
+                  <span className="font-semibold text-ink">{totalApps}</span> total applications ingested from job boards
                 </p>
               </div>
             )}
           </>
         )}
-      </div>
+      </section>
 
       {publishOpen && (
         <JobBoardPublishModal

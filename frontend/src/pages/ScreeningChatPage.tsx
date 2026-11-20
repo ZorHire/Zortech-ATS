@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { Briefcase, Send, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Send, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Button, Spinner } from "../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL || "/v1";
 
@@ -90,81 +91,95 @@ export default function ScreeningChatPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-surface">
+        <Spinner size={32} tone="brand" label="Loading chat" />
       </div>
     );
   }
 
   if (error && messages.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-sm w-full text-center space-y-3">
-          <AlertTriangle size={32} className="mx-auto text-red-400" />
-          <h2 className="font-bold text-gray-900">Unable to load this chat</h2>
-          <p className="text-sm text-gray-500">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-surface px-4 sm:px-6">
+        <div className="zh-card w-full max-w-sm space-y-3 p-8 text-center" role="alert">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger-50 text-danger-600">
+            <AlertTriangle size={22} aria-hidden="true" />
+          </div>
+          <h1 className="text-base font-semibold text-ink">Unable to load this chat</h1>
+          <p className="text-sm text-muted">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-6">
-      <div className="w-full max-w-lg flex flex-col flex-1">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Briefcase size={16} className="text-white" />
-          </div>
-          <span className="font-bold text-gray-900">ZorHire — Screening Chat</span>
+    <div className="flex min-h-screen flex-col items-center bg-surface px-4 py-6">
+      <div className="flex w-full max-w-lg flex-1 flex-col">
+        <div className="mb-4 flex items-center gap-3">
+          <img src="/brand/zortech-logo.png" alt="ZorTech" className="h-6 w-auto" />
+          <h1 className="border-l border-line pl-3 text-sm font-semibold text-navy-700">ZorHire — Screening Chat</h1>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 flex flex-col flex-1 overflow-hidden" style={{ minHeight: "60vh" }}>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="zh-card flex min-h-[60vh] flex-1 flex-col overflow-hidden">
+          <div className="flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
             {messages.length === 0 && (
-              <p className="text-sm text-gray-400 text-center mt-8">Say hello to get started.</p>
+              <p className="mt-8 text-center text-sm text-muted">Say hello to get started.</p>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "candidate" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                  className={`max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm ${
                     m.role === "candidate"
-                      ? "bg-blue-600 text-white rounded-br-sm"
-                      : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                      ? "rounded-br-sm bg-navy-600 text-white"
+                      : "rounded-bl-sm bg-surface-sunken text-ink"
                   }`}
                 >
                   {m.content}
                 </div>
               </div>
             ))}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm bg-surface-sunken px-4 py-2 text-sm text-muted">
+                  <Spinner size={12} />
+                  Typing…
+                </div>
+              </div>
+            )}
             <div ref={bottomRef} />
           </div>
 
           {status === "completed" ? (
-            <div className="border-t border-gray-200 p-4 flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50">
-              <CheckCircle2 size={16} />
+            <div className="flex items-center gap-2 border-t border-line bg-success-50 p-4 text-sm text-success-700" role="status">
+              <CheckCircle2 size={16} aria-hidden="true" className="shrink-0" />
               Thanks — this screening chat has ended. A recruiter will follow up.
             </div>
           ) : (
-            <form onSubmit={handleSend} className="border-t border-gray-200 p-3 flex items-center gap-2">
+            <form onSubmit={handleSend} className="flex items-center gap-2 border-t border-line p-3">
+              <label htmlFor="screening-message" className="sr-only">
+                Your message
+              </label>
               <input
+                id="screening-message"
                 type="text"
+                autoComplete="off"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type your message…"
-                disabled={sending}
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60"
+                readOnly={sending}
+                className="zh-input flex-1"
               />
-              <button
+              <Button
                 type="submit"
-                disabled={sending || !input.trim()}
-                className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors flex-shrink-0"
-              >
-                <Send size={16} />
-              </button>
+                className="h-10 w-10 shrink-0 px-0"
+                loading={sending}
+                disabled={!input.trim()}
+                aria-label="Send message"
+                icon={<Send size={16} aria-hidden="true" />}
+              />
             </form>
           )}
           {error && (
-            <p className="px-4 pb-3 text-xs text-red-600">{error}</p>
+            <p role="alert" className="px-4 pb-3 text-xs text-danger-600">{error}</p>
           )}
         </div>
       </div>

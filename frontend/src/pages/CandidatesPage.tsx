@@ -7,8 +7,7 @@ import {
   Plus,
   Upload,
   UserCheck,
-  ChevronDown,
-  X,
+  UserX,
   Download,
   Eye,
   Trash2,
@@ -18,7 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import Header from "../components/layout/Header";
 import { Candidate } from "../types";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { selectCurrentUser } from "../store/slices/authSlice";
@@ -32,11 +30,22 @@ import {
 import { useGetJobsQuery } from "../store/api/jobApi";
 import CandidateModal from "../components/candidates/CandidateModal";
 import ComposeEmailModal from "../components/candidates/ComposeEmailModal";
-import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
+import { isLowConfidence } from "../lib/confidenceIndicator";
 import { useNotify } from "../hooks/useNotify";
-import { useEscapeKey } from "../hooks/useEscapeKey";
 import { getErrorMessage } from "../lib/format";
 import BulkResumeUploadModal from "../components/bulk/BulkResumeUploadModal";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  ErrorState,
+  Modal,
+  PageHeader,
+  StatCard,
+  TableSkeleton,
+  useConfirm,
+} from "../components/ui";
+import { Avatar } from "../components/jobs/jobBadges";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -45,99 +54,65 @@ const sourceLabels: Record<string, string> = {
   vendor: "Vendor", referral: "Referral", direct: "Direct", other: "Other",
 };
 
-const sourceBadgeColors: Record<string, string> = {
-  linkedin: "bg-blue-50 text-blue-700", indeed: "bg-blue-50 text-blue-600",
-  naukri: "bg-orange-50 text-orange-700", monster: "bg-purple-50 text-purple-700",
-  vendor: "bg-teal-50 text-teal-700", referral: "bg-green-50 text-green-700",
-  direct: "bg-gray-100 text-gray-600", other: "bg-gray-100 text-gray-600",
-};
-
-const AVATAR_COLORS = [
-  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500",
-  "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500",
-];
-function avatarColor(name: string) {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff;
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-}
-
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-function StatusBadge({ active }: { active: boolean }) {
-  return active ? (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-500">
-      <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />Inactive
-    </span>
-  );
-}
+const TH = "border-b border-line px-4 py-2.5 text-left text-xs font-medium text-muted whitespace-nowrap";
+const TD = "px-4 py-3 align-middle text-ink";
 
 // ─── Row action menu ──────────────────────────────────────────────────────────
 
 function RowMenu({
-  onView, onEmail, onDelete, onViewFull,
+  name, onView, onEmail, onDelete, onViewFull,
 }: {
-  onView: () => void; onEmail: () => void; onDelete: () => void; onViewFull?: () => void;
+  name: string; onView: () => void; onEmail: () => void; onDelete: () => void; onViewFull?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const iconBtn = "rounded-lg p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink";
+  const item = "flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm text-ink hover:bg-surface";
   return (
-    <div className="relative flex items-center gap-1 justify-end">
-      <button onClick={onView} title="View profile" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-        <Eye size={14} />
+    <div className="relative flex items-center justify-end gap-1">
+      <button type="button" onClick={onView} title="View profile" aria-label={`View ${name}`} className={iconBtn}>
+        <Eye size={15} />
       </button>
-      <button onClick={onEmail} title="Send email" className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
-        <Mail size={14} />
+      <button type="button" onClick={onEmail} title="Send email" aria-label={`Email ${name}`} className={iconBtn}>
+        <Mail size={15} />
       </button>
       <div className="relative">
-        <button onClick={() => setOpen((v) => !v)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-          <MoreHorizontal size={14} />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={`More actions for ${name}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          className={iconBtn}
+        >
+          <MoreHorizontal size={15} />
         </button>
         {open && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-            <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1">
-              <button onClick={() => { setOpen(false); onView(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <Eye size={12} /> View Profile
+            <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-line bg-white py-1 shadow-pop">
+              <button role="menuitem" onClick={() => { setOpen(false); onView(); }} className={item}>
+                <Eye size={14} /> View profile
               </button>
               {onViewFull && (
-                <button onClick={() => { setOpen(false); onViewFull(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                  <ExternalLink size={12} /> Full Profile
+                <button role="menuitem" onClick={() => { setOpen(false); onViewFull(); }} className={item}>
+                  <ExternalLink size={14} /> Full profile
                 </button>
               )}
-              <button onClick={() => { setOpen(false); onEmail(); }} className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                <Mail size={12} /> Send Email
+              <button role="menuitem" onClick={() => { setOpen(false); onEmail(); }} className={item}>
+                <Mail size={14} /> Send email
               </button>
-              <hr className="border-gray-100 my-0.5" />
-              <button onClick={() => { setOpen(false); onDelete(); }} className="w-full text-left px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-                <Trash2 size={12} /> Delete
+              <hr className="my-1 border-line" />
+              <button
+                role="menuitem"
+                onClick={() => { setOpen(false); onDelete(); }}
+                className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm text-danger-600 hover:bg-danger-50"
+              >
+                <Trash2 size={14} /> Delete
               </button>
             </div>
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-// ─── Stat Card ────────────────────────────────────────────────────────────────
-
-function StatCard({ icon: Icon, label, value, color, bg }: {
-  icon: React.ComponentType<any>; label: string; value: number | string;
-  color: string; bg: string;
-}) {
-  return (
-    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
-        <div className={`w-9 h-9 ${bg} rounded-xl flex items-center justify-center`}>
-          <Icon size={16} className={color} />
-        </div>
-      </div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
     </div>
   );
 }
@@ -152,7 +127,7 @@ export default function CandidatesPage() {
   const isVendor = profile?.role === "vendor_user" || profile?.role === "vendor_manager";
   const isRecruiter = profile?.role === "recruiter";
 
-  const { data: candidates = [], isLoading: loading, refetch } = useGetCandidatesQuery();
+  const { data: candidates = [], isLoading: loading, isFetching, isError, error, refetch } = useGetCandidatesQuery();
   const { data: assignedJobs = [] } = useGetJobsQuery(undefined, { skip: !(isVendor || isRecruiter) });
   const [parseResume, { isLoading: resumeParsing }] = useParseResumeMutation();
   const [addCandidateToJob, { isLoading: addingToJob }] = useAddCandidateToJobMutation();
@@ -160,6 +135,7 @@ export default function CandidatesPage() {
   const [deleteCandidate] = useDeleteCandidateMutation();
   const savingCandidate = addingToJob || creating;
   const notify = useNotify();
+  const confirm = useConfirm();
 
   const [composeTarget, setComposeTarget] = useState<Candidate | null>(null);
   const [search, setSearch] = useState("");
@@ -185,8 +161,6 @@ export default function CandidatesPage() {
   const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
 
   const closeAddModal = () => { setIsAddModalOpen(false); setSelectedJobId(""); };
-  // Esc closes the add form (not while saving). No backdrop-close: it would discard typed input.
-  useEscapeKey(closeAddModal, isAddModalOpen && !savingCandidate);
 
   const parseResumeFile = async (file: File) => {
     setResumeParseMessage(""); setResumeParseError("");
@@ -263,7 +237,7 @@ export default function CandidatesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Delete this candidate?")) return;
+    if (!(await confirm({ title: "Delete this candidate?", message: "Their profile and applications will be removed.", danger: true, confirmText: "Delete" }))) return;
     try {
       await deleteCandidate(id).unwrap();
       if (viewingCandidate?.id === id) setViewingCandidate(null);
@@ -291,7 +265,7 @@ export default function CandidatesPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  const toggleSelect = (id: string) => setSelectedIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleSelect = (id: string) => setSelectedIds((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleSelectAll = () => setSelectedIds((p) => p.size === paginated.length ? new Set() : new Set(paginated.map((c) => c.id)));
 
   const handleExportCSV = () => {
@@ -312,195 +286,193 @@ export default function CandidatesPage() {
 
   const activeCount = candidates.filter((c) => c.is_active).length;
   const inactiveCount = candidates.length - activeCount;
+  const filtersActive = !!search || sourceFilter !== "all" || expFilter !== "all" || statusFilter !== "all";
+  const clearFilters = () => {
+    setSearch(""); setSourceFilter("all"); setExpFilter("all"); setStatusFilter("all"); setCurrentPage(1);
+  };
+  const allOnPageSelected = selectedIds.size === paginated.length && paginated.length > 0;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < paginated.length;
+  const noJobsToAddTo = (isVendor || isRecruiter) && assignedJobs.length === 0;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
+    <>
+      <PageHeader
         title="Candidates"
-        subtitle={`${candidates.length} total candidates · ${selectedIds.size > 0 ? `${selectedIds.size} selected` : "0 selected"}`}
+        subtitle={`${candidates.length} total candidates${selectedIds.size > 0 ? ` · ${selectedIds.size} selected` : ""}`}
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsBulkUploadOpen(true)}
-              className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all shadow-sm"
-            >
-              <Upload size={15} /> Bulk Upload
-            </button>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm"
-            >
-              <Plus size={15} /> Add Candidate
-            </button>
-          </div>
+          <>
+            <Button variant="secondary" onClick={handleExportCSV} disabled={filtered.length === 0} icon={<Download size={15} />}>
+              Export CSV
+            </Button>
+            <Button variant="secondary" onClick={() => setIsBulkUploadOpen(true)} icon={<Upload size={15} />}>
+              Bulk upload
+            </Button>
+            <Button onClick={() => setIsAddModalOpen(true)} icon={<Plus size={15} />}>
+              Add candidate
+            </Button>
+          </>
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
 
         {/* ── Stat Cards ── */}
         {/* Only counts we can derive from real data; per-stage counts live on the Pipeline page. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-          <StatCard icon={Users} label="Total Candidates" value={candidates.length} color="text-blue-600" bg="bg-blue-50" />
-          <StatCard icon={UserCheck} label="Active" value={activeCount} color="text-emerald-600" bg="bg-emerald-50" />
-          <StatCard icon={X} label="Inactive" value={inactiveCount} color="text-red-500" bg="bg-red-50" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard icon={<Users size={18} />} label="Total candidates" value={candidates.length} loading={loading} tone="navy" />
+          <StatCard icon={<UserCheck size={18} />} label="Active" value={activeCount} loading={loading} tone="success" />
+          <StatCard icon={<UserX size={18} />} label="Inactive" value={inactiveCount} loading={loading} tone="neutral" />
         </div>
 
         {/* ── Search + Filters ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3.5">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex-1 min-w-[200px] relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="zh-card p-3 sm:p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <label htmlFor="cand-search" className="sr-only">Search candidates</label>
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
               <input
-                type="text"
+                id="cand-search"
+                type="search"
                 placeholder="Search by name, skills, company, title…"
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="zh-input py-2 pl-9"
               />
             </div>
-            {[
-              { value: sourceFilter, set: setSourceFilter, options: [["all", "All Sources"], ...Object.entries(sourceLabels)] },
-              { value: expFilter, set: setExpFilter, options: [["all", "All Experience"], ["0-3", "0–3 yrs"], ["3-7", "3–7 yrs"], ["7+", "7+ yrs"]] },
-              { value: statusFilter, set: setStatusFilter, options: [["all", "All Status"], ["active", "Active"], ["inactive", "Inactive"]] },
-            ].map((f, i) => (
-              <div key={i} className="relative">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:flex">
+              {[
+                { label: "Source", value: sourceFilter, set: setSourceFilter, options: [["all", "All sources"], ...Object.entries(sourceLabels)] },
+                { label: "Experience", value: expFilter, set: setExpFilter, options: [["all", "All experience"], ["0-3", "0–3 yrs"], ["3-7", "3–7 yrs"], ["7+", "7+ yrs"]] },
+                { label: "Status", value: statusFilter, set: setStatusFilter, options: [["all", "All statuses"], ["active", "Active"], ["inactive", "Inactive"]] },
+              ].map((f) => (
                 <select
+                  key={f.label}
+                  aria-label={f.label}
                   value={f.value}
                   onChange={(e) => { (f.set as any)(e.target.value); setCurrentPage(1); }}
-                  className="appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="zh-input py-2 lg:w-44"
                 >
                   {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
-                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Toolbar ── */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={selectedIds.size === paginated.length && paginated.length > 0}
-              ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < paginated.length; }}
-              onChange={toggleSelectAll}
-              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-            />
-            <span className="text-sm font-medium text-gray-700">Select All</span>
-            <span className="text-sm text-gray-400">
-              Showing <strong className="text-gray-900">{filtered.length}</strong> candidates
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
-            >
-              <Download size={13} /> Export CSV
-            </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* ── Table ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center py-16 gap-3">
-              <UserCheck size={32} className="text-gray-200" />
-              <p className="text-sm text-gray-500 font-medium">No candidates found</p>
-              <p className="text-xs text-gray-400">Try adjusting your search or filters</p>
-            </div>
-          ) : (
+        {loading ? (
+          <TableSkeleton columns={6} />
+        ) : isError && candidates.length === 0 ? (
+          <div className="zh-card">
+            <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
+          </div>
+        ) : candidates.length === 0 ? (
+          <div className="zh-card">
+            <EmptyState
+              icon={<Users size={22} aria-hidden="true" />}
+              title="No candidates yet"
+              description="Add a candidate or upload a batch of resumes to build your talent pool."
+              action={
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button variant="secondary" onClick={() => setIsBulkUploadOpen(true)} icon={<Upload size={15} />}>Bulk upload</Button>
+                  <Button onClick={() => setIsAddModalOpen(true)} icon={<Plus size={15} />}>Add candidate</Button>
+                </div>
+              }
+            />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="zh-card">
+            <EmptyState
+              icon={<Search size={22} aria-hidden="true" />}
+              title="No candidates match"
+              description="Try a different search or clear the filters."
+              action={filtersActive ? <Button variant="secondary" onClick={clearFilters}>Clear filters</Button> : undefined}
+            />
+          </div>
+        ) : (
+          <div className="zh-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-50/60 border-b border-gray-100">
-                    <th className="px-4 py-3.5 w-10">
+              <table className="w-full min-w-[960px] border-collapse text-sm">
+                <caption className="sr-only">Candidates</caption>
+                <thead className="bg-surface">
+                  <tr>
+                    <th scope="col" className={`${TH} w-10`}>
                       <input
                         type="checkbox"
-                        checked={selectedIds.size === paginated.length && paginated.length > 0}
-                        ref={(el) => { if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < paginated.length; }}
+                        aria-label="Select all on this page"
+                        checked={allOnPageSelected}
+                        ref={(el) => { if (el) el.indeterminate = someSelected; }}
                         onChange={toggleSelectAll}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                        className="h-4 w-4 cursor-pointer rounded border-line-strong text-navy-600"
                       />
                     </th>
-                    {["CANDIDATE", "EXPERIENCE", "CURRENT ROLE", "SKILLS", "SOURCE", "STATUS", "ADDED ON", "ACTIONS"].map((h) => (
-                      <th key={h} className="px-4 py-3.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    {["Candidate", "Experience", "Current role", "Skills", "Source", "Status", "Added on"].map((h) => (
+                      <th key={h} scope="col" className={TH}>{h}</th>
                     ))}
+                    <th scope="col" className={`${TH} text-right`}><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody>
                   {paginated.map((candidate) => {
-                    const color = avatarColor(candidate.first_name + candidate.last_name);
+                    const fullName = `${candidate.first_name} ${candidate.last_name}`;
                     const isSelected = selectedIds.has(candidate.id);
                     const dateStr = new Date(candidate.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
                     return (
                       <tr
                         key={candidate.id}
-                        className={`transition-colors hover:bg-gray-50/60 cursor-pointer ${isSelected ? "bg-blue-50/40" : ""}`}
+                        className={`cursor-pointer border-b border-line last:border-0 hover:bg-surface ${isSelected ? "bg-navy-50/50" : ""}`}
                         onClick={() => setViewingCandidate(candidate)}
                       >
-                        <td className="px-4 py-3.5 w-10" onClick={(e) => e.stopPropagation()}>
+                        <td className={`${TD} w-10`} onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
+                            aria-label={`Select ${fullName}`}
                             checked={isSelected}
                             onChange={() => toggleSelect(candidate.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                            className="h-4 w-4 cursor-pointer rounded border-line-strong text-navy-600"
                           />
                         </td>
-                        <td className="px-4 py-3.5 min-w-[200px]">
+                        <td className={`${TD} min-w-[220px]`}>
                           <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
-                              <span className="text-xs font-bold text-white">
-                                {candidate.first_name.charAt(0)}{candidate.last_name.charAt(0)}
-                              </span>
-                            </div>
+                            <Avatar name={fullName} />
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">
-                                {candidate.first_name} {candidate.last_name}
-                              </p>
-                              <p className="text-xs text-gray-400 truncate flex items-center gap-1">
-                                <Mail size={9} />{candidate.email}
-                                {candidate.phone && <><span className="mx-1">·</span><Phone size={9} />{candidate.phone}</>}
+                              <p className="truncate font-medium text-ink">{fullName}</p>
+                              <p className="flex items-center gap-1 truncate text-xs text-muted">
+                                <Mail size={11} aria-hidden="true" />{candidate.email}
+                                {candidate.phone && <><span className="mx-1">·</span><Phone size={11} aria-hidden="true" />{candidate.phone}</>}
                               </p>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-sm text-gray-600 whitespace-nowrap">
-                          {candidate.experience_years ? `${candidate.experience_years} Years` : "—"}
+                        <td className={`${TD} whitespace-nowrap text-ink-soft`}>
+                          {candidate.experience_years ? `${candidate.experience_years} yrs` : "—"}
                         </td>
-                        <td className="px-4 py-3.5 min-w-[160px]">
-                          <p className="text-sm text-gray-700 font-medium truncate">{candidate.current_title || "—"}</p>
+                        <td className={`${TD} min-w-[160px]`}>
+                          <p className="truncate text-ink">{candidate.current_title || "—"}</p>
                           {candidate.current_company && (
-                            <p className="text-xs text-gray-400 truncate">{candidate.current_company}</p>
+                            <p className="truncate text-xs text-muted">{candidate.current_company}</p>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 min-w-[180px]">
+                        <td className={`${TD} min-w-[180px]`}>
                           <div className="flex flex-wrap gap-1">
                             {candidate.skills.slice(0, 3).map((s) => (
-                              <span key={s} className="text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">{s}</span>
+                              <Badge key={s}>{s}</Badge>
                             ))}
                             {candidate.skills.length > 3 && (
-                              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-md">+{candidate.skills.length - 3}</span>
+                              <Badge>+{candidate.skills.length - 3}</Badge>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3.5">
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${sourceBadgeColors[candidate.source] || "bg-gray-100 text-gray-600"}`}>
-                            {sourceLabels[candidate.source] || candidate.source}
-                          </span>
+                        <td className={TD}>
+                          <Badge tone="navy">{sourceLabels[candidate.source] || candidate.source}</Badge>
                         </td>
-                        <td className="px-4 py-3.5">
-                          <StatusBadge active={candidate.is_active} />
+                        <td className={TD}>
+                          {candidate.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-gray-400 whitespace-nowrap">{dateStr}</td>
-                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <td className={`${TD} whitespace-nowrap text-xs text-muted`}>{dateStr}</td>
+                        <td className={TD} onClick={(e) => e.stopPropagation()}>
                           <RowMenu
+                            name={fullName}
                             onView={() => setViewingCandidate(candidate)}
                             onEmail={() => setComposeTarget(candidate)}
                             onDelete={() => handleDelete(candidate.id)}
@@ -513,148 +485,171 @@ export default function CandidatesPage() {
                 </tbody>
               </table>
             </div>
-          )}
 
-          {/* Pagination */}
-          {filtered.length > 0 && (
-            <div className="flex items-center justify-between px-5 py-4 border-t border-gray-50">
-              <p className="text-xs text-gray-500">
-                Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, filtered.length)} to{" "}
-                {Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} candidates
+            {/* Pagination */}
+            <div className="flex flex-col gap-3 border-t border-line px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-muted">
+                Showing {Math.min((currentPage - 1) * PAGE_SIZE + 1, filtered.length)}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} candidates
               </p>
-              <div className="flex items-center gap-1.5">
-                <button disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)} className="p-1.5 border border-gray-200 rounded-lg text-gray-500 disabled:opacity-40 hover:bg-gray-50">
+              <nav aria-label="Pagination" className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Previous page"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  className="rounded-lg border border-line p-1.5 text-muted hover:bg-surface disabled:opacity-40"
+                >
                   <ChevronLeft size={14} />
                 </button>
                 {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
-                  <button key={p} onClick={() => setCurrentPage(p)} className={`w-7 h-7 text-xs font-medium rounded-lg ${p === currentPage ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}>
+                  <button
+                    key={p}
+                    type="button"
+                    aria-current={p === currentPage ? "page" : undefined}
+                    onClick={() => setCurrentPage(p)}
+                    className={`h-7 w-7 rounded-lg text-xs font-medium ${p === currentPage ? "bg-navy-600 text-white" : "text-muted hover:bg-surface-sunken"}`}
+                  >
                     {p}
                   </button>
                 ))}
-                {totalPages > 5 && <span className="text-xs text-gray-400">…{totalPages}</span>}
-                <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)} className="p-1.5 border border-gray-200 rounded-lg text-gray-500 disabled:opacity-40 hover:bg-gray-50">
+                {totalPages > 5 && <span className="px-1 text-xs text-muted">…{totalPages}</span>}
+                <button
+                  type="button"
+                  aria-label="Next page"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  className="rounded-lg border border-line p-1.5 text-muted hover:bg-surface disabled:opacity-40"
+                >
                   <ChevronRight size={14} />
                 </button>
-              </div>
+              </nav>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── Add Candidate Modal ── */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-7 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
-              <h2 className="text-lg font-bold text-gray-900">Add New Candidate</h2>
-              <button onClick={closeAddModal} aria-label="Close" className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleAddCandidate} className="p-7 overflow-y-auto space-y-5">
-              {(isVendor || isRecruiter) && (
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Add to Job *</label>
-                  {assignedJobs.length === 0 ? (
-                    <p className="px-4 py-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
-                      No jobs are assigned to you yet.
-                    </p>
-                  ) : (
-                    <div className="relative">
-                      <select required value={selectedJobId} onChange={(e) => setSelectedJobId(e.target.value)}
-                        className="w-full px-4 py-3 pr-10 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
-                        <option value="">Select a job…</option>
-                        {assignedJobs.map((j) => <option key={j.id} value={j.id}>{j.title}{j.client?.name ? ` — ${j.client.name}` : ""}</option>)}
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-                  )}
-                </div>
+      <Modal
+        open={isAddModalOpen}
+        onClose={closeAddModal}
+        size="lg"
+        preventClose={savingCandidate}
+        title="Add new candidate"
+        description="Upload a resume to auto-fill, then review the details."
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeAddModal} disabled={savingCandidate}>Cancel</Button>
+            <Button
+              type="submit"
+              form="add-candidate-form"
+              disabled={resumeParsing || noJobsToAddTo}
+              loading={savingCandidate}
+              loadingText="Saving…"
+            >
+              {resumeParsing ? "Parsing…" : "Create profile"}
+            </Button>
+          </>
+        }
+      >
+        <form id="add-candidate-form" onSubmit={handleAddCandidate} className="space-y-5">
+          {(isVendor || isRecruiter) && (
+            <div>
+              <label htmlFor="cand-add-job" className="zh-label">Add to job <span className="text-danger-600">*</span></label>
+              {assignedJobs.length === 0 ? (
+                <p className="rounded-lg bg-warning-50 px-4 py-3 text-sm text-warning-700">
+                  No jobs are assigned to you yet.
+                </p>
+              ) : (
+                <select id="cand-add-job" required value={selectedJobId} onChange={(e) => setSelectedJobId(e.target.value)} className="zh-input">
+                  <option value="">Select a job…</option>
+                  {assignedJobs.map((j) => <option key={j.id} value={j.id}>{j.title}{j.client?.name ? ` — ${j.client.name}` : ""}</option>)}
+                </select>
               )}
+            </div>
+          )}
 
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  ["First Name", "first_name", "text", "e.g. John", true, ["name"]],
-                  ["Last Name", "last_name", "text", "e.g. Doe", true, ["name"]],
-                  ["Email Address", "email", "email", "john@example.com", false, []],
-                  ["Phone Number", "phone", "text", "+91 XXXXX XXXXX", false, []],
-                  ["Current Title", "current_title", "text", "e.g. Senior Engineer", false, []],
-                  ["Current Company", "current_company", "text", "e.g. Google", false, []],
-                  ["Preferred Location", "preferred_location", "text", "e.g. Bangalore or Remote", false, []],
-                  ["Notice Period (days)", "notice_period_days", "number", "e.g. 30", false, []],
-                  ["Current CTC (annual)", "current_ctc", "number", "e.g. 1200000", false, []],
-                  ["Expected CTC (annual)", "expected_ctc", "number", "e.g. 1500000", false, []],
-                ].map(([label, field, type, placeholder, required, aliases]) => {
-                  const flagged = isLowConfidence(lowConfidenceFields, field as string, ...((aliases as string[]) || []));
-                  return (
-                    <div key={field as string}>
-                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                        {label as string}
-                        {flagged && <span className={ConfidenceBadge}>needs review</span>}
-                      </label>
-                      <input
-                        required={required as boolean}
-                        type={type as string}
-                        value={(formData as any)[field as string]}
-                        onChange={(e) => setFormData((f) => ({ ...f, [field as string]: e.target.value }))}
-                        placeholder={placeholder as string}
-                        className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(flagged)}`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  {(() => {
-                    const skillsFlagged = isLowConfidence(lowConfidenceFields, "skills");
-                    return (
-                      <>
-                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                          Skills (comma separated)
-                          {skillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
-                        </label>
-                        <input type="text" value={formData.skills} onChange={(e) => setFormData((f) => ({ ...f, skills: e.target.value }))}
-                          placeholder="React, Node.js, TypeScript" className={`w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${confidenceInputClass(skillsFlagged)}`} />
-                      </>
-                    );
-                  })()}
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Source</label>
-                  <div className="relative">
-                    <select value={formData.source} onChange={(e) => setFormData((f) => ({ ...f, source: e.target.value }))}
-                      className="w-full px-4 py-2.5 pr-10 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
-                      {Object.entries(sourceLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Upload Resume (PDF/DOC/DOCX)</label>
-                <input type="file" accept=".pdf,.doc,.docx"
-                  onChange={(e) => { if (e.target.files?.[0]) { const f = e.target.files[0]; setResumeFile(f); parseResumeFile(f); } }}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                {resumeFile && <p className="text-xs text-gray-500 mt-1">Selected: {resumeFile.name}</p>}
-                {resumeParsing && <p className="text-xs text-blue-600 mt-1">Parsing resume…</p>}
-                {resumeParseMessage && <p className="text-xs text-emerald-700 mt-1">{resumeParseMessage}</p>}
-                {resumeParseError && <p className="text-xs text-red-600 mt-1">{resumeParseError}</p>}
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={closeAddModal} disabled={savingCandidate} className="flex-1 py-3 bg-gray-50 text-gray-700 font-semibold text-sm rounded-xl hover:bg-gray-100 disabled:opacity-50">Cancel</button>
-                <button type="submit" disabled={resumeParsing || savingCandidate || ((isVendor || isRecruiter) && assignedJobs.length === 0)}
-                  className="flex-1 py-3 bg-gray-900 text-white font-semibold text-sm rounded-xl hover:bg-gray-800 disabled:opacity-50">
-                  {resumeParsing ? "Parsing…" : savingCandidate ? "Saving…" : "Create Profile"}
-                </button>
-              </div>
-            </form>
+          <div>
+            <label htmlFor="cand-add-resume" className="zh-label">Resume (PDF/DOC/DOCX)</label>
+            <input
+              id="cand-add-resume"
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={(e) => { if (e.target.files?.[0]) { const f = e.target.files[0]; setResumeFile(f); parseResumeFile(f); } }}
+              className="zh-input file:mr-3 file:rounded-md file:border-0 file:bg-navy-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-navy-700"
+            />
+            {resumeFile && <p className="mt-1 text-xs text-muted">Selected: {resumeFile.name}</p>}
+            {resumeParsing && <p className="mt-1 text-xs text-navy-600" role="status">Parsing resume…</p>}
+            {resumeParseMessage && <p className="mt-1 text-xs text-success-700" role="status">{resumeParseMessage}</p>}
+            {resumeParseError && <p className="mt-1 text-xs text-danger-600" role="alert">{resumeParseError}</p>}
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[
+              ["First name", "first_name", "text", "e.g. John", true, ["name"]],
+              ["Last name", "last_name", "text", "e.g. Doe", true, ["name"]],
+              ["Email address", "email", "email", "john@example.com", false, []],
+              ["Phone number", "phone", "text", "+91 XXXXX XXXXX", false, []],
+              ["Current title", "current_title", "text", "e.g. Senior Engineer", false, []],
+              ["Current company", "current_company", "text", "e.g. Google", false, []],
+              ["Preferred location", "preferred_location", "text", "e.g. Bangalore or Remote", false, []],
+              ["Notice period (days)", "notice_period_days", "number", "e.g. 30", false, []],
+              ["Current CTC (annual)", "current_ctc", "number", "e.g. 1200000", false, []],
+              ["Expected CTC (annual)", "expected_ctc", "number", "e.g. 1500000", false, []],
+            ].map(([label, field, type, placeholder, required, aliases]) => {
+              const flagged = isLowConfidence(lowConfidenceFields, field as string, ...((aliases as string[]) || []));
+              const id = `cand-add-${field as string}`;
+              return (
+                <div key={field as string}>
+                  <label htmlFor={id} className="zh-label">
+                    {label as string}
+                    {required && <span className="text-danger-600"> *</span>}
+                    {flagged && <Badge tone="warning" className="ml-2">Needs review</Badge>}
+                  </label>
+                  <input
+                    id={id}
+                    required={required as boolean}
+                    type={type as string}
+                    value={(formData as any)[field as string]}
+                    onChange={(e) => setFormData((f) => ({ ...f, [field as string]: e.target.value }))}
+                    placeholder={placeholder as string}
+                    className={`zh-input ${flagged ? "border-warning-600 bg-warning-50" : ""}`}
+                  />
+                </div>
+              );
+            })}
+            {(() => {
+              const skillsFlagged = isLowConfidence(lowConfidenceFields, "skills");
+              return (
+                <div>
+                  <label htmlFor="cand-add-skills" className="zh-label">
+                    Skills (comma separated)
+                    {skillsFlagged && <Badge tone="warning" className="ml-2">Needs review</Badge>}
+                  </label>
+                  <input
+                    id="cand-add-skills"
+                    type="text"
+                    value={formData.skills}
+                    onChange={(e) => setFormData((f) => ({ ...f, skills: e.target.value }))}
+                    placeholder="React, Node.js, TypeScript"
+                    className={`zh-input ${skillsFlagged ? "border-warning-600 bg-warning-50" : ""}`}
+                  />
+                </div>
+              );
+            })()}
+            <div>
+              <label htmlFor="cand-add-source" className="zh-label">Source</label>
+              <select
+                id="cand-add-source"
+                value={formData.source}
+                onChange={(e) => setFormData((f) => ({ ...f, source: e.target.value }))}
+                className="zh-input"
+              >
+                {Object.entries(sourceLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+          </div>
+        </form>
+      </Modal>
 
       {viewingCandidate && (
         <CandidateModal
@@ -680,6 +675,6 @@ export default function CandidatesPage() {
           onClose={() => setComposeTarget(null)}
         />
       )}
-    </div>
+    </>
   );
 }

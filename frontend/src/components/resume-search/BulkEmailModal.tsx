@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Mail, Loader2, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Mail, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import api, { ApiError } from "../../lib/api";
 import type { Candidate } from "../../types";
 import { useNotify } from "../../hooks/useNotify";
+import { Button, Modal } from "../ui";
 
 // Same default subject the single-send hook (useSendEmail) uses.
 const BULK_EMAIL_SUBJECT = "Exciting Opportunity from ZorHire";
@@ -36,15 +37,6 @@ export default function BulkEmailModal({
   const notify = useNotify();
 
   const sending = phase === "sending";
-
-  // Close on Esc (not mid-send)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !sending) onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, sending]);
 
   const handleSend = async () => {
     setPhase("sending");
@@ -91,94 +83,85 @@ export default function BulkEmailModal({
   const n = candidates.length;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => !sending && onClose()}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bulk-email-title"
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-          <h3 id="bulk-email-title" className="font-semibold text-gray-900 flex items-center gap-2">
-            <Mail size={16} className="text-blue-600" />
-            {phase === "done" ? "Email results" : `Send to ${n} candidate${n === 1 ? "" : "s"}?`}
-          </h3>
-          <button onClick={onClose} disabled={sending} aria-label="Close" className="text-gray-400 hover:text-gray-600 disabled:opacity-40">
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4 text-sm">
-          {phase === "done" ? (
-            <div className="flex flex-col items-center gap-3 text-center">
-              {failures.length === 0 ? (
-                <CheckCircle2 size={36} className="text-emerald-500" />
-              ) : (
-                <AlertCircle size={36} className="text-amber-500" />
-              )}
-              <p className="font-semibold text-gray-900">Sent {sent}, failed {failures.length}</p>
-              {notConfigured && (
-                <p className="text-xs text-gray-600">
-                  Your email account is not connected.{" "}
-                  <Link to="/settings/email" className="text-blue-600 hover:underline" onClick={onClose}>
-                    Connect email
-                  </Link>
-                </p>
-              )}
-              {failures.length > 0 && (
-                <ul className="w-full text-left text-xs text-red-600 bg-red-50 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
-                  {failures.map((f, i) => (
-                    <li key={i}><span className="font-medium">{f.name}</span>: {f.reason}</li>
-                  ))}
-                </ul>
-              )}
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      preventClose={sending}
+      title={
+        <span className="flex items-center gap-2">
+          <Mail size={16} className="text-navy-600" aria-hidden="true" />
+          {phase === "done" ? "Email results" : `Send to ${n} candidate${n === 1 ? "" : "s"}?`}
+        </span>
+      }
+      footer={
+        phase === "done" ? (
+          <Button onClick={onClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose} disabled={sending}>
+              Cancel
+            </Button>
+            <Button onClick={handleSend} loading={sending}>
+              Send {n} email{n === 1 ? "" : "s"}
+            </Button>
+          </>
+        )
+      }
+    >
+      <div className="text-sm">
+        {phase === "done" ? (
+          <div className="flex flex-col items-center gap-3 text-center">
+            {failures.length === 0 ? (
+              <CheckCircle2 size={36} className="text-success-600" aria-hidden="true" />
+            ) : (
+              <AlertCircle size={36} className="text-warning-600" aria-hidden="true" />
+            )}
+            <p className="font-semibold text-ink">
+              Sent {sent}, failed {failures.length}
+            </p>
+            {notConfigured && (
+              <p className="text-xs text-muted">
+                Your email account is not connected.{" "}
+                <Link to="/settings/email" className="font-medium text-navy-600 hover:underline" onClick={onClose}>
+                  Connect email
+                </Link>
+              </p>
+            )}
+            {failures.length > 0 && (
+              <ul className="max-h-40 w-full space-y-1 overflow-y-auto rounded-lg bg-danger-50 p-3 text-left text-xs text-danger-700">
+                {failures.map((f, i) => (
+                  <li key={i}>
+                    <span className="font-medium">{f.name}</span>: {f.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted">Subject</p>
+              <p className="text-ink">{BULK_EMAIL_SUBJECT}</p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-1">Subject</p>
-                <p className="text-gray-900">{BULK_EMAIL_SUBJECT}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-1">Recipients</p>
-                <ul className="text-xs text-gray-700 bg-gray-50 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
-                  {candidates.map((c) => (
-                    <li key={c.id}>
-                      {fullName(c)} <span className="text-gray-400">{c.email || "(no email)"}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              {sending && (
-                <p className="text-xs text-gray-500 flex items-center gap-2">
-                  <Loader2 size={12} className="animate-spin" /> Sending {progress} of {n}…
-                </p>
-              )}
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted">Recipients</p>
+              <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-surface p-3 text-xs text-ink-soft">
+                {candidates.map((c) => (
+                  <li key={c.id} className="break-words">
+                    {fullName(c)} <span className="text-muted">{c.email || "(no email)"}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-          )}
-        </div>
-
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          {phase === "done" ? (
-            <button onClick={onClose} className="text-sm px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Done</button>
-          ) : (
-            <>
-              <button onClick={onClose} disabled={sending} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-                Cancel
-              </button>
-              <button
-                onClick={handleSend}
-                disabled={sending}
-                className="flex items-center gap-2 text-sm px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
-              >
-                {sending && <Loader2 size={13} className="animate-spin" />}
-                Send {n} email{n === 1 ? "" : "s"}
-              </button>
-            </>
-          )}
-        </div>
+            {sending && (
+              <p className="flex items-center gap-2 text-xs text-muted" role="status">
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" /> Sending {progress} of {n}…
+              </p>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

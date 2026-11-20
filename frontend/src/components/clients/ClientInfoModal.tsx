@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { X, Plus, Trash2, ChevronDown } from "lucide-react";
+import { useId, useState } from "react";
+import { Plus, Trash2, ChevronDown, Users } from "lucide-react";
+import { Button, EmptyState, Modal } from "../ui";
 import api from "../../lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,11 +26,13 @@ const TABS = ["Basic Info", "Stakeholders", "Business & Billing", "Contract & AI
 
 // ─── Reusable field primitives ────────────────────────────────────────────────
 
-function FieldLabel({ text, required }: { text: string; required?: boolean }) {
+const span = (colSpan?: boolean) => (colSpan ? " sm:col-span-2" : "");
+
+function FieldLabel({ text, required, htmlFor }: { text: string; required?: boolean; htmlFor?: string }) {
   return (
-    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+    <label htmlFor={htmlFor} className="zh-label">
       {text}
-      {required && <span className="text-red-500 ml-0.5">*</span>}
+      {required && <span className="ml-0.5 text-danger-600">*</span>}
     </label>
   );
 }
@@ -40,16 +43,18 @@ function InputField({
   label: string; value: string; onChange: (v: string) => void;
   type?: string; placeholder?: string; required?: boolean; colSpan?: boolean;
 }) {
+  const id = useId();
   return (
-    <div className={`space-y-1.5${colSpan ? " col-span-2" : ""}`}>
-      <FieldLabel text={label} required={required} />
+    <div className={span(colSpan)}>
+      <FieldLabel text={label} required={required} htmlFor={id} />
       <input
+        id={id}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required={required}
         placeholder={placeholder}
-        className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+        className="zh-input"
       />
     </div>
   );
@@ -61,15 +66,17 @@ function TextareaField({
   label: string; value: string; onChange: (v: string) => void;
   placeholder?: string; rows?: number; colSpan?: boolean;
 }) {
+  const id = useId();
   return (
-    <div className={`space-y-1.5${colSpan ? " col-span-2" : ""}`}>
-      <FieldLabel text={label} />
+    <div className={span(colSpan)}>
+      <FieldLabel text={label} htmlFor={id} />
       <textarea
+        id={id}
         rows={rows}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none"
+        className="zh-input resize-none"
       />
     </div>
   );
@@ -81,20 +88,22 @@ function SelectField({
   label: string; value: string; onChange: (v: string) => void;
   options: string[]; colSpan?: boolean;
 }) {
+  const id = useId();
   return (
-    <div className={`space-y-1.5${colSpan ? " col-span-2" : ""}`}>
-      <FieldLabel text={label} />
+    <div className={span(colSpan)}>
+      <FieldLabel text={label} htmlFor={id} />
       <div className="relative">
         <select
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none"
+          className="zh-input appearance-none pr-9"
         >
           {options.map((o) => (
             <option key={o} value={o}>{o}</option>
           ))}
         </select>
-        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
       </div>
     </div>
   );
@@ -106,28 +115,28 @@ function CheckboxField({
   id: string; label: string; checked: boolean; onChange: (v: boolean) => void; colSpan?: boolean;
 }) {
   return (
-    <div className={`space-y-1.5${colSpan ? " col-span-2" : ""}`}>
-      <FieldLabel text={label} />
-      <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl cursor-pointer" onClick={() => onChange(!checked)}>
+    <div className={`flex items-end${span(colSpan)}`}>
+      <label
+        htmlFor={id}
+        className="flex w-full cursor-pointer select-none items-center gap-3 rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink hover:border-line-strong"
+      >
         <input
           type="checkbox"
           id={id}
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
-          className="w-4 h-4 rounded accent-blue-600"
-          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 rounded accent-navy-600"
         />
-        <label htmlFor={id} className="text-sm text-gray-600 cursor-pointer select-none">{label}</label>
-      </div>
+        {label}
+      </label>
     </div>
   );
 }
 
 function SectionDivider({ title }: { title: string }) {
   return (
-    <div className="col-span-2 pt-3 pb-1">
-      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{title}</p>
-      <div className="h-px bg-gray-100 mt-1.5" />
+    <div className="border-b border-line pb-1.5 pt-2 sm:col-span-2">
+      <h3 className="text-sm font-semibold text-ink">{title}</h3>
     </div>
   );
 }
@@ -305,38 +314,41 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
 
   // ─── Stakeholder tab ────────────────────────────────────────────────────────
   const stakeholderInputCls =
-    "w-full px-4 py-3 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all";
+    "zh-input";
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[88vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
-
-        {/* ── Header ── */}
-        <div className="px-8 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
-          <div>
-            <h2 className="text-xl font-black text-[#111111] tracking-tight">Client Information</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Add a new client with complete details</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title="Add client"
+      description="Add a new client with complete details"
+      preventClose={loading}
+      bodyClassName="!p-0"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button type="submit" form="client-info-form" loading={loading} loadingText="Saving...">
+            Save client
+          </Button>
+        </>
+      }
+    >
         {/* ── Tabs ── */}
-        <div className="flex border-b border-gray-100 flex-shrink-0 overflow-x-auto px-2">
+        <div role="tablist" className="sticky top-0 z-[1] flex overflow-x-auto border-b border-line bg-white px-3 sm:px-4">
           {TABS.map((tab, i) => (
             <button
               key={tab}
               type="button"
+              role="tab"
+              aria-selected={activeTab === i}
               onClick={() => setActiveTab(i)}
-              className={`py-3.5 px-4 text-xs font-bold whitespace-nowrap border-b-2 transition-all flex-shrink-0 ${
+              className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
                 activeTab === i
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-gray-400 hover:text-gray-600"
+                  ? "border-navy-600 text-navy-700"
+                  : "border-transparent text-muted hover:text-ink"
               }`}
             >
               {tab}
@@ -345,12 +357,17 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
         </div>
 
         {/* ── Form ── */}
-        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-8">
+        <form id="client-info-form" onSubmit={handleSubmit}>
+          <div className="px-5 py-5 sm:px-6">
+            {error && (
+              <div role="alert" className="mb-4 rounded-lg border border-danger-600/20 bg-danger-50 px-4 py-3 text-sm text-danger-700">
+                {error}
+              </div>
+            )}
 
             {/* TAB 0 — Basic Info + Primary Contact */}
             {activeTab === 0 && (
-              <div className="grid grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SectionDivider title="Basic Client Information" />
 
                 <InputField label="Client Name" value={clientName} onChange={setClientName}
@@ -388,70 +405,70 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
             {/* TAB 1 — Stakeholders */}
             {activeTab === 1 && (
               <div className="space-y-5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-black text-gray-700">Stakeholders</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <h3 className="text-sm font-semibold text-ink">Stakeholders</h3>
+                    <p className="mt-0.5 text-sm text-muted">
                       Add multiple points of contact at this client
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={addStakeholder}
-                    className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus size={14} />
-                    Add Stakeholder
-                  </button>
+                  <Button variant="secondary" size="sm" onClick={addStakeholder} icon={<Plus size={14} />}>
+                    Add stakeholder
+                  </Button>
                 </div>
 
                 {stakeholders.length === 0 && (
-                  <div className="text-center py-14 border-2 border-dashed border-gray-200 rounded-2xl">
-                    <p className="text-sm text-gray-400 font-medium">No stakeholders added yet</p>
-                    <p className="text-xs text-gray-300 mt-1">Click "Add Stakeholder" to begin</p>
+                  <div className="rounded-xl border-2 border-dashed border-line">
+                    <EmptyState
+                      compact
+                      icon={<Users size={22} aria-hidden="true" />}
+                      title="No stakeholders added yet"
+                      description='Click "Add stakeholder" to add a point of contact.'
+                    />
                   </div>
                 )}
 
                 {stakeholders.map((s, i) => (
-                  <div key={i} className="p-5 border border-gray-100 rounded-2xl bg-gray-50/40 space-y-4">
+                  <div key={i} className="space-y-4 rounded-xl border border-line bg-surface p-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      <span className="text-sm font-medium text-ink">
                         Stakeholder {i + 1}
                       </span>
                       <button
                         type="button"
                         onClick={() => removeStakeholder(i)}
-                        className="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition-colors"
+                        aria-label={`Remove stakeholder ${i + 1}`}
+                        className="rounded-lg p-1.5 text-danger-600 transition-colors hover:bg-danger-50"
                       >
                         <Trash2 size={14} />
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
                         <FieldLabel text="Name" />
                         <input type="text" value={s.name}
                           onChange={(e) => updateStakeholder(i, "name", e.target.value)}
                           placeholder="Full name" className={stakeholderInputCls} />
                       </div>
-                      <div className="space-y-1.5">
+                      <div>
                         <FieldLabel text="Role" />
                         <input type="text" value={s.role}
                           onChange={(e) => updateStakeholder(i, "role", e.target.value)}
                           placeholder="e.g. Hiring Manager" className={stakeholderInputCls} />
                       </div>
-                      <div className="space-y-1.5">
+                      <div>
                         <FieldLabel text="Email" />
                         <input type="email" value={s.email}
                           onChange={(e) => updateStakeholder(i, "email", e.target.value)}
                           placeholder="email@company.com" className={stakeholderInputCls} />
                       </div>
-                      <div className="space-y-1.5">
+                      <div>
                         <FieldLabel text="Phone" />
                         <input type="text" value={s.phone}
                           onChange={(e) => updateStakeholder(i, "phone", e.target.value)}
                           placeholder="+91 98765 43210" className={stakeholderInputCls} />
                       </div>
-                      <div className="col-span-2 space-y-1.5">
+                      <div className="sm:col-span-2">
                         <FieldLabel text="Timezone" />
                         <input type="text" value={s.timezone}
                           onChange={(e) => updateStakeholder(i, "timezone", e.target.value)}
@@ -465,7 +482,7 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
 
             {/* TAB 2 — Business & Billing */}
             {activeTab === 2 && (
-              <div className="grid grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SectionDivider title="Business Details" />
 
                 <SelectField label="Engagement Type" value={engagementType}
@@ -500,7 +517,7 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
 
             {/* TAB 3 — Contract & AI */}
             {activeTab === 3 && (
-              <div className="grid grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SectionDivider title="Contract Details" />
 
                 <InputField label="Contract Start" value={contractStart}
@@ -535,7 +552,7 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
 
             {/* TAB 4 — Internal */}
             {activeTab === 4 && (
-              <div className="grid grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <SectionDivider title="Performance Metrics" />
 
                 <InputField label="Positions Closed" value={positionsClosed}
@@ -574,33 +591,7 @@ export default function ClientInfoModal({ onClose, onSuccess }: Props) {
               </div>
             )}
           </div>
-
-          {/* ── Footer ── */}
-          <div className="px-8 py-6 border-t border-gray-100 flex-shrink-0">
-            {error && (
-              <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-600">
-                {error}
-              </div>
-            )}
-            <div className="flex gap-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
-              >
-                {loading ? "Saving..." : "Save Client"}
-              </button>
-            </div>
-          </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

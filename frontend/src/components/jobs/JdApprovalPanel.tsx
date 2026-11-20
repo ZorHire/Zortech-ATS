@@ -7,7 +7,8 @@ import {
   useRejectJobMutation,
   type JobApproval,
 } from "../../store/api/jdLifecycleApi";
-import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { Button, Modal } from "../ui";
+import { getErrorMessage } from "../../lib/format";
 
 interface Props {
   jobId: string;
@@ -33,11 +34,10 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
   const [notes, setNotes] = useState("");
   const [actionError, setActionError] = useState("");
 
-  // Esc closes whichever confirm modal is open (not mid-request). No backdrop-close: it holds a typed note.
+  // Modal handles Esc (blocked mid-request). No backdrop-close: it holds a typed note.
   const closeModals = () => {
     setShowApproveModal(false); setShowRejectModal(false); setNotes(""); setActionError("");
   };
-  useEscapeKey(closeModals, (showApproveModal || showRejectModal) && !approving && !rejecting);
 
   const isApprover = userRole === "super_admin" || userRole === "accounts_manager";
   const canSubmit =
@@ -48,8 +48,8 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
     setActionError("");
     try {
       await submitForReview(jobId).unwrap();
-    } catch (e: any) {
-      setActionError(e?.data?.message ?? "Failed to submit for review.");
+    } catch (e) {
+      setActionError(getErrorMessage(e, "Failed to submit for review."));
     }
   };
 
@@ -59,8 +59,8 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
       await approveJob({ jobId, notes: notes.trim() || undefined }).unwrap();
       setShowApproveModal(false);
       setNotes("");
-    } catch (e: any) {
-      setActionError(e?.data?.message ?? "Failed to approve.");
+    } catch (e) {
+      setActionError(getErrorMessage(e, "Failed to approve."));
     }
   };
 
@@ -70,102 +70,68 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
       await rejectJob({ jobId, notes: notes.trim() || undefined }).unwrap();
       setShowRejectModal(false);
       setNotes("");
-    } catch (e: any) {
-      setActionError(e?.data?.message ?? "Failed to reject.");
+    } catch (e) {
+      setActionError(getErrorMessage(e, "Failed to reject."));
     }
   };
 
   if (isLoading) return null;
 
+  const modalOpen = showApproveModal || showRejectModal;
+  const isApprove = showApproveModal;
+  const busy = approving || rejecting;
+
   return (
     <>
-      {/* Modals */}
-      {showApproveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <CheckCircle size={18} className="text-emerald-600" /> Approve Job Description
-            </h3>
-            <p className="text-sm text-gray-500 mb-3">
-              Approving will set this job to <strong>Active</strong> and notify assigned vendors.
-            </p>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Note <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Approval comment…"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
-            />
-            {actionError && <p className="text-xs text-red-600 mt-2">{actionError}</p>}
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => { setShowApproveModal(false); setNotes(""); setActionError(""); }}
-                className="flex-1 border border-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={approving}
-                onClick={handleApprove}
-                className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {approving ? "Approving…" : "Confirm Approve"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRejectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <XCircle size={18} className="text-red-500" /> Reject Job Description
-            </h3>
-            <p className="text-sm text-gray-500 mb-3">
-              Rejecting will return this job to <strong>Draft</strong> for revision.
-            </p>
-            <label className="block text-xs font-medium text-gray-600 mb-1">
-              Reason <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="What needs to be corrected?"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
-            />
-            {actionError && <p className="text-xs text-red-600 mt-2">{actionError}</p>}
-            <div className="flex gap-3 mt-4">
-              <button
-                onClick={() => { setShowRejectModal(false); setNotes(""); setActionError(""); }}
-                className="flex-1 border border-gray-200 text-gray-700 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={rejecting}
-                onClick={handleReject}
-                className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50"
-              >
-                {rejecting ? "Rejecting…" : "Confirm Reject"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={modalOpen}
+        onClose={closeModals}
+        preventClose={busy}
+        size="sm"
+        title={isApprove ? "Approve job description" : "Reject job description"}
+        description={
+          isApprove ? (
+            <>Approving will set this job to <strong>Active</strong> and notify assigned vendors.</>
+          ) : (
+            <>Rejecting will return this job to <strong>Draft</strong> for revision.</>
+          )
+        }
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModals} disabled={busy}>Cancel</Button>
+            {isApprove ? (
+              <Button icon={<CheckCircle size={16} />} loading={approving} loadingText="Approving…" onClick={handleApprove}>
+                Approve
+              </Button>
+            ) : (
+              <Button variant="danger" icon={<XCircle size={16} />} loading={rejecting} loadingText="Rejecting…" onClick={handleReject}>
+                Reject
+              </Button>
+            )}
+          </>
+        }
+      >
+        <label htmlFor="jd-approval-notes" className="zh-label">
+          {isApprove ? "Note" : "Reason"} <span className="font-normal text-muted">(optional)</span>
+        </label>
+        <textarea
+          id="jd-approval-notes"
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={isApprove ? "Approval comment…" : "What needs to be corrected?"}
+          aria-describedby={actionError ? "jd-approval-error" : undefined}
+          className="zh-input resize-none"
+        />
+        {actionError && <p id="jd-approval-error" className="mt-1 text-xs text-danger-600">{actionError}</p>}
+      </Modal>
 
       {/* Panel */}
-      <div className="bg-white border border-gray-200 rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">
-          Approval Workflow
-        </h3>
+      <section className="zh-card p-5">
+        <h3 className="mb-4 text-base font-semibold text-ink">Approval workflow</h3>
 
-        {actionError && !showApproveModal && !showRejectModal && (
-          <p className="text-xs text-red-600 mb-3 bg-red-50 px-3 py-2 rounded-lg">{actionError}</p>
+        {actionError && !modalOpen && (
+          <p role="alert" className="mb-3 rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{actionError}</p>
         )}
 
         {/* Current approval status */}
@@ -174,35 +140,31 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
         {/* Actions */}
         <div className="mt-4 flex flex-wrap gap-2">
           {canSubmit && (
-            <button
-              disabled={submitting}
-              onClick={handleSubmit}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors"
-            >
-              <Send size={14} />
-              {submitting ? "Submitting…" : "Submit for Review"}
-            </button>
+            <Button icon={<Send size={16} />} loading={submitting} loadingText="Submitting…" onClick={handleSubmit}>
+              Submit for review
+            </Button>
           )}
 
           {isApprover && jobStatus === "pending_review" && (
             <>
-              <button
+              <Button
+                icon={<CheckCircle size={16} />}
                 onClick={() => { setNotes(""); setActionError(""); setShowApproveModal(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
               >
-                <CheckCircle size={14} /> Approve
-              </button>
-              <button
+                Approve
+              </Button>
+              <Button
+                variant="secondary"
+                icon={<XCircle size={16} />}
                 onClick={() => { setNotes(""); setActionError(""); setShowRejectModal(true); }}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
               >
-                <XCircle size={14} /> Reject
-              </button>
+                Reject
+              </Button>
             </>
           )}
 
           {!canSubmit && !(isApprover && jobStatus === "pending_review") && (
-            <p className="text-xs text-gray-400">
+            <p className="text-sm text-muted">
               {jobStatus === "active"
                 ? "This job has been approved and is active."
                 : jobStatus === "pending_review"
@@ -211,16 +173,16 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
             </p>
           )}
         </div>
-      </div>
+      </section>
     </>
   );
 }
 
 function ApprovalStatus({ approval }: { approval: JobApproval }) {
   const statusConfig = {
-    pending: { icon: <Clock size={14} className="text-amber-500" />, label: "Pending Review", bg: "bg-amber-50 border-amber-200" },
-    approved: { icon: <CheckCircle size={14} className="text-emerald-600" />, label: "Approved", bg: "bg-emerald-50 border-emerald-200" },
-    rejected: { icon: <XCircle size={14} className="text-red-500" />, label: "Rejected", bg: "bg-red-50 border-red-200" },
+    pending: { icon: <Clock size={15} className="text-warning-600" />, label: "Pending review", bg: "bg-warning-50 border-brand-100" },
+    approved: { icon: <CheckCircle size={15} className="text-success-600" />, label: "Approved", bg: "bg-success-50 border-emerald-100" },
+    rejected: { icon: <XCircle size={15} className="text-danger-600" />, label: "Rejected", bg: "bg-danger-50 border-red-100" },
   };
   const cfg = statusConfig[approval.status];
 
@@ -228,22 +190,22 @@ function ApprovalStatus({ approval }: { approval: JobApproval }) {
     <div className={`rounded-lg border p-3 ${cfg.bg}`}>
       <div className="flex items-center gap-2 mb-1">
         {cfg.icon}
-        <span className="text-sm font-semibold text-gray-800">{cfg.label}</span>
+        <span className="text-sm font-semibold text-ink">{cfg.label}</span>
       </div>
-      <p className="text-xs text-gray-500">
-        Submitted by <span className="font-medium text-gray-700">{approval.submitter_name ?? "Unknown"}</span>
+      <p className="text-xs text-muted">
+        Submitted by <span className="font-medium text-ink">{approval.submitter_name ?? "Unknown"}</span>
         {" "}on {formatDate(approval.submitted_at)}
         {approval.version_num != null && ` (v${approval.version_num})`}
       </p>
       {approval.reviewed_at && (
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-muted mt-0.5">
           {approval.status === "approved" ? "Approved" : "Rejected"} by{" "}
-          <span className="font-medium text-gray-700">{approval.reviewer_name ?? "Unknown"}</span>
+          <span className="font-medium text-ink">{approval.reviewer_name ?? "Unknown"}</span>
           {" "}on {formatDate(approval.reviewed_at)}
         </p>
       )}
       {approval.notes && (
-        <p className="text-xs text-gray-600 mt-2 italic">&ldquo;{approval.notes}&rdquo;</p>
+        <p className="mt-2 text-xs italic text-ink-soft">&ldquo;{approval.notes}&rdquo;</p>
       )}
     </div>
   );

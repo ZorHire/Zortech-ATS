@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarCheck, CheckCircle2, Mail, Users, Workflow, Building2 } from "lucide-react";
 import { useRequestDemoMutation } from "../store/api/demoApi";
 import type { DemoRequestBody } from "../store/api/demoApi";
+import { Button } from "../components/ui";
 
 const SALES_EMAIL = "tech@zortechs.in";
 const TEAM_SIZES = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
@@ -43,8 +44,7 @@ function mailtoFor(f: DemoRequestBody): string {
   return `mailto:${SALES_EMAIL}?subject=${encodeURIComponent(`ZorHire demo request: ${f.company}`)}&body=${encodeURIComponent(lines.join("\n"))}`;
 }
 
-const inputCls =
-  "w-full rounded-lg border border-[#E3E7EC] bg-white px-3.5 py-2.5 text-sm text-[#262626] placeholder:text-[#9AA4AE] focus:border-[#1A4277] focus:outline-none focus:ring-2 focus:ring-[#1A4277]/15";
+const inputCls = "zh-input";
 
 function Field({
   id,
@@ -61,12 +61,12 @@ function Field({
 }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-[#262626]">
-        {label} {optional && <span className="font-normal text-[#5F6B76]">(optional)</span>}
+      <label htmlFor={id} className="zh-label">
+        {label} {optional && <span className="font-normal text-muted">(optional)</span>}
       </label>
       {children}
       {error && (
-        <p id={`${id}-error`} className="mt-1 text-xs text-[#B42318]">
+        <p id={`${id}-error`} className="mt-1 text-xs text-danger-600">
           {error}
         </p>
       )}
@@ -116,14 +116,15 @@ export default function BookDemoPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#F6F8FB] text-[#262626]">
-      <header className="border-b border-[#E3E7EC] bg-white">
+    <div className="min-h-screen bg-surface text-ink">
+      <header className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link to="/" className="flex items-center gap-2 text-sm text-[#5F6B76] hover:text-[#262626]">
+          <Link to="/" className="flex items-center gap-2 text-sm text-muted hover:text-ink">
             <ArrowLeft size={16} aria-hidden="true" />
             <img src="/brand/zortech-logo.png" alt="ZorTech" className="h-6 w-auto" />
+            <span className="hidden border-l border-line pl-2 font-semibold text-navy-700 sm:inline">ZorHire</span>
           </Link>
-          <Link to="/login" className="text-sm font-semibold text-[#1A4277] hover:underline">
+          <Link to="/login" className="text-sm font-semibold text-navy-600 hover:underline">
             Sign in
           </Link>
         </div>
@@ -131,11 +132,11 @@ export default function BookDemoPage() {
 
       <main className="mx-auto grid max-w-6xl gap-10 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_minmax(0,480px)] lg:py-16">
         <section>
-          <p className="text-sm font-semibold uppercase tracking-wide text-[#F7911E]">ZorHire ATS</p>
-          <h1 className="mt-2 text-3xl font-semibold leading-tight text-[#0F2A4F] sm:text-4xl">
+          <p className="text-sm font-semibold uppercase tracking-wide text-brand-700">ZorHire ATS</p>
+          <h1 className="mt-2 text-3xl font-semibold leading-tight text-navy-800 sm:text-4xl">
             Book a demo
           </h1>
-          <p className="mt-4 max-w-md text-base leading-7 text-[#5F6B76]">
+          <p className="mt-4 max-w-md text-base leading-7 text-muted">
             See how ZorHire runs jobs, candidates, vendors and client submissions in one place. In about 30 minutes we'll
             walk through your hiring workflow and, if it's a fit, set up your company workspace.
           </p>
@@ -146,8 +147,8 @@ export default function BookDemoPage() {
               { icon: Building2, text: "Your own company workspace, set up by our team" },
               { icon: CalendarCheck, text: "We reply within one business day to schedule" },
             ].map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-start gap-3 text-sm text-[#262626]">
-                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#FFF4E6] text-[#B85F00]">
+              <li key={text} className="flex items-start gap-3 text-sm text-ink">
+                <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-700">
                   <Icon size={15} aria-hidden="true" />
                 </span>
                 {text}
@@ -156,22 +157,22 @@ export default function BookDemoPage() {
           </ul>
         </section>
 
-        <section className="rounded-2xl border border-[#E3E7EC] bg-white p-6 shadow-sm sm:p-8">
+        <section className="zh-card p-6 sm:p-8">
           {sentMessage ? (
             <div className="py-8 text-center" role="status">
-              <CheckCircle2 size={44} className="mx-auto text-[#1C6B3A]" aria-hidden="true" />
-              <h2 className="mt-4 text-xl font-semibold text-[#0F2A4F]">Request received</h2>
-              <p className="mt-2 text-sm text-[#5F6B76]">{sentMessage}</p>
-              <Link to="/" className="mt-6 inline-block text-sm font-semibold text-[#1A4277] hover:underline">
+              <CheckCircle2 size={44} className="mx-auto text-success-600" aria-hidden="true" />
+              <h2 className="mt-4 text-xl font-semibold text-navy-800">Request received</h2>
+              <p className="mt-2 text-sm text-muted">{sentMessage}</p>
+              <Link to="/" className="mt-6 inline-block text-sm font-semibold text-navy-600 hover:underline">
                 Back to home
               </Link>
             </div>
           ) : (
             <form onSubmit={submit} noValidate className="space-y-4">
-              <h2 className="text-lg font-semibold text-[#0F2A4F]">Tell us about your team</h2>
+              <h2 className="text-lg font-semibold text-navy-800">Tell us about your team</h2>
 
               {sendFailed && (
-                <div role="alert" className="rounded-lg border border-[#F7911E]/40 bg-[#FFF4E6] p-3 text-sm text-[#7A3E00]">
+                <div role="alert" className="rounded-lg border border-brand-300 bg-brand-50 p-3 text-sm text-warning-700">
                   We couldn't send your request right now.{" "}
                   <a href={mailtoFor(form)} className="inline-flex items-center gap-1 font-semibold underline">
                     <Mail size={14} aria-hidden="true" /> Email it to {SALES_EMAIL}
@@ -218,16 +219,12 @@ export default function BookDemoPage() {
                 <input id="demo-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={set("website")} />
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full rounded-lg bg-[#1A4277] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0F2A4F] disabled:opacity-60"
-              >
-                {isLoading ? "Sending…" : "Request a demo"}
-              </button>
-              <p className="text-center text-xs text-[#5F6B76]">
+              <Button type="submit" size="lg" fullWidth loading={isLoading} loadingText="Sending…">
+                Request a demo
+              </Button>
+              <p className="text-center text-xs text-muted">
                 Prefer email? Write to{" "}
-                <a href={`mailto:${SALES_EMAIL}`} className="font-medium text-[#1A4277] hover:underline">
+                <a href={`mailto:${SALES_EMAIL}`} className="font-medium text-navy-600 hover:underline">
                   {SALES_EMAIL}
                 </a>
               </p>

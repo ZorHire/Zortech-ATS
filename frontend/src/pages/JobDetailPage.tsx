@@ -1,13 +1,12 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../lib/api';
 import {
-  ArrowLeft,
   MapPin,
   Users,
   Clock,
   Briefcase,
-  ChevronRight,
   ChevronDown,
   Mail,
   Building2,
@@ -15,9 +14,8 @@ import {
   UserPlus,
   Sparkles,
   Globe,
+  IndianRupee,
 } from 'lucide-react';
-import Header from '../components/layout/Header';
-import { jobStatusLabels } from '../lib/mockData';
 import { useGetJobQuery, useUpdateJobMutation } from '../store/api/jobApi';
 import { useAppSelector } from '../hooks/useAppSelector';
 import { selectCurrentUser } from '../store/slices/authSlice';
@@ -29,24 +27,11 @@ import JdVersionHistory from '../components/jobs/JdVersionHistory';
 import JobBoardStatusSection from '../components/jobs/JobBoardStatusSection';
 import JobBoardPublishModal from '../components/jobs/JobBoardPublishModal';
 import { useNotify } from '../hooks/useNotify';
-import { formatINR, getErrorMessage } from '../lib/format';
-
-const priorityColors: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700',
-  high: 'bg-orange-100 text-orange-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-green-100 text-green-700',
-};
-
-const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-600',
-  pending_review: 'bg-amber-100 text-amber-700',
-  active: 'bg-emerald-100 text-emerald-700',
-  on_hold: 'bg-slate-100 text-slate-600',
-  closed_filled: 'bg-blue-100 text-blue-700',
-  closed_cancelled: 'bg-red-100 text-red-600',
-  expired: 'bg-red-100 text-red-600',
-};
+import { formatINR, getErrorMessage, getErrorStatus } from '../lib/format';
+import {
+  Badge, Button, EmptyState, ErrorState, PageHeader, Skeleton, buttonClasses, useConfirm,
+} from '../components/ui';
+import { JobStatusBadge, PriorityBadge, Avatar } from '../components/jobs/jobBadges';
 
 const workModeLabel: Record<string, string> = {
   remote: 'Remote',
@@ -74,10 +59,22 @@ const STATUS_OPTIONS = [
   { value: 'expired', label: 'Expired' },
 ];
 
+function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <section>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-ink">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const profile = useAppSelector(selectCurrentUser);
-  const { data: job, isLoading, error, refetch } = useGetJobQuery(id!, { skip: !id });
+  const { data: job, isLoading, error, refetch, isFetching } = useGetJobQuery(id!, { skip: !id });
   const [updateJob, { isLoading: statusChanging }] = useUpdateJobMutation();
   const [isAddCandidateOpen, setIsAddCandidateOpen] = useState(false);
   const [matches, setMatches] = useState<CandidateMatch[] | null>(null);
@@ -85,6 +82,7 @@ export default function JobDetailPage() {
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
   const notify = useNotify();
+  const confirm = useConfirm();
 
   const handleFindMatches = async () => {
     if (!id) return;
@@ -93,8 +91,8 @@ export default function JobDetailPage() {
     try {
       const data = await api.post(`/jobs/${id}/matches`, {});
       setMatches(data.matches ?? []);
-    } catch (err: any) {
-      setMatchesError(err.message || 'Failed to find matching candidates');
+    } catch (err: unknown) {
+      setMatchesError(getErrorMessage(err, 'Failed to find matching candidates'));
     } finally {
       setMatchesLoading(false);
     }
@@ -115,7 +113,12 @@ export default function JobDetailPage() {
     if (!job || !id) return;
     if (newStatus === 'closed_filled' || newStatus === 'closed_cancelled') {
       const label = STATUS_OPTIONS.find((o) => o.value === newStatus)?.label ?? newStatus;
-      if (!window.confirm(`Change this job to ${label}? This stops hiring on the job.`)) return;
+      const ok = await confirm({
+        title: `Change this job to ${label}?`,
+        message: 'This stops hiring on the job.',
+        confirmText: 'Change status',
+      });
+      if (!ok) return;
     }
     try {
       await updateJob({ id, body: { status: newStatus } }).unwrap();
@@ -127,38 +130,48 @@ export default function JobDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Job Details" subtitle="Loading..." />
-        <div className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-blue-600/20 border-t-blue-600 rounded-full animate-spin" />
+      <>
+        <PageHeader title="Job details" breadcrumbs={[{ label: 'Jobs', to: '/jobs' }, { label: 'Loading…' }]} />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8" role="status" aria-label="Loading job">
+          <div className="zh-card space-y-4 p-6">
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-4 w-40" />
+            <Skeleton className="h-4 w-full max-w-xl" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+          <Skeleton className="h-20 w-full rounded-xl" />
         </div>
-      </div>
+      </>
     );
   }
 
   if (error || !job) {
+    const notFound = !error || getErrorStatus(error) === 404;
     return (
-      <div className="flex flex-col flex-1 overflow-hidden">
-        <Header title="Job Details" subtitle="Error" />
-        <div className="flex-1 flex items-center justify-center p-6">
-          <div className="text-center">
-            <Briefcase size={40} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-gray-700 font-medium mb-1">
-              {(error as any)?.data?.message || 'Job not found'}
-            </p>
-            <Link to="/jobs" className="text-blue-600 text-sm hover:underline mt-2 block">
-              Back to jobs
-            </Link>
+      <>
+        <PageHeader title="Job details" breadcrumbs={[{ label: 'Jobs', to: '/jobs' }, { label: 'Not found' }]} />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <div className="zh-card">
+            {notFound ? (
+              <EmptyState
+                icon={<Briefcase size={22} />}
+                title="Job not found"
+                description="It may have been deleted, or you don't have access to it."
+                action={<Link to="/jobs" className={buttonClasses('secondary')}>Back to jobs</Link>}
+              />
+            ) : (
+              <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
+            )}
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   const salary =
     job.salary_min && job.salary_max
       ? `${formatINR(job.salary_min)} – ${formatINR(job.salary_max)}`
-      : 'Not specified';
+      : 'Salary not specified';
 
   const booleanQueries = generateBooleanQueries({
     title: job.title,
@@ -169,85 +182,62 @@ export default function JobDetailPage() {
     experience_max: job.experience_max,
   });
 
+  const subtitle = [job.client?.name, job.location].filter(Boolean).join(' · ');
+  const showInternal = profile && profile.role !== 'vendor_user' && (profile.role as string) !== 'client_user';
+
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
+    <>
+      <PageHeader
         title={job.title}
-        subtitle={`${job.client?.name ?? ''} · ${job.location ?? ''}`}
+        subtitle={subtitle || undefined}
+        breadcrumbs={[{ label: 'Jobs', to: '/jobs' }, { label: job.title }]}
         actions={
-          <div className="flex items-center gap-2">
-            <Link
-              to={`/pipeline/${id}`}
-              className="flex items-center gap-2 px-3 py-2 border border-emerald-200 rounded-lg text-sm text-emerald-700 hover:bg-emerald-50 font-medium transition-colors"
-            >
-              <TrendingUp size={14} />
-              View Pipeline
+          <>
+            <Link to={`/pipeline/${id}`} className={buttonClasses('secondary')}>
+              <TrendingUp size={16} />
+              Pipeline
             </Link>
-            <button
-              onClick={() => setIsAddCandidateOpen(true)}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              <UserPlus size={14} />
-              Add Candidate
-            </button>
             {canAssignVendors && (
               <Link
                 to="/vendors"
                 title="Open Vendors and use “Assign JD” to send this job to vendors"
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                className={buttonClasses('secondary')}
               >
-                <Mail size={14} />
-                Send to Vendors
+                <Mail size={16} />
+                Send to vendors
               </Link>
             )}
             {canEditStatus && (
-              <button
-                onClick={() => setIsPublishBoardsOpen(true)}
-                className="flex items-center gap-2 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-              >
-                <Globe size={14} />
-                Publish to Boards
-              </button>
+              <Button variant="secondary" icon={<Globe size={16} />} onClick={() => setIsPublishBoardsOpen(true)}>
+                Publish to boards
+              </Button>
             )}
-          </div>
+            <Button icon={<UserPlus size={16} />} onClick={() => setIsAddCandidateOpen(true)}>
+              Add candidate
+            </Button>
+          </>
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Link to="/jobs" className="hover:text-blue-600 flex items-center gap-1 transition-colors">
-            <ArrowLeft size={14} />
-            Jobs
-          </Link>
-          <ChevronRight size={14} />
-          <span className="text-gray-900 font-medium truncate">{job.title}</span>
-        </div>
-
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         {/* Main info card */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
-          {/* Title + badges */}
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-bold text-gray-900">{job.title}</h2>
-              <div className="flex items-center gap-1.5 mt-1">
-                <Building2 size={14} className="text-gray-400" />
-                <span className="text-sm text-gray-500">{job.client?.name}</span>
-                {job.client?.tier === 'priority' && (
-                  <span className="text-xs bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-medium">
-                    Priority
-                  </span>
-                )}
-              </div>
+        <div className="zh-card space-y-6 p-5 sm:p-6">
+          {/* Client + badges */}
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5 text-sm text-muted">
+              <Building2 size={15} />
+              <span className="truncate">{job.client?.name ?? 'No client'}</span>
+              {job.client?.tier === 'priority' && <Badge tone="brand">Priority client</Badge>}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canEditStatus ? (
                 <div className="relative">
                   <select
+                    aria-label="Job status"
                     value={job.status}
                     onChange={(e) => handleStatusChange(e.target.value)}
                     disabled={statusChanging}
-                    className={`text-xs pl-2.5 pr-7 py-1 rounded-full font-medium cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-0 transition-opacity ${statusColors[job.status]} ${statusChanging ? 'opacity-60' : ''}`}
+                    className="cursor-pointer appearance-none rounded-lg border border-line bg-white py-1 pl-2.5 pr-7 text-xs font-medium text-ink hover:border-line-strong disabled:opacity-60"
                   >
                     {STATUS_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -255,204 +245,168 @@ export default function JobDetailPage() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown
-                    size={10}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50"
-                  />
+                  <ChevronDown size={12} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-muted" />
                 </div>
               ) : (
-                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusColors[job.status]}`}>
-                  {jobStatusLabels[job.status]}
-                </span>
+                <JobStatusBadge status={job.status} />
               )}
-              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${priorityColors[job.priority]}`}>
-                {job.priority.charAt(0).toUpperCase() + job.priority.slice(1)} Priority
-              </span>
+              <PriorityBadge priority={job.priority} />
             </div>
           </div>
 
           {/* Meta row */}
-          <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-soft">
             {job.location && (
               <span className="flex items-center gap-1.5">
-                <MapPin size={14} className="text-gray-400" />
+                <MapPin size={15} className="text-muted" />
                 {job.location}
               </span>
             )}
             <span className="flex items-center gap-1.5">
-              <Briefcase size={14} className="text-gray-400" />
-              {workModeLabel[job.work_mode]}
+              <Briefcase size={15} className="text-muted" />
+              {workModeLabel[job.work_mode] ?? job.work_mode}
             </span>
             <span className="flex items-center gap-1.5">
-              <Clock size={14} className="text-gray-400" />
+              <Clock size={15} className="text-muted" />
               {job.experience_min}–{job.experience_max} yrs
             </span>
             <span className="flex items-center gap-1.5">
-              <Users size={14} className="text-gray-400" />
+              <Users size={15} className="text-muted" />
               {job.headcount} headcount
             </span>
-            <span className="text-gray-500">{salary}</span>
-            {job.department && <span className="text-gray-500">{job.department}</span>}
+            <span className="flex items-center gap-1.5">
+              <IndianRupee size={15} className="text-muted" />
+              {salary}
+            </span>
+            {job.department && <span>{job.department}</span>}
           </div>
 
           {/* Skills */}
           {job.mandatory_skills.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Mandatory Skills
-              </p>
+            <Section title="Mandatory skills">
               <div className="flex flex-wrap gap-1.5">
                 {job.mandatory_skills.map((skill) => (
-                  <span
-                    key={skill}
-                    className="text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg border border-blue-100 font-medium"
-                  >
-                    {skill}
-                  </span>
+                  <Badge key={skill} tone="navy">{skill}</Badge>
                 ))}
               </div>
-            </div>
+            </Section>
           )}
 
           {job.preferred_skills && job.preferred_skills.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Preferred Skills
-              </p>
+            <Section title="Preferred skills">
               <div className="flex flex-wrap gap-1.5">
                 {job.preferred_skills.map((skill) => (
-                  <span
-                    key={skill}
-                    className="text-xs bg-gray-50 text-gray-600 px-2.5 py-1 rounded-lg border border-gray-200 font-medium"
-                  >
-                    {skill}
-                  </span>
+                  <Badge key={skill}>{skill}</Badge>
                 ))}
               </div>
-            </div>
+            </Section>
           )}
 
           {/* Sourcing — boolean search strings for external job boards */}
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-              Sourcing — Boolean Search
-            </p>
-            <div className="space-y-2">
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between gap-3 mb-1.5">
-                  <p className="text-xs font-medium text-gray-500">LinkedIn (X-ray search via Google)</p>
+          <Section title="Sourcing — Boolean search">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              <div className="rounded-lg border border-line bg-surface p-3">
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium text-muted">LinkedIn (X-ray search via Google)</p>
                   <CopyButton text={booleanQueries.linkedin} />
                 </div>
-                <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.linkedin}</p>
+                <p className="break-all font-mono text-xs text-ink-soft">{booleanQueries.linkedin}</p>
               </div>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between gap-3 mb-1.5">
-                  <p className="text-xs font-medium text-gray-500">Naukri, Indeed, Monster, Glassdoor</p>
+              <div className="rounded-lg border border-line bg-surface p-3">
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium text-muted">Naukri, Indeed, Monster, Glassdoor</p>
                   <CopyButton text={booleanQueries.generic} />
                 </div>
-                <p className="text-xs font-mono text-gray-700 break-all">{booleanQueries.generic}</p>
+                <p className="break-all font-mono text-xs text-ink-soft">{booleanQueries.generic}</p>
               </div>
             </div>
-          </div>
+          </Section>
 
           {/* Matching — vector-similarity candidate search */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                Matching Candidates
-              </p>
-              <button
+          <Section
+            title="Matching candidates"
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Sparkles size={14} />}
                 onClick={handleFindMatches}
-                disabled={matchesLoading}
-                className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-60"
+                loading={matchesLoading}
+                loadingText="Searching…"
               >
-                <Sparkles size={13} />
-                {matchesLoading ? 'Searching…' : 'Find Matching Candidates'}
-              </button>
-            </div>
-
+                Find matching candidates
+              </Button>
+            }
+          >
             {matchesError && (
-              <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2.5">
+              <p role="alert" className="rounded-lg border border-danger-50 bg-danger-50 p-2.5 text-sm text-danger-700">
                 {matchesError}
               </p>
             )}
 
             {matches && matches.length === 0 && !matchesError && (
-              <p className="text-xs text-gray-500">
+              <p className="text-sm text-muted">
                 No matching candidates found — candidates need an embedding before they can be matched.
               </p>
             )}
 
             {matches && matches.length > 0 && (
-              <div className="space-y-1.5">
+              <ul className="space-y-1.5">
                 {matches.map((c) => (
-                  <div
+                  <li
                     key={c.id}
-                    className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-3 py-2"
                   >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {c.first_name} {c.last_name}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {c.current_title || 'No title'}
-                        {c.current_location ? ` · ${c.current_location}` : ''}
-                      </p>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <Avatar name={`${c.first_name} ${c.last_name}`} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-ink">
+                          {c.first_name} {c.last_name}
+                        </p>
+                        <p className="truncate text-xs text-muted">
+                          {c.current_title || 'No title'}
+                          {c.current_location ? ` · ${c.current_location}` : ''}
+                        </p>
+                      </div>
                     </div>
-                    <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex-shrink-0">
-                      {Math.round(c.similarity * 100)}% match
-                    </span>
-                  </div>
+                    <Badge tone="success">{Math.round(c.similarity * 100)}% match</Badge>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
-          </div>
+          </Section>
 
           {/* Description */}
           {job.description && (
-            <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Description
-              </p>
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                {job.description}
-              </p>
-            </div>
+            <Section title="Description">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">{job.description}</p>
+            </Section>
           )}
         </div>
 
         {/* Pipeline CTA */}
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-5 flex items-center justify-between gap-4">
+        <div className="zh-card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-semibold text-gray-900">Candidate Pipeline</p>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="font-semibold text-ink">Candidate pipeline</p>
+            <p className="mt-0.5 text-sm text-muted">
               {job.application_count
                 ? `${job.application_count} candidate${job.application_count !== 1 ? 's' : ''} in pipeline`
                 : 'No candidates added yet'}
             </p>
           </div>
-          <Link
-            to={`/pipeline/${id}`}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex-shrink-0"
-          >
-            <TrendingUp size={15} />
-            Open Pipeline
+          <Link to={`/pipeline/${id}`} className={buttonClasses('secondary', 'md', 'shrink-0')}>
+            <TrendingUp size={16} />
+            Open pipeline
           </Link>
         </div>
 
         {/* Job Board Distribution */}
-        {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
-          <JobBoardStatusSection jobId={id!} />
-        )}
+        {showInternal && <JobBoardStatusSection jobId={id!} />}
 
         {/* Approval Workflow + Version History — only for non-portal roles */}
-        {profile && profile.role !== 'vendor_user' && profile.role !== 'client_user' && (
+        {showInternal && profile && (
           <>
-            <JdApprovalPanel
-              jobId={id!}
-              jobStatus={job.status}
-              userRole={profile.role}
-            />
+            <JdApprovalPanel jobId={id!} jobStatus={job.status} userRole={profile.role} />
             <JdVersionHistory jobId={id!} />
           </>
         )}
@@ -473,6 +427,6 @@ export default function JobDetailPage() {
           onSuccess={() => {}}
         />
       )}
-    </div>
+    </>
   );
 }

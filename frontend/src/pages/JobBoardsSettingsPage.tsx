@@ -1,27 +1,46 @@
-import { useState } from 'react';
-import { Globe, CheckCircle2, Plus, Trash2, Loader2, X, Eye, EyeOff } from 'lucide-react';
-import Header from '../components/layout/Header';
+import { useId, useState } from 'react';
+import { Globe, CheckCircle2, Plus, Trash2, Eye, EyeOff, Webhook } from 'lucide-react';
 import {
   useListBoardsQuery,
   useConnectBoardMutation,
   useDisconnectBoardMutation,
 } from '../store/api/jobBoardsApi';
 import type { BoardInfo } from '../store/api/jobBoardsApi';
+import { Badge, Button, EmptyState, ErrorState, Modal, PageHeader, Skeleton, useConfirm } from '../components/ui';
+import { useNotify } from '../hooks/useNotify';
+import { getErrorMessage } from '../lib/format';
 
 // ── Connect modal ─────────────────────────────────────────────────────────────
 
 function ConnectModal({ board, onClose }: { board: BoardInfo; onClose: () => void }) {
+  const notify = useNotify();
+  const uid = useId();
+  const fid = (k: string) => `${uid}-${k}`;
   const [connectBoard, { isLoading }] = useConnectBoardMutation();
   const [form, setForm]   = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+
+  const allFields = [
+    ...board.configFields,
+    { key: 'webhook_secret', label: 'Webhook secret (optional)', placeholder: 'Shared secret to verify incoming webhooks', required: false, secret: true },
+  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
+    const errs: Record<string, string> = {};
+    for (const f of allFields) {
+      if ((f.required || f.key === 'access_token') && !(form[f.key] ?? '').trim()) {
+        errs[f.key] = f.key === 'access_token' ? 'API key / access token is required.' : `${f.label.replace(/\s*\*$/, '')} is required.`;
+      }
+    }
+    setFieldErrors(errs);
+    if (Object.keys(errs).length) return;
+
     const access_token = form['access_token'] ?? '';
-    if (!access_token) { setError('API Key / Access Token is required.'); return; }
 
     // Build extra_config from form keys prefixed with 'extra_config.'
     const extra_config: Record<string, unknown> = {};
@@ -39,146 +58,148 @@ function ConnectModal({ board, onClose }: { board: BoardInfo; onClose: () => voi
         webhook_secret:   form['webhook_secret']   || undefined,
         extra_config:     Object.keys(extra_config).length ? extra_config : undefined,
       }).unwrap();
+      notify.success(`${board.name} connected`);
       onClose();
     } catch (err: unknown) {
-      setError((err as { data?: { message?: string } })?.data?.message ?? 'Connection failed');
+      setError(getErrorMessage(err, 'Connection failed'));
     }
   };
 
-  const allFields = [
-    ...board.configFields,
-    { key: 'webhook_secret', label: 'Webhook Secret (optional)', placeholder: 'Shared secret to verify incoming webhooks', required: false, secret: false },
-  ];
-
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${board.color}`} />
-            <h2 className="text-base font-semibold text-gray-900">Connect {board.name}</h2>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-            <X size={18} />
-          </button>
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      preventClose={isLoading}
+      title={`Connect ${board.name}`}
+      description="Credentials are encrypted with AES-256-GCM before storage."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={isLoading}>Cancel</Button>
+          <Button type="submit" form={fid('form')} loading={isLoading}>Save credentials</Button>
+        </>
+      }
+    >
+      <form id={fid('form')} onSubmit={handleSubmit} noValidate autoComplete="off" className="space-y-4">
+        {error && (
+          <p role="alert" className="rounded-lg border border-danger-600/20 bg-danger-50 px-3 py-2 text-sm text-danger-700">
+            {error}
+          </p>
+        )}
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {allFields.map((field) => (
+        {allFields.map((field) => {
+          const id = fid(field.key);
+          const err = fieldErrors[field.key];
+          const required = field.required || field.key === 'access_token';
+          const shown = !!showSecrets[field.key];
+          return (
             <div key={field.key}>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label htmlFor={id} className="zh-label">
                 {field.label}
-                {field.required && <span className="text-red-500 ml-0.5">*</span>}
+                {required && <span className="ml-0.5 text-danger-600" aria-hidden="true">*</span>}
               </label>
               <div className="relative">
                 <input
-                  type={field.secret && !showSecrets[field.key] ? 'password' : 'text'}
+                  id={id}
+                  type={field.secret && !shown ? 'password' : 'text'}
                   placeholder={field.placeholder}
                   value={form[field.key] ?? ''}
                   onChange={(e) => setForm((p) => ({ ...p, [field.key]: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-9"
+                  autoComplete={field.secret ? 'new-password' : 'off'}
+                  spellCheck={false}
+                  required={required}
+                  aria-invalid={!!err || undefined}
+                  aria-describedby={err ? `${id}-err` : undefined}
+                  className={`zh-input ${field.secret ? 'pr-11' : ''}`}
                 />
                 {field.secret && (
                   <button
                     type="button"
                     onClick={() => setShowSecrets((p) => ({ ...p, [field.key]: !p[field.key] }))}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label={`${shown ? 'Hide' : 'Show'} ${field.label.replace(/\s*\(optional\)/i, '').toLowerCase()}`}
+                    aria-pressed={shown}
+                    className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-muted hover:text-ink"
                   >
-                    {showSecrets[field.key] ? <EyeOff size={14} /> : <Eye size={14} />}
+                    {shown ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 )}
               </div>
+              {err && <p id={`${id}-err`} className="mt-1 text-xs text-danger-600">{err}</p>}
             </div>
-          ))}
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <p className="text-xs text-gray-500">
-            Credentials are encrypted with AES-256-GCM before storage.
-          </p>
-
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isLoading && <Loader2 size={14} className="animate-spin" />}
-              Save credentials
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+          );
+        })}
+      </form>
+    </Modal>
   );
 }
 
 // ── Board card ─────────────────────────────────────────────────────────────────
 
 function BoardCard({ board }: { board: BoardInfo }) {
+  const notify = useNotify();
+  const confirm = useConfirm();
   const [disconnectBoard, { isLoading: disconnecting }] = useDisconnectBoardMutation();
   const [connectOpen, setConnectOpen] = useState(false);
 
   const handleDisconnect = async () => {
-    if (!confirm(`Disconnect ${board.name}? Active postings will no longer be manageable from ZorHire.`)) return;
-    await disconnectBoard(board.key);
+    const ok = await confirm({
+      title: `Disconnect ${board.name}?`,
+      message: 'Active postings will no longer be manageable from ZorHire.',
+      confirmText: 'Disconnect',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await disconnectBoard(board.key).unwrap();
+      notify.success(`${board.name} disconnected`);
+    } catch (err) {
+      notify.error(getErrorMessage(err, `Failed to disconnect ${board.name}`));
+    }
   };
 
   return (
     <>
-      <div className="bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4">
-        <div className={`w-10 h-10 rounded-lg ${board.color} flex items-center justify-center flex-shrink-0`}>
-          <Globe size={18} className="text-white" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">{board.name}</p>
-          {board.connected && board.connected_at ? (
-            <p className="text-xs text-gray-500 mt-0.5">
-              Connected {new Date(board.connected_at).toLocaleDateString()}
+      <div className="zh-card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-600">
+            <Globe size={18} aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-ink">
+              {board.name}
+              {board.connected
+                ? <Badge tone="success" icon={<CheckCircle2 size={11} aria-hidden="true" />}>Connected</Badge>
+                : <Badge tone="neutral">Not connected</Badge>}
             </p>
-          ) : (
-            <p className="text-xs text-gray-400 mt-0.5">Not connected</p>
-          )}
+            {board.connected && board.connected_at && (
+              <p className="mt-0.5 text-xs text-muted">
+                Connected {new Date(board.connected_at).toLocaleDateString()}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2">
           {board.connected ? (
             <>
-              <span className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full font-medium">
-                <CheckCircle2 size={11} />
-                Connected
-              </span>
-              <button
-                onClick={() => setConnectOpen(true)}
-                className="text-xs text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-200 px-2.5 py-1 rounded-lg transition-colors"
-              >
-                Update
-              </button>
-              <button
+              <Button variant="secondary" size="sm" onClick={() => setConnectOpen(true)}>
+                Update credentials
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleDisconnect}
-                disabled={disconnecting}
-                className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                title="Disconnect"
+                loading={disconnecting}
+                icon={<Trash2 size={14} />}
+                aria-label={`Disconnect ${board.name}`}
+                className="text-danger-600 hover:bg-danger-50 hover:text-danger-700"
               >
-                {disconnecting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              </button>
+                Disconnect
+              </Button>
             </>
           ) : (
-            <button
-              onClick={() => setConnectOpen(true)}
-              className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              <Plus size={14} />
+            <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setConnectOpen(true)}>
               Connect
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -193,46 +214,64 @@ function BoardCard({ board }: { board: BoardInfo }) {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function JobBoardsSettingsPage() {
-  const { data, isLoading } = useListBoardsQuery();
+  const { data, isLoading, isFetching, isError, error, refetch } = useListBoardsQuery();
 
-  const connectedCount = data?.boards.filter((b) => b.connected).length ?? 0;
+  const boards = data?.boards ?? [];
+  const connectedCount = boards.filter((b) => b.connected).length;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
-        title="Job Board Integrations"
+    <>
+      <PageHeader
+        title="Job board integrations"
         subtitle={
           connectedCount > 0
-            ? `${connectedCount} of ${data?.boards.length ?? 0} boards connected`
+            ? `${connectedCount} of ${boards.length} boards connected`
             : 'Connect job boards to publish openings and receive applications automatically'
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-        {/* Webhook info box */}
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-          <p className="text-sm font-medium text-blue-800">Webhook endpoint for incoming applications</p>
-          <code className="text-xs text-blue-700 font-mono mt-1 block break-all">
-            {window.location.origin.replace('5173', '5000')}/v1/job-boards/webhooks/<span className="text-blue-500">{'<board_key>'}</span>
-          </code>
-          <p className="text-xs text-blue-600 mt-1.5">
-            Register this URL in each job board's developer console to receive applications automatically.
-            Set the same Webhook Secret in both places.
-          </p>
-        </div>
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <section className="flex gap-3 rounded-xl border border-navy-100 bg-navy-50 p-4">
+          <Webhook size={18} className="mt-0.5 flex-shrink-0 text-navy-600" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-medium text-navy-800">Webhook endpoint for incoming applications</h2>
+            <code className="mt-1 block break-all font-mono text-xs text-navy-700">
+              {window.location.origin.replace('5173', '5000')}/v1/job-boards/webhooks/<span className="text-navy-500">{'<board_key>'}</span>
+            </code>
+            <p className="mt-1.5 text-xs text-ink-soft">
+              Register this URL in each job board's developer console to receive applications automatically.
+              Set the same webhook secret in both places.
+            </p>
+          </div>
+        </section>
 
         {isLoading ? (
-          <div className="flex justify-center py-10">
-            <Loader2 size={24} className="animate-spin text-gray-400" />
+          <div className="grid gap-3" role="status" aria-label="Loading job boards">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : isError ? (
+          <div className="zh-card">
+            <ErrorState error={error} onRetry={refetch} retrying={isFetching} />
+          </div>
+        ) : boards.length === 0 ? (
+          <div className="zh-card">
+            <EmptyState
+              icon={<Globe size={22} aria-hidden="true" />}
+              title="No job boards available"
+              description="No integrations are enabled for your workspace yet. Check again later or contact support."
+              action={<Button variant="secondary" onClick={() => refetch()}>Refresh</Button>}
+            />
           </div>
         ) : (
           <div className="grid gap-3">
-            {data?.boards.map((board) => (
+            {boards.map((board) => (
               <BoardCard key={board.key} board={board} />
             ))}
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }

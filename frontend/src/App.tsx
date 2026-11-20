@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAppDispatch } from "./hooks/useAppDispatch";
 import { useAppSelector } from "./hooks/useAppSelector";
@@ -17,47 +17,50 @@ import {
 import type { SubscriptionInfo } from "./store/slices/subscriptionSlice";
 import { useMeQuery } from "./store/api/authApi";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { ConfirmProvider } from "./components/ui/ConfirmDialog";
 import Layout from "./components/layout/Layout";
-import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
-import OAuthCallbackPage from "./pages/OAuthCallbackPage";
-import BookDemoPage from "./pages/BookDemoPage";
 import { FullPageLoader, ServerUnreachableScreen } from "./components/layout/AppStatusScreens";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
-import SubscribePage from "./pages/SubscribePage";
-import PublicPricingPage from "./pages/PublicPricingPage";
-import DashboardPage from "./pages/DashboardPage";
-import JobsPage from "./pages/JobsPage";
-import JobDetailPage from "./pages/JobDetailPage";
-import NewJobPage from "./pages/NewJobPage";
-import CandidatesPage from "./pages/CandidatesPage";
-import VendorsPage from "./pages/VendorsPage";
-import ResumeSearchPage from "./pages/ResumeSearchPage";
-import AnalyticsPage from "./pages/AnalyticsPage";
-import AdminPage from "./pages/AdminPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
-import PipelinePage from "./pages/PipelinePage";
-import EmailSettingsPage from "./pages/EmailSettingsPage";
-import EmailCampaignsPage from "./pages/EmailCampaignsPage";
-import SubscriptionPage from "./pages/SubscriptionPage";
-import PricingPage from "./pages/PricingPage";
-import OnboardingPage from "./pages/OnboardingPage";
-import CompaniesPage from "./pages/CompaniesPage";
-import AssignedJDsPage from "./pages/AssignedJDsPage";
-import ScreeningChatPage from "./pages/ScreeningChatPage";
-import InterviewsPage from "./pages/InterviewsPage";
-import OffersPage from "./pages/OffersPage";
-import ReportsPage from "./pages/ReportsPage";
-import ProfilePage from "./pages/ProfilePage";
-import CandidateDetailPage from "./pages/CandidateDetailPage";
-import JobBoardsSettingsPage from "./pages/JobBoardsSettingsPage";
-import EmailCampaignDetailPage from "./pages/EmailCampaignDetailPage";
-import VendorLeaderboardPage from "./pages/VendorLeaderboardPage";
-import ClientsPage from "./pages/ClientsPage";
-import VendorPortalJobsPage from "./pages/vendor-portal/VendorPortalJobsPage";
-import VendorPortalSubmissionsPage from "./pages/vendor-portal/VendorPortalSubmissionsPage";
-import ClientPortalJobsPage from "./pages/client-portal/ClientPortalJobsPage";
-import ClientCandidatesPage from "./pages/client-portal/ClientCandidatesPage";
+
+// Route-level code splitting: each screen downloads when first opened.
+const LandingPage = lazy(() => import("./pages/LandingPage"));
+const OAuthCallbackPage = lazy(() => import("./pages/OAuthCallbackPage"));
+const BookDemoPage = lazy(() => import("./pages/BookDemoPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const SubscribePage = lazy(() => import("./pages/SubscribePage"));
+const PublicPricingPage = lazy(() => import("./pages/PublicPricingPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const JobsPage = lazy(() => import("./pages/JobsPage"));
+const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
+const NewJobPage = lazy(() => import("./pages/NewJobPage"));
+const CandidatesPage = lazy(() => import("./pages/CandidatesPage"));
+const VendorsPage = lazy(() => import("./pages/VendorsPage"));
+const ResumeSearchPage = lazy(() => import("./pages/ResumeSearchPage"));
+const AnalyticsPage = lazy(() => import("./pages/AnalyticsPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const PipelinePage = lazy(() => import("./pages/PipelinePage"));
+const EmailSettingsPage = lazy(() => import("./pages/EmailSettingsPage"));
+const EmailCampaignsPage = lazy(() => import("./pages/EmailCampaignsPage"));
+const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
+const PricingPage = lazy(() => import("./pages/PricingPage"));
+const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
+const CompaniesPage = lazy(() => import("./pages/CompaniesPage"));
+const AssignedJDsPage = lazy(() => import("./pages/AssignedJDsPage"));
+const ScreeningChatPage = lazy(() => import("./pages/ScreeningChatPage"));
+const InterviewsPage = lazy(() => import("./pages/InterviewsPage"));
+const OffersPage = lazy(() => import("./pages/OffersPage"));
+const ReportsPage = lazy(() => import("./pages/ReportsPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const CandidateDetailPage = lazy(() => import("./pages/CandidateDetailPage"));
+const JobBoardsSettingsPage = lazy(() => import("./pages/JobBoardsSettingsPage"));
+const EmailCampaignDetailPage = lazy(() => import("./pages/EmailCampaignDetailPage"));
+const VendorLeaderboardPage = lazy(() => import("./pages/VendorLeaderboardPage"));
+const ClientsPage = lazy(() => import("./pages/ClientsPage"));
+const VendorPortalJobsPage = lazy(() => import("./pages/vendor-portal/VendorPortalJobsPage"));
+const VendorPortalSubmissionsPage = lazy(() => import("./pages/vendor-portal/VendorPortalSubmissionsPage"));
+const ClientPortalJobsPage = lazy(() => import("./pages/client-portal/ClientPortalJobsPage"));
+const ClientCandidatesPage = lazy(() => import("./pages/client-portal/ClientCandidatesPage"));
 
 // vendor_user may access /jobs, /jobs/:id, /pipeline/:jobId, and /vendor-portal/*
 const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline", "/vendor-portal"];
@@ -508,8 +511,13 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <SessionRestorer />
-        <AppRoutes />
+        <ConfirmProvider>
+          <SessionRestorer />
+          {/* Pages load on demand; in-app pages show a skeleton inside the shell (see Layout). */}
+          <Suspense fallback={<FullPageLoader />}>
+            <AppRoutes />
+          </Suspense>
+        </ConfirmProvider>
       </BrowserRouter>
     </ErrorBoundary>
   );

@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { X, Mail, Loader2 } from "lucide-react";
+import { Mail } from "lucide-react";
 import { useSendEmail } from "../../hooks/useSendEmail";
 import { useNotify } from "../../hooks/useNotify";
-import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { Button, Modal } from "../ui";
 
 interface Props {
   to: string;
@@ -54,9 +54,6 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
   const { sendEmail, sending } = useSendEmail();
   const notify = useNotify();
 
-  // Esc closes (not while a send is in flight). No backdrop-close: it would discard the draft.
-  useEscapeKey(onClose, !sending);
-
   const applyTemplate = (idx: number) => {
     const t = TEMPLATES[idx];
     setSubject(t.subject(positionHint));
@@ -85,38 +82,39 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
   const canSend = subject.trim().length > 0 && body.trim().length > 0 && !sending;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center z-[70] p-4">
-      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in fade-in slide-in-from-bottom-4 duration-200">
-
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-50 rounded-xl">
-              <Mail size={18} className="text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-base font-black text-gray-900">Compose Email</h2>
-              <p className="text-xs text-gray-400 mt-0.5">to {toName} · {to}</p>
-            </div>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-gray-100 rounded-xl transition-all text-gray-400 hover:text-gray-700">
-            <X size={18} />
-          </button>
-        </div>
-
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      preventClose={sending}
+      title="Compose email"
+      description={`To ${toName} · ${to}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={sending}>
+            Cancel
+          </Button>
+          <Button onClick={handleSend} disabled={!canSend && !sending} loading={sending} loadingText="Sending…" icon={<Mail size={15} />}>
+            Send email
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
         {/* Quick templates */}
-        <div className="px-6 pt-4 pb-2 flex-shrink-0">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Quick templates</p>
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted">Quick templates</p>
           <div className="flex flex-wrap gap-2">
             {TEMPLATES.map((t, i) => (
               <button
                 key={t.label}
                 type="button"
                 onClick={() => applyTemplate(i)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                aria-pressed={activeTemplate === i}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTemplate === i
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-gray-50 text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"
+                    ? "border-navy-600 bg-navy-600 text-white"
+                    : "border-line bg-white text-ink-soft hover:border-navy-300 hover:text-navy-700"
                 }`}
               >
                 {t.label}
@@ -125,62 +123,30 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
           </div>
         </div>
 
-        {/* Fields */}
-        <div className="px-6 pb-2 flex-1 overflow-y-auto space-y-4 pt-3">
-          {/* Subject */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subject</label>
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => { setSubject(e.target.value); setActiveTemplate(null); }}
-              placeholder="Enter email subject..."
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-            />
-          </div>
-
-          {/* Body */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Message</label>
-            <textarea
-              value={body}
-              onChange={(e) => { setBody(e.target.value); setActiveTemplate(null); }}
-              placeholder="Write your message here..."
-              rows={10}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none leading-relaxed"
-            />
-          </div>
+        <div>
+          <label htmlFor="compose-subject" className="zh-label">Subject</label>
+          <input
+            id="compose-subject"
+            type="text"
+            value={subject}
+            onChange={(e) => { setSubject(e.target.value); setActiveTemplate(null); }}
+            placeholder="Enter email subject…"
+            className="zh-input"
+          />
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex-1 py-3 bg-gray-50 text-gray-700 font-black text-sm rounded-[16px] border border-gray-200 hover:bg-gray-100 transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!canSend}
-            className="flex-[2] py-3 bg-blue-600 text-white font-black text-sm rounded-[16px] hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {sending ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Mail size={15} />
-                Send Email
-              </>
-            )}
-          </button>
+        <div>
+          <label htmlFor="compose-body" className="zh-label">Message</label>
+          <textarea
+            id="compose-body"
+            value={body}
+            onChange={(e) => { setBody(e.target.value); setActiveTemplate(null); }}
+            placeholder="Write your message here…"
+            rows={10}
+            className="zh-input resize-none leading-relaxed"
+          />
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

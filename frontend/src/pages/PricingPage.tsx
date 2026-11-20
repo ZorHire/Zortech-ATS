@@ -1,29 +1,21 @@
 import { lazy, Suspense } from "react";
-import { Loader2, CreditCard, Headphones, ShieldCheck } from "lucide-react";
-import { Subscription } from "../services/billing.service";
+import { CreditCard, Headphones, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { setSubscription } from "../store/slices/subscriptionSlice";
 import { useNotify } from "../hooks/useNotify";
+import { Badge, buttonClasses, LoadingBlock, PageHeader } from "../components/ui";
 
 const PricingCards = lazy(
   () => import("../components/subscription/PricingCards"),
 );
-
-function CardsSkeleton() {
-  return (
-    <div className="flex items-center justify-center py-24">
-      <Loader2 size={28} className="animate-spin text-gray-300" />
-    </div>
-  );
-}
 
 export default function PricingPage() {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const notify = useNotify();
 
-  const handleSubscribed = (_sub: Subscription) => {
+  const handleSubscribed = () => {
     // Unlock the app straight away; previously the subscription gate still
     // saw the old "inactive" state and bounced the user back to /pricing.
     dispatch(setSubscription({ active: true, isPlatformOwner: false, reason: null }));
@@ -32,64 +24,50 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Inline page header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
-        <div>
-          <h1 className="text-base font-black text-[#111111] tracking-tight">
-            Subscription Plans
-          </h1>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">
-            Choose the plan that fits your hiring needs
-          </p>
-        </div>
-        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full uppercase tracking-widest">
-          No setup fees
-        </span>
-      </div>
+    <>
+      <PageHeader
+        title="Subscription Plans"
+        subtitle="Choose the plan that fits your hiring needs"
+        actions={<Badge tone="success">No setup fees</Badge>}
+      />
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 py-8 sm:py-10">
+      <div className="space-y-8 p-4 sm:p-6 lg:p-8">
         {/* Trust banner */}
-        <div className="flex items-center gap-4 bg-amber-50 border border-amber-100 rounded-2xl px-5 py-3.5 mb-8">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-            <ShieldCheck size={16} className="text-amber-700" />
+        <div className="flex items-center gap-4 rounded-xl border border-navy-100 bg-navy-50 px-5 py-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-navy-600">
+            <ShieldCheck size={16} aria-hidden="true" />
           </div>
           <div>
-            <p className="text-xs font-black text-[#111111]">
+            <p className="text-sm font-semibold text-ink">
               All plans include 24/7 support, regular updates, and bank-level security.
             </p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              You can upgrade, downgrade or cancel at any time.
-            </p>
+            <p className="mt-0.5 text-sm text-muted">You can upgrade, downgrade or cancel at any time.</p>
           </div>
         </div>
 
         {/* Pricing cards */}
-        <Suspense fallback={<CardsSkeleton />}>
+        <Suspense fallback={<LoadingBlock label="Loading plans…" />}>
           <PricingCards onSubscribed={handleSubscribed} />
         </Suspense>
 
         {/* Bottom trust section */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-10">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {/* Secure Payments */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-              <CreditCard size={18} className="text-amber-600" />
+          <div className="zh-card flex items-start gap-4 p-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+              <CreditCard size={18} aria-hidden="true" />
             </div>
             <div>
-              <p className="text-xs font-black text-[#111111] mb-1">Secure Payments</p>
-              <p className="text-[11px] text-gray-500 mb-2.5">
-                All payments are securely processed by Razorpay.
-              </p>
+              <p className="mb-1 text-sm font-semibold text-ink">Secure Payments</p>
+              <p className="mb-2.5 text-sm text-muted">All payments are securely processed by Razorpay.</p>
               <ul className="space-y-1.5">
                 {[
                   "SSL encrypted transactions",
                   "Cards, UPI, Netbanking supported",
                   "GST invoice provided",
                 ].map((item) => (
-                  <li key={item} className="flex items-center gap-1.5 text-[11px] text-gray-600">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                  <li key={item} className="flex items-center gap-1.5 text-sm text-ink-soft">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success-600" aria-hidden="true" />
                     {item}
                   </li>
                 ))}
@@ -98,46 +76,35 @@ export default function PricingPage() {
           </div>
 
           {/* Razorpay branding */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col items-center justify-center gap-2">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              Powered by
-            </p>
-            <p className="text-2xl font-black text-[#072654] tracking-tight">Razorpay</p>
-            <p className="text-[11px] text-gray-400">India's leading payment gateway</p>
+          <div className="zh-card flex flex-col items-center justify-center gap-1 p-5 text-center">
+            <p className="text-xs font-medium text-muted">Powered by</p>
+            <p className="text-2xl font-semibold tracking-tight text-navy-800">Razorpay</p>
+            <p className="text-sm text-muted">India's leading payment gateway</p>
           </div>
 
           {/* Need Help Choosing? */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
-              <Headphones size={18} className="text-blue-600" />
+          <div className="zh-card flex items-start gap-4 p-5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-600">
+              <Headphones size={18} aria-hidden="true" />
             </div>
             <div className="flex-1">
-              <p className="text-xs font-black text-[#111111] mb-1">Need Help Choosing?</p>
-              <p className="text-[11px] text-gray-500 mb-3">
-                Our team is here to help you find the perfect plan.
-              </p>
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() =>
-                    window.open(
-                      "mailto:tech@zortechs.in?subject=Plan%20Inquiry",
-                      "_blank",
-                    )
-                  }
-                  className="w-full py-2 rounded-xl bg-[#111111] text-white text-[11px] font-black hover:bg-black transition-colors"
-                >
-                  Talk to Sales
-                </button>
-              </div>
+              <p className="mb-1 text-sm font-semibold text-ink">Need Help Choosing?</p>
+              <p className="mb-3 text-sm text-muted">Our team is here to help you find the perfect plan.</p>
+              <a
+                href="mailto:tech@zortechs.in?subject=Plan%20Inquiry"
+                target="_blank"
+                rel="noreferrer"
+                className={buttonClasses("primary", "sm", "w-full")}
+              >
+                Talk to Sales
+              </a>
             </div>
           </div>
         </div>
 
         {/* Footer note */}
-        <p className="text-center text-[11px] text-gray-400 font-medium mt-6 pb-2">
-          Prices are exclusive of applicable taxes.
-        </p>
+        <p className="pb-2 text-center text-sm text-muted">Prices are exclusive of applicable taxes.</p>
       </div>
-    </div>
+    </>
   );
 }

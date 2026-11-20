@@ -1,11 +1,16 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   UserPlus, Shield, CheckCircle2, XCircle, RotateCcw, Search,
   ShieldCheck, UserCheck, ShieldAlert, SendHorizonal, Trash2,
-  MoreHorizontal, ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Eye, EyeOff, Users, KeyRound,
 } from "lucide-react";
-import Header from "../components/layout/Header";
 import EmailToast from "../components/ui/EmailToast";
+import {
+  Badge, Button, DataTable, EmptyState, Modal, PageHeader, StatCard, useConfirm,
+} from "../components/ui";
+import type { BadgeTone, Column } from "../components/ui";
+import { useNotify } from "../hooks/useNotify";
+import { getErrorMessage } from "../lib/format";
 import {
   useGetUsersQuery, useInviteUserMutation, useDeleteUserMutation,
   useToggleUserStatusMutation, useResetUserPasswordMutation,
@@ -13,12 +18,13 @@ import {
 } from "../store/api/adminApi";
 import { useGetVendorsQuery } from "../store/api/vendorApi";
 
-const roleConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  super_admin: { label: "Super Admin", color: "bg-red-50 text-red-700", icon: ShieldAlert },
-  accounts_manager: { label: "Accounts Mgr", color: "bg-blue-50 text-blue-700", icon: ShieldCheck },
-  vendor_manager: { label: "Vendor Mgr", color: "bg-violet-50 text-violet-700", icon: UserCheck },
-  recruiter: { label: "Recruiter", color: "bg-emerald-50 text-emerald-700", icon: UserPlus },
-  vendor_user: { label: "Vendor", color: "bg-amber-50 text-amber-700", icon: Shield },
+/** Role → badge tone, short label and icon (one mapping for the page). */
+const roleConfig: Record<string, { label: string; tone: BadgeTone; icon: React.ElementType }> = {
+  super_admin: { label: "Super Admin", tone: "danger", icon: ShieldAlert },
+  accounts_manager: { label: "Accounts Mgr", tone: "navy", icon: ShieldCheck },
+  vendor_manager: { label: "Vendor Mgr", tone: "info", icon: UserCheck },
+  recruiter: { label: "Recruiter", tone: "success", icon: UserPlus },
+  vendor_user: { label: "Vendor", tone: "brand", icon: Shield },
 };
 
 const roleLabels: Record<string, string> = {
@@ -27,8 +33,8 @@ const roleLabels: Record<string, string> = {
 };
 
 const AVATAR_COLORS = [
-  "bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500",
-  "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500",
+  "bg-navy-600 text-white", "bg-brand-500 text-ink", "bg-navy-400 text-white",
+  "bg-brand-200 text-brand-900", "bg-navy-800 text-white", "bg-navy-100 text-navy-800",
 ];
 function avatarColor(name: string) {
   let h = 0;
@@ -37,51 +43,66 @@ function avatarColor(name: string) {
 }
 
 const PAGE_SIZE = 15;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function RowMenu({ user, onReset, onToggle, onDelete }: {
-  user: ManagedUser;
-  onReset: () => void;
-  onToggle: () => void;
-  onDelete: () => void;
+/** Password field with a show/hide toggle. */
+function PasswordInput({
+  id, value, onChange, placeholder, invalid, describedBy, autoFocus,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  invalid?: boolean;
+  describedBy?: string;
+  autoFocus?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [show, setShow] = useState(false);
   return (
-    <div className="relative flex items-center justify-end">
-      <button onClick={() => setOpen((v) => !v)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-        <MoreHorizontal size={15} />
+    <div className="relative">
+      <input
+        id={id}
+        type={show ? "text" : "password"}
+        autoComplete="new-password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
+        data-autofocus={autoFocus ? true : undefined}
+        className="zh-input pr-11"
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        aria-label={show ? "Hide password" : "Show password"}
+        aria-pressed={show}
+        className="absolute inset-y-0 right-0 flex w-10 items-center justify-center rounded-r-lg text-muted hover:text-ink"
+      >
+        {show ? <EyeOff size={16} /> : <Eye size={16} />}
       </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-100 rounded-xl shadow-lg z-20 py-1">
-            <button onClick={() => { setOpen(false); onReset(); }}
-              className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-              <RotateCcw size={12} /> Reset Password
-            </button>
-            <button onClick={() => { setOpen(false); onToggle(); }}
-              className={`w-full text-left px-3.5 py-2 text-xs flex items-center gap-2 ${user.is_active ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50"}`}>
-              {user.is_active ? <XCircle size={12} /> : <CheckCircle2 size={12} />}
-              {user.is_active ? "Deactivate" : "Activate"}
-            </button>
-            <hr className="border-gray-100 my-0.5" />
-            <button onClick={() => { setOpen(false); onDelete(); }}
-              className="w-full text-left px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2">
-              <Trash2 size={12} /> Delete User
-            </button>
-          </div>
-        </>
-      )}
     </div>
   );
 }
 
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return <p id={id} className="mt-1 text-xs text-danger-600">{message}</p>;
+}
+
+type FieldErrors = Partial<Record<"full_name" | "email" | "password", string>>;
+
 export default function AdminPage() {
-  const { data: users = [], isLoading: loading } = useGetUsersQuery();
+  const notify = useNotify();
+  const confirm = useConfirm();
+  const ids = useId();
+
+  const { data: users = [], isLoading: loading, isError, error, refetch } = useGetUsersQuery();
   const { data: vendors = [] } = useGetVendorsQuery();
   const [inviteUser, { isLoading: formLoading }] = useInviteUserMutation();
   const [deleteUser] = useDeleteUserMutation();
   const [toggleUserStatusMutation] = useToggleUserStatusMutation();
-  const [resetUserPassword] = useResetUserPasswordMutation();
+  const [resetUserPassword, { isLoading: resetting }] = useResetUserPasswordMutation();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearch] = useState("");
@@ -94,16 +115,32 @@ export default function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newVendorId, setNewVendorId] = useState("");
   const [formError, setFormError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [emailToast, setEmailToast] = useState<{ message: string; type: "success" | "error"; showConfigLink?: boolean } | null>(null);
+
+  const [resetUser, setResetUser] = useState<ManagedUser | null>(null);
+  const [resetPwd, setResetPwd] = useState("");
+  const [resetError, setResetError] = useState("");
 
   const showEmailToast = (toast: typeof emailToast) => {
     setEmailToast(toast);
     setTimeout(() => setEmailToast(null), 4500);
   };
 
+  const validate = (): boolean => {
+    const errs: FieldErrors = {};
+    if (!newFullName.trim()) errs.full_name = "Enter the user's full name.";
+    if (!newEmail.trim()) errs.email = "Enter an email address.";
+    else if (!EMAIL_RE.test(newEmail.trim())) errs.email = "Enter a valid email address.";
+    if (!newPassword) errs.password = "Set a temporary password.";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
+    if (!validate()) return;
     try {
       const result = (await inviteUser({
         email: newEmail, full_name: newFullName, role: newRole, password: newPassword,
@@ -119,33 +156,53 @@ export default function AdminPage() {
       } else {
         showEmailToast({ message: `User created successfully`, type: "success" });
       }
-    } catch (err: any) { setFormError(err.message || "Failed to create user"); }
+    } catch (err) { setFormError(getErrorMessage(err, "Failed to create user")); }
   };
 
   const handleDeleteUser = async (user: ManagedUser) => {
-    if (!window.confirm(`Permanently delete "${user.full_name || user.email}"?\n\nThis cannot be undone.`)) return;
-    try { await deleteUser(user.id).unwrap(); }
-    catch (err: any) { alert(err?.message || "Failed to delete user."); }
+    const ok = await confirm({
+      title: `Delete ${user.full_name || user.email}?`,
+      message: "This permanently removes the user and cannot be undone.",
+      confirmText: "Delete user",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteUser(user.id).unwrap();
+      notify.success("User deleted");
+    } catch (err) { notify.error(getErrorMessage(err, "Failed to delete user.")); }
   };
 
   const handleToggleStatus = async (user: ManagedUser) => {
-    try { await toggleUserStatusMutation({ id: user.id, is_active: !user.is_active }).unwrap(); }
-    catch { alert("Failed to update user status"); }
+    try {
+      await toggleUserStatusMutation({ id: user.id, is_active: !user.is_active }).unwrap();
+      notify.success(user.is_active ? "User deactivated" : "User activated");
+    } catch { notify.error("Failed to update user status"); }
   };
 
-  const handleResetPassword = async (userId: string) => {
-    const password = prompt("Enter new temporary password:");
-    if (!password) return;
+  const openReset = (user: ManagedUser) => {
+    setResetUser(user);
+    setResetPwd("");
+    setResetError("");
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetUser) return;
+    if (!resetPwd) { setResetError("Enter a temporary password."); return; }
     try {
-      await resetUserPassword({ userId, newPassword: password }).unwrap();
-      alert("Password reset successfully. User will be forced to change it on next login.");
-    } catch { alert("Failed to reset password"); }
+      await resetUserPassword({ userId: resetUser.id, newPassword: resetPwd }).unwrap();
+      setResetUser(null);
+      notify.success("Password reset. The user must change it on next login.");
+    } catch { notify.error("Failed to reset password"); }
   };
 
   const resetForm = () => {
     setNewEmail(""); setNewFullName(""); setNewRole("recruiter");
-    setNewPassword(""); setNewVendorId(""); setFormError("");
+    setNewPassword(""); setNewVendorId(""); setFormError(""); setFieldErrors({});
   };
+
+  const closeCreate = () => { setShowCreateModal(false); resetForm(); };
 
   const filteredUsers = users.filter((u) => {
     const matchSearch = u.email.toLowerCase().includes(searchTerm.toLowerCase()) || u.full_name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -163,240 +220,284 @@ export default function AdminPage() {
     pending: users.filter((u) => u.must_change_password).length,
   };
 
+  const columns: Column<ManagedUser>[] = [
+    {
+      key: "user",
+      header: "User",
+      cell: (user) => (
+        <div className="flex items-center gap-3">
+          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${avatarColor(user.full_name || user.email)}`} aria-hidden="true">
+            {(user.full_name || user.email).charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="font-medium text-ink">{user.full_name || "No name"}</p>
+            <p className="truncate text-xs text-muted">{user.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      cell: (user) => {
+        const rc = roleConfig[user.role] || roleConfig.recruiter;
+        const RoleIcon = rc.icon;
+        return <Badge tone={rc.tone} icon={<RoleIcon size={11} aria-hidden="true" />}>{rc.label}</Badge>;
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (user) =>
+        user.is_active ? <Badge tone="success">Active</Badge> : <Badge tone="neutral">Inactive</Badge>,
+    },
+    {
+      key: "password",
+      header: "Password",
+      cell: (user) =>
+        user.must_change_password ? <Badge tone="warning">Pending reset</Badge> : <Badge tone="success">Verified</Badge>,
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      className: "text-right whitespace-nowrap",
+      cell: (user) => {
+        const name = user.full_name || user.email;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={() => openReset(user)}
+              aria-label={`Reset password for ${name}`}
+              title="Reset password"
+              className="rounded-lg p-2 text-muted hover:bg-surface-sunken hover:text-ink"
+            >
+              <RotateCcw size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleStatus(user)}
+              aria-label={`${user.is_active ? "Deactivate" : "Activate"} ${name}`}
+              title={user.is_active ? "Deactivate" : "Activate"}
+              className={`rounded-lg p-2 hover:bg-surface-sunken ${user.is_active ? "text-warning-600" : "text-success-600"}`}
+            >
+              {user.is_active ? <XCircle size={15} /> : <CheckCircle2 size={15} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteUser(user)}
+              aria-label={`Delete ${name}`}
+              title="Delete user"
+              className="rounded-lg p-2 text-danger-600 hover:bg-danger-50"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
+
+  const fid = (k: string) => `${ids}-${k}`;
+  const hasFilters = !!searchTerm || roleFilter !== "all";
+
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header title="User Management" subtitle="Manage platform access and roles for your team"
+    <>
+      <PageHeader
+        title="User management"
+        subtitle="Manage platform access and roles for your team"
         actions={
-          <button onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#111111] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all shadow-lg shadow-gray-200">
-            <UserPlus size={15} /> Invite User
-          </button>
+          <Button icon={<UserPlus size={16} />} onClick={() => setShowCreateModal(true)}>
+            Invite user
+          </Button>
         }
       />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Users</p>
-            <p className="text-2xl font-black text-gray-900">{counts.total}</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Active</p>
-            <p className="text-2xl font-black text-emerald-600">{counts.active}</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Inactive</p>
-            <p className="text-2xl font-black text-gray-400">{counts.inactive}</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pending Reset</p>
-            <p className="text-2xl font-black text-amber-600">{counts.pending}</p>
-          </div>
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Total users" value={counts.total} icon={<Users size={18} />} tone="navy" loading={loading} />
+          <StatCard label="Active" value={counts.active} icon={<CheckCircle2 size={18} />} tone="success" loading={loading} />
+          <StatCard label="Inactive" value={counts.inactive} icon={<XCircle size={18} />} tone="neutral" loading={loading} />
+          <StatCard label="Pending reset" value={counts.pending} icon={<KeyRound size={18} />} tone="brand" loading={loading} />
         </div>
 
-        {/* Search + Role filter */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input type="text" placeholder="Search by name or email…" value={searchTerm}
+            <label htmlFor={fid("search")} className="sr-only">Search users</label>
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input id={fid("search")} type="search" placeholder="Search by name or email…" value={searchTerm}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="zh-input pl-9" />
           </div>
-          <div className="relative">
-            <select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
-              className="appearance-none pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
-              <option value="all">All Roles</option>
+          <div className="sm:w-56">
+            <label htmlFor={fid("role-filter")} className="sr-only">Filter by role</label>
+            <select id={fid("role-filter")} value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
+              className="zh-input cursor-pointer">
+              <option value="all">All roles</option>
               {Object.entries(roleLabels).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
             </select>
-            <ChevronLeft size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none rotate-[-90deg]" />
           </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-            </div>
-          ) : paginated.length === 0 ? (
-            <div className="text-center py-16 text-gray-400">
-              <UserPlus size={36} className="mx-auto mb-3 opacity-30" />
-              <p className="font-semibold text-gray-500">No users found</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    {["User", "Role", "Status", "Password", "Actions"].map((h) => (
-                      <th key={h} className={`px-5 py-3.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest ${h === "Actions" ? "text-right" : ""}`}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {paginated.map((user) => {
-                    const rc = roleConfig[user.role] || roleConfig.recruiter;
-                    const RoleIcon = rc.icon;
-                    const initials = (user.full_name || user.email).charAt(0).toUpperCase();
-                    return (
-                      <tr key={user.id} className="hover:bg-gray-50/60 transition-colors group">
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl ${avatarColor(user.full_name || user.email)} text-white flex items-center justify-center font-bold text-sm flex-shrink-0`}>
-                              {initials}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">{user.full_name || "No Name"}</p>
-                              <p className="text-xs text-gray-400">{user.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${rc.color}`}>
-                            <RoleIcon size={11} />
-                            {rc.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4">
-                          {user.is_active ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-semibold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-gray-400 text-xs font-semibold">
-                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400" /> Inactive
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          {user.must_change_password ? (
-                            <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Pending Reset</span>
-                          ) : (
-                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded-full font-bold uppercase tracking-wide">Verified</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4">
-                          <RowMenu user={user}
-                            onReset={() => handleResetPassword(user.id)}
-                            onToggle={() => handleToggleStatus(user)}
-                            onDelete={() => handleDeleteUser(user)} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="space-y-3">
+          <DataTable
+            caption="Users"
+            columns={columns}
+            rows={isError ? undefined : paginated}
+            rowKey={(u) => u.id}
+            loading={loading}
+            error={isError ? error : undefined}
+            onRetry={refetch}
+            empty={
+              hasFilters ? (
+                <EmptyState
+                  icon={<Search size={22} aria-hidden="true" />}
+                  title="No users match"
+                  description="Try a different name, email or role."
+                  action={<Button variant="secondary" onClick={() => { setSearch(""); setRoleFilter("all"); setPage(1); }}>Clear filters</Button>}
+                />
+              ) : (
+                <EmptyState
+                  icon={<UserPlus size={22} aria-hidden="true" />}
+                  title="No users yet"
+                  description="Invite your team to give them access."
+                  action={<Button icon={<UserPlus size={16} />} onClick={() => setShowCreateModal(true)}>Invite user</Button>}
+                />
+              )
+            }
+          />
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-50">
-              <p className="text-xs text-gray-500">
+            <nav aria-label="Pagination" className="flex flex-col items-center justify-between gap-2 sm:flex-row">
+              <p className="text-xs text-muted">
                 {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} users
               </p>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+              <div className="flex flex-wrap items-center gap-1">
+                <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+                  aria-label="Previous page"
+                  className="rounded-lg p-1.5 text-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-30">
                   <ChevronLeft size={15} />
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button key={p} onClick={() => setPage(p)}
-                    className={`w-8 h-8 rounded-lg text-xs font-bold ${page === p ? "bg-[#111111] text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+                  <button key={p} type="button" onClick={() => setPage(p)}
+                    aria-current={page === p ? "page" : undefined}
+                    className={`h-8 w-8 rounded-lg text-xs font-semibold ${page === p ? "bg-navy-600 text-white" : "text-ink-soft hover:bg-surface-sunken"}`}>
                     {p}
                   </button>
                 ))}
-                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-30">
+                <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                  aria-label="Next page"
+                  className="rounded-lg p-1.5 text-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-30">
                   <ChevronRight size={15} />
                 </button>
               </div>
-            </div>
+            </nav>
           )}
         </div>
       </div>
 
       {emailToast && <EmailToast {...emailToast} />}
 
-      {/* Create User Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="px-7 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#111111] rounded-xl flex items-center justify-center text-white">
-                  <UserPlus size={18} />
-                </div>
-                <div>
-                  <h2 className="text-lg font-black text-gray-900">Invite New User</h2>
-                  <p className="text-xs text-gray-400">User will be prompted to change password on first login</p>
-                </div>
-              </div>
-              <button onClick={() => { setShowCreateModal(false); resetForm(); }}
-                className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-700">
-                <XCircle size={20} />
-              </button>
+      {/* Invite user */}
+      <Modal
+        open={showCreateModal}
+        onClose={closeCreate}
+        preventClose={formLoading}
+        title="Invite new user"
+        description="The user will be prompted to change the password on first login."
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeCreate} disabled={formLoading}>Cancel</Button>
+            <Button type="submit" form={fid("invite-form")} loading={formLoading} icon={<SendHorizonal size={15} />}>
+              Send invite
+            </Button>
+          </>
+        }
+      >
+        <form id={fid("invite-form")} onSubmit={handleCreateUser} noValidate className="space-y-4">
+          {formError && (
+            <div role="alert" className="flex gap-2 rounded-lg border border-danger-600/20 bg-danger-50 p-3 text-sm text-danger-700">
+              <Shield size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" /> {formError}
             </div>
+          )}
 
-            <form onSubmit={handleCreateUser} className="p-7 space-y-4">
-              {formError && (
-                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-xl border border-red-100 flex gap-2">
-                  <Shield size={16} className="flex-shrink-0 mt-0.5" /> {formError}
-                </div>
-              )}
-
-              {[
-                { label: "Full Name", value: newFullName, onChange: setNewFullName, type: "text", placeholder: "John Doe", required: true },
-                { label: "Email Address", value: newEmail, onChange: setNewEmail, type: "email", placeholder: "name@company.com", required: true },
-              ].map((f) => (
-                <div key={f.label}>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{f.label}</label>
-                  <input type={f.type} required={f.required} value={f.value} onChange={(e) => f.onChange(e.target.value)} placeholder={f.placeholder}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              ))}
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Role</label>
-                <select value={newRole} onChange={(e) => { setNewRole(e.target.value); setNewVendorId(""); }}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
-                  {Object.entries(roleLabels).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-                </select>
-              </div>
-
-              {newRole === "vendor_user" && (
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Linked Vendor Company</label>
-                  <select value={newVendorId} onChange={(e) => setNewVendorId(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none">
-                    <option value="">— Select vendor —</option>
-                    {vendors.map((v) => <option key={v.id} value={v.id}>{v.company_name}</option>)}
-                  </select>
-                  <p className="mt-1 text-[10px] text-gray-400">This vendor's assigned jobs will be visible to the user.</p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Temporary Password</label>
-                <input type="text" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Set a temporary password"
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              </div>
-
-              <div className="pt-2 flex gap-3">
-                <button type="button" onClick={() => { setShowCreateModal(false); resetForm(); }}
-                  className="flex-1 py-3 bg-gray-50 text-gray-700 font-bold text-sm rounded-xl hover:bg-gray-100 transition-all">
-                  Cancel
-                </button>
-                <button type="submit" disabled={formLoading}
-                  className="flex-1 py-3 bg-[#111111] text-white font-bold text-sm rounded-xl hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-60">
-                  {formLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <><SendHorizonal size={15} /> Send Invite</>}
-                </button>
-              </div>
-            </form>
+          <div>
+            <label htmlFor={fid("name")} className="zh-label">Full name</label>
+            <input id={fid("name")} type="text" autoComplete="off" value={newFullName}
+              onChange={(e) => setNewFullName(e.target.value)} placeholder="John Doe"
+              aria-invalid={!!fieldErrors.full_name || undefined}
+              aria-describedby={fieldErrors.full_name ? fid("name-err") : undefined}
+              className="zh-input" />
+            <FieldError id={fid("name-err")} message={fieldErrors.full_name} />
           </div>
-        </div>
-      )}
-    </div>
+
+          <div>
+            <label htmlFor={fid("email")} className="zh-label">Email address</label>
+            <input id={fid("email")} type="email" autoComplete="off" value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)} placeholder="name@company.com"
+              aria-invalid={!!fieldErrors.email || undefined}
+              aria-describedby={fieldErrors.email ? fid("email-err") : undefined}
+              className="zh-input" />
+            <FieldError id={fid("email-err")} message={fieldErrors.email} />
+          </div>
+
+          <div>
+            <label htmlFor={fid("role")} className="zh-label">Role</label>
+            <select id={fid("role")} value={newRole} onChange={(e) => { setNewRole(e.target.value); setNewVendorId(""); }}
+              className="zh-input">
+              {Object.entries(roleLabels).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+            </select>
+          </div>
+
+          {newRole === "vendor_user" && (
+            <div>
+              <label htmlFor={fid("vendor")} className="zh-label">Linked vendor company</label>
+              <select id={fid("vendor")} value={newVendorId} onChange={(e) => setNewVendorId(e.target.value)}
+                aria-describedby={fid("vendor-hint")}
+                className="zh-input">
+                <option value="">— Select vendor —</option>
+                {vendors.map((v) => <option key={v.id} value={v.id}>{v.company_name}</option>)}
+              </select>
+              <p id={fid("vendor-hint")} className="mt-1 text-xs text-muted">This vendor's assigned jobs will be visible to the user.</p>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor={fid("password")} className="zh-label">Temporary password</label>
+            <PasswordInput id={fid("password")} value={newPassword} onChange={setNewPassword}
+              placeholder="Set a temporary password"
+              invalid={!!fieldErrors.password}
+              describedBy={fieldErrors.password ? fid("password-err") : undefined} />
+            <FieldError id={fid("password-err")} message={fieldErrors.password} />
+          </div>
+        </form>
+      </Modal>
+
+      {/* Reset password (replaces window.prompt) */}
+      <Modal
+        open={!!resetUser}
+        onClose={() => setResetUser(null)}
+        preventClose={resetting}
+        size="sm"
+        title="Reset password"
+        description={resetUser ? `Set a temporary password for ${resetUser.full_name || resetUser.email}. They must change it on next login.` : undefined}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetUser(null)} disabled={resetting}>Cancel</Button>
+            <Button type="submit" form={fid("reset-form")} loading={resetting}>Reset password</Button>
+          </>
+        }
+      >
+        <form id={fid("reset-form")} onSubmit={handleResetPassword} noValidate>
+          <label htmlFor={fid("reset-pwd")} className="zh-label">New temporary password</label>
+          <PasswordInput id={fid("reset-pwd")} value={resetPwd}
+            onChange={(v) => { setResetPwd(v); if (resetError) setResetError(""); }}
+            invalid={!!resetError}
+            describedBy={resetError ? fid("reset-err") : undefined}
+            autoFocus />
+          <FieldError id={fid("reset-err")} message={resetError} />
+        </form>
+      </Modal>
+    </>
   );
 }

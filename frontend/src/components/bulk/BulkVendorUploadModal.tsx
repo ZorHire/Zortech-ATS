@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback } from "react";
-import {
-  X, Upload, FileText, CheckCircle2, XCircle, Loader2,
-  ChevronDown, ArrowLeft, Eye,
-} from "lucide-react";
+import { X, Upload, FileText, CheckCircle2, XCircle, ArrowLeft, Eye } from "lucide-react";
 import {
   useParseVendorMutation,
   useCreateVendorMutation,
 } from "../../store/api/vendorApi";
+import { Badge, Button, Modal, Spinner } from "../ui";
+import type { BadgeTone } from "../ui";
 
 type FileStatus = "pending" | "parsing" | "parsed" | "error" | "saving" | "saved";
 
@@ -182,264 +181,206 @@ export default function BulkVendorUploadModal({ onClose, onSuccess }: Props) {
   };
 
   const statusIcon = (status: FileStatus) => {
-    if (status === "parsing" || status === "saving")
-      return <Loader2 size={14} className="text-blue-500 animate-spin flex-shrink-0" />;
+    if (status === "parsing" || status === "saving") return <Spinner size={14} className="shrink-0" />;
     if (status === "parsed" || status === "saved")
-      return <CheckCircle2 size={14} className="text-emerald-500 flex-shrink-0" />;
-    if (status === "error")
-      return <XCircle size={14} className="text-red-500 flex-shrink-0" />;
-    return <FileText size={14} className="text-gray-400 flex-shrink-0" />;
+      return <CheckCircle2 size={16} className="shrink-0 text-success-600" aria-hidden="true" />;
+    if (status === "error") return <XCircle size={16} className="shrink-0 text-danger-600" aria-hidden="true" />;
+    return <FileText size={16} className="shrink-0 text-muted" aria-hidden="true" />;
   };
 
   const statusBadge = (f: UploadFile) => {
-    const map: Record<FileStatus, { label: string; cls: string }> = {
-      pending: { label: "Pending", cls: "bg-gray-100 text-gray-500" },
-      parsing: { label: "Parsing…", cls: "bg-blue-50 text-blue-600" },
-      parsed: { label: "Ready", cls: "bg-emerald-50 text-emerald-600" },
-      error: { label: f.error || "Error", cls: "bg-red-50 text-red-600" },
-      saving: { label: "Saving…", cls: "bg-blue-50 text-blue-600" },
-      saved: { label: "Saved", cls: "bg-emerald-50 text-emerald-700" },
+    const map: Record<FileStatus, { label: string; tone: BadgeTone }> = {
+      pending: { label: "Pending", tone: "neutral" },
+      parsing: { label: "Parsing…", tone: "navy" },
+      parsed: { label: "Ready", tone: "success" },
+      error: { label: f.error || "Error", tone: "danger" },
+      saving: { label: "Saving…", tone: "navy" },
+      saved: { label: "Saved", tone: "success" },
     };
-    const { label, cls } = map[f.status];
-    return (
-      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
-    );
+    const { label, tone } = map[f.status];
+    return <Badge tone={tone}>{label}</Badge>;
   };
 
+  const inputId = (name: string, field: string) => `bulk-vendor-${field}-${name.replace(/[^a-z0-9]/gi, "-")}`;
+
+  const textField = (f: UploadFile, label: string, field: keyof ParsedVendor, wide = false) => (
+    <div key={field} className={wide ? "sm:col-span-2" : ""}>
+      <label htmlFor={inputId(f.file.name, field)} className="zh-label">
+        {label}
+      </label>
+      <input
+        id={inputId(f.file.name, field)}
+        type="text"
+        value={f.result![field]}
+        onChange={(e) => updateResult(f.file.name, field, e.target.value)}
+        className="zh-input"
+      />
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-
-        {/* Header */}
-        <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            {view === "preview" && (
-              <button
-                onClick={() => setView("upload")}
-                className="p-1.5 hover:bg-white rounded-lg text-gray-500 hover:text-gray-800 transition-all"
-              >
-                <ArrowLeft size={18} />
-              </button>
-            )}
-            <div>
-              <h2 className="text-xl font-black text-gray-900 tracking-tight">
-                {view === "upload"
-                  ? "Bulk Vendor Import"
-                  : `Preview — ${parsedFiles.length} Vendor${parsedFiles.length !== 1 ? "s" : ""}`}
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {view === "upload"
-                  ? "Upload vendor documents to import multiple vendors at once"
-                  : "Review parsed vendor details before saving"}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-gray-700 transition-all"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-
-          {view === "upload" ? (
-            <div className="p-8 space-y-6">
-
-              {/* Drop zone */}
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all select-none ${
-                  isDragging ? "border-teal-500 bg-teal-50" : "border-gray-200 hover:border-teal-400 hover:bg-gray-50"
-                }`}
-              >
-                <Upload size={28} className={`mx-auto mb-3 ${isDragging ? "text-teal-500" : "text-gray-400"}`} />
-                <p className="text-sm font-semibold text-gray-700">Drop vendor documents here or click to browse</p>
-                <p className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX — multiple files supported</p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleFileInput}
-                  className="hidden"
-                />
-              </div>
-
-              {/* File list */}
-              {files.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    {files.length} file{files.length !== 1 ? "s" : ""} selected
-                  </p>
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                    {files.map((f) => (
-                      <div key={f.file.name} className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl">
-                        {statusIcon(f.status)}
-                        <span className="flex-1 text-sm text-gray-700 truncate">{f.file.name}</span>
-                        {statusBadge(f)}
-                        {f.status !== "parsing" && (
-                          <button
-                            onClick={() => removeFile(f.file.name)}
-                            className="text-gray-400 hover:text-red-500 ml-1 flex-shrink-0"
-                          >
-                            <X size={12} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-          ) : (
-            // Preview view
-            <div className="p-8 space-y-4">
-              {parsedFiles.map((f) => {
-                const r = f.result!;
-                return (
-                  <div key={f.file.name} className="border border-gray-100 rounded-2xl p-5 bg-gray-50/40 space-y-4">
-                    <div className="flex items-center gap-2">
-                      <FileText size={13} className="text-teal-500 flex-shrink-0" />
-                      <span className="text-xs font-semibold text-gray-500 truncate">{f.file.name}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                          Company Name *
-                        </label>
-                        <input
-                          type="text"
-                          value={r.company_name}
-                          onChange={(e) => updateResult(f.file.name, "company_name", e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                        />
-                      </div>
-                      {(
-                        [
-                          ["Contact Name", "primary_contact_name"],
-                          ["Contact Email", "primary_contact_email"],
-                          ["Contact Phone", "primary_contact_phone"],
-                          ["Registration No.", "registration_number"],
-                          ["GST ID", "gst_id"],
-                        ] as [string, string][]
-                      ).map(([label, field]) => (
-                        <div key={field}>
-                          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                            {label}
-                          </label>
-                          <input
-                            type="text"
-                            value={(r as any)[field]}
-                            onChange={(e) => updateResult(f.file.name, field, e.target.value)}
-                            className="w-full px-3 py-2 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                          />
-                        </div>
-                      ))}
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                          Tier
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={r.tier}
-                            onChange={(e) => updateResult(f.file.name, "tier", e.target.value)}
-                            className="w-full px-3 py-2 pr-8 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 appearance-none"
-                          >
-                            {tiers.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                          </select>
-                          <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        </div>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                          Industry Specializations (comma separated)
-                        </label>
-                        <input
-                          type="text"
-                          value={r.industry_specializations}
-                          onChange={(e) => updateResult(f.file.name, "industry_specializations", e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                          Geographies (comma separated)
-                        </label>
-                        <input
-                          type="text"
-                          value={r.geographies}
-                          onChange={(e) => updateResult(f.file.name, "geographies", e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {overallError && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{overallError}</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-8 py-5 border-t border-gray-100 flex items-center justify-between gap-3 flex-shrink-0 bg-gray-50/30">
-          {view === "upload" ? (
-            <>
-              <span className="text-xs text-gray-400">
-                {anyParsing
-                  ? "Parsing documents…"
-                  : parsedFiles.length > 0
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      preventClose={saving}
+      title={
+        view === "upload"
+          ? "Bulk vendor import"
+          : `Preview: ${parsedFiles.length} vendor${parsedFiles.length !== 1 ? "s" : ""}`
+      }
+      description={
+        view === "upload"
+          ? "Upload vendor documents to import multiple vendors at once"
+          : "Review parsed vendor details before saving"
+      }
+      footer={
+        view === "upload" ? (
+          <>
+            <span className="text-sm text-muted sm:mr-auto sm:self-center" aria-live="polite">
+              {anyParsing
+                ? "Parsing documents…"
+                : parsedFiles.length > 0
                   ? `${parsedFiles.length} of ${files.length} ready to preview`
                   : "No files added yet"}
-              </span>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onClose}
-                  className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-200 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setView("preview")}
-                  disabled={parsedFiles.length === 0 || anyParsing}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-teal-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                >
-                  <Eye size={14} /> Preview ({parsedFiles.length})
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setView("upload")}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-200 transition-all"
-              >
-                <ArrowLeft size={14} /> Back
-              </button>
-              <button
-                onClick={handleSaveAll}
-                disabled={saving}
-                className="flex items-center gap-2 px-6 py-2.5 bg-teal-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 disabled:opacity-50 transition-all"
-              >
-                {saving && <Loader2 size={14} className="animate-spin" />}
-                {saving
-                  ? "Saving…"
-                  : `Save ${parsedFiles.length} Vendor${parsedFiles.length !== 1 ? "s" : ""}`}
-              </button>
-            </>
+            </span>
+            <Button variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              icon={<Eye size={16} />}
+              onClick={() => setView("preview")}
+              disabled={parsedFiles.length === 0 || anyParsing}
+            >
+              Preview ({parsedFiles.length})
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              icon={<ArrowLeft size={16} />}
+              onClick={() => setView("upload")}
+              disabled={saving}
+              className="sm:mr-auto"
+            >
+              Back
+            </Button>
+            <Button onClick={handleSaveAll} loading={saving} loadingText="Saving…">
+              {`Save ${parsedFiles.length} vendor${parsedFiles.length !== 1 ? "s" : ""}`}
+            </Button>
+          </>
+        )
+      }
+    >
+      {view === "upload" ? (
+        <div className="space-y-6">
+          {/* Drop zone */}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Add vendor documents"
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            className={`cursor-pointer select-none rounded-xl border-2 border-dashed p-8 text-center transition-colors sm:p-10 ${
+              isDragging ? "border-navy-500 bg-navy-50" : "border-line-strong hover:border-navy-400 hover:bg-surface"
+            }`}
+          >
+            <Upload size={28} className={`mx-auto mb-3 ${isDragging ? "text-navy-600" : "text-muted"}`} aria-hidden="true" />
+            <p className="text-sm font-semibold text-ink">Drop vendor documents here or click to browse</p>
+            <p className="mt-1 text-xs text-muted">PDF, DOC, DOCX. Multiple files supported.</p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx"
+              onChange={handleFileInput}
+              className="hidden"
+            />
+          </div>
+
+          {files.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted">
+                {files.length} file{files.length !== 1 ? "s" : ""} selected
+              </p>
+              <ul className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
+                {files.map((f) => (
+                  <li key={f.file.name} className="flex items-center gap-3 rounded-lg bg-surface px-3 py-2.5">
+                    {statusIcon(f.status)}
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{f.file.name}</span>
+                    {statusBadge(f)}
+                    {f.status !== "parsing" && (
+                      <button
+                        type="button"
+                        onClick={() => removeFile(f.file.name)}
+                        aria-label={`Remove ${f.file.name}`}
+                        className="shrink-0 rounded-md p-1 text-muted hover:bg-danger-50 hover:text-danger-600"
+                      >
+                        <X size={14} aria-hidden="true" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
-
-      </div>
-    </div>
+      ) : (
+        <div className="space-y-4">
+          {parsedFiles.map((f) => (
+            <div key={f.file.name} className="space-y-4 rounded-xl border border-line bg-surface p-4 sm:p-5">
+              <div className="flex items-center gap-2">
+                <FileText size={14} className="shrink-0 text-navy-600" aria-hidden="true" />
+                <span className="truncate text-xs font-medium text-muted">{f.file.name}</span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {textField(f, "Company name *", "company_name", true)}
+                {textField(f, "Contact name", "primary_contact_name")}
+                {textField(f, "Contact email", "primary_contact_email")}
+                {textField(f, "Contact phone", "primary_contact_phone")}
+                {textField(f, "Registration no.", "registration_number")}
+                {textField(f, "GST ID", "gst_id")}
+                <div>
+                  <label htmlFor={inputId(f.file.name, "tier")} className="zh-label">
+                    Tier
+                  </label>
+                  <select
+                    id={inputId(f.file.name, "tier")}
+                    value={f.result!.tier}
+                    onChange={(e) => updateResult(f.file.name, "tier", e.target.value)}
+                    className="zh-input"
+                  >
+                    {tiers.map((t) => (
+                      <option key={t.value} value={t.value}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {textField(f, "Industry specializations (comma separated)", "industry_specializations", true)}
+                {textField(f, "Geographies (comma separated)", "geographies", true)}
+              </div>
+            </div>
+          ))}
+          {overallError && (
+            <p role="alert" className="rounded-lg bg-danger-50 px-4 py-3 text-sm text-danger-700">
+              {overallError}
+            </p>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }

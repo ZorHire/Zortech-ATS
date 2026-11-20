@@ -1,11 +1,12 @@
-
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, ArrowLeft, Upload, CheckCircle, AlertCircle, Loader } from "lucide-react";
-import Header from "../components/layout/Header";
+import { Upload, CheckCircle, AlertCircle } from "lucide-react";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import { useGetClientsQuery, useParseJdMutation, useCreateJobMutation } from "../store/api/jobApi";
 import { useNotify } from "../hooks/useNotify";
+import { getErrorMessage } from "../lib/format";
+import { Button, PageHeader, Spinner } from "../components/ui";
 
 const statusOptions = [
   { value: "draft", label: "Draft" },
@@ -13,6 +14,24 @@ const statusOptions = [
   { value: "closed_filled", label: "Closed Filled" },
   { value: "closed_cancelled", label: "Closed Cancelled" },
 ];
+
+/** Only add the low-confidence highlight; zh-input supplies the normal border. */
+const flagClass = (flagged: boolean) => (flagged ? confidenceInputClass(true) : "");
+
+function Field({ id, label, flagged, error, children, className = "" }: {
+  id: string; label: string; flagged?: boolean; error?: string | null; children: ReactNode; className?: string;
+}) {
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="zh-label">
+        {label}
+        {flagged && <span className={ConfidenceBadge}>needs review</span>}
+      </label>
+      {children}
+      {error && <p id={`${id}-error`} className="mt-1 text-xs text-danger-600">{error}</p>}
+    </div>
+  );
+}
 
 export default function NewJobPage() {
   const navigate = useNavigate();
@@ -116,118 +135,83 @@ export default function NewJobPage() {
       }).unwrap();
       notify.success("Job created");
       navigate("/jobs");
-    } catch (error: any) {
-      notify.error(error?.data?.message || error?.message || "Unable to create job. Please verify all fields and try again.");
+    } catch (error) {
+      notify.error(getErrorMessage(error, "Unable to create job. Please verify all fields and try again."));
     }
   };
 
   const titleFlagged = isLowConfidence(lowConfidenceFields, "title");
+  const locationFlagged = isLowConfidence(lowConfidenceFields, "location");
   const departmentFlagged = isLowConfidence(lowConfidenceFields, "department");
   const workModeFlagged = isLowConfidence(lowConfidenceFields, "work_mode");
   const mandatorySkillsFlagged = isLowConfidence(lowConfidenceFields, "mandatory_skills", "required_skills");
   const preferredSkillsFlagged = isLowConfidence(lowConfidenceFields, "preferred_skills");
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header
-        title="Create Job Description"
+    <>
+      <PageHeader
+        title="Create job description"
         subtitle="Build a new JD and assign it to your hiring pipeline"
-        actions={
-          <button
-            onClick={() => navigate("/jobs")}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors"
-          >
-            <ArrowLeft size={16} /> Back to Jobs
-          </button>
-        }
+        breadcrumbs={[{ label: "Jobs", to: "/jobs" }, { label: "New job" }]}
       />
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl mx-auto overflow-hidden">
-          <div className="px-8 py-6 border-b border-gray-100 flex items-center gap-3 bg-gray-50/50">
-            <div className="p-3 bg-gray-100 rounded-2xl">
-              <Plus size={18} className="text-[#111111]" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-[#111111] tracking-tight">
-                New Job Description
-              </h2>
-              <p className="text-sm text-gray-500">
-                Enter job details, skills, budget and publish status.
-              </p>
-            </div>
-          </div>
-
-          <form
-            onSubmit={handleSubmit}
-            className="p-8 grid grid-cols-1 gap-6 max-h-[75vh] overflow-y-auto"
-          >
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <form onSubmit={handleSubmit} className="zh-card mx-auto max-w-4xl">
+          <div className="space-y-6 p-5 sm:p-6">
             {/* JD Upload → Auto-fill */}
-            <div className="border border-dashed border-blue-200 bg-blue-50/40 rounded-2xl p-4">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">
-                Upload JD to Auto-fill (PDF / DOCX / TXT)
-              </label>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer px-4 py-2.5 bg-white border border-blue-200 rounded-xl text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-all shadow-sm">
-                  {jdParsing ? (
-                    <Loader size={15} className="animate-spin" />
-                  ) : (
-                    <Upload size={15} />
-                  )}
-                  {jdParsing ? "Parsing…" : "Choose File"}
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt"
-                    className="hidden"
-                    disabled={jdParsing}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleJDUpload(file);
-                    }}
-                  />
+            <div className="rounded-xl border border-dashed border-navy-200 bg-navy-50/50 p-4">
+              <p className="zh-label">Upload a JD to auto-fill (PDF / DOCX / TXT)</p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <label
+                  htmlFor="new-job-file"
+                  className={`inline-flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink shadow-sm transition hover:bg-surface ${jdParsing ? "pointer-events-none opacity-60" : ""}`}
+                >
+                  {jdParsing ? <Spinner size={16} tone="dark" /> : <Upload size={16} />}
+                  {jdParsing ? "Parsing…" : "Choose file"}
                 </label>
+                <input
+                  id="new-job-file"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt"
+                  className="sr-only"
+                  disabled={jdParsing}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleJDUpload(file);
+                  }}
+                />
                 {jdParseMessage && (
                   <span
+                    role={jdParseMessage.type === "error" ? "alert" : "status"}
                     className={`flex items-center gap-1.5 text-xs font-medium ${
-                      jdParseMessage.type === "success" ? "text-emerald-600" : "text-red-500"
+                      jdParseMessage.type === "success" ? "text-success-700" : "text-danger-600"
                     }`}
                   >
-                    {jdParseMessage.type === "success" ? (
-                      <CheckCircle size={13} />
-                    ) : (
-                      <AlertCircle size={13} />
-                    )}
+                    {jdParseMessage.type === "success" ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
                     {jdParseMessage.text}
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Job Title
-                  {titleFlagged && <span className={ConfidenceBadge}>needs review</span>}
-                </label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field id="new-job-title" label="Job title" flagged={titleFlagged}>
                 <input
+                  id="new-job-title"
                   required
                   value={formData.title}
-                  onChange={(e) =>
-                    setFormData({ ...formData, title: e.target.value })
-                  }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(titleFlagged)}`}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className={`zh-input ${flagClass(titleFlagged)}`}
                   placeholder="Senior Product Designer"
                 />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Client
-                </label>
+              </Field>
+              <Field id="new-job-client" label="Client">
                 <select
+                  id="new-job-client"
                   required
                   value={formData.client_id}
                   onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                 >
                   <option value="">Select client</option>
                   {clients.map((client) => (
@@ -236,32 +220,23 @@ export default function NewJobPage() {
                     </option>
                   ))}
                 </select>
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Location
-                </label>
+              </Field>
+              <Field id="new-job-location" label="Location" flagged={locationFlagged}>
                 <input
+                  id="new-job-location"
                   required
                   value={formData.location}
-                  onChange={(e) =>
-                    setFormData({ ...formData, location: e.target.value })
-                  }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(isLowConfidence(lowConfidenceFields, "location"))}`}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  className={`zh-input ${flagClass(locationFlagged)}`}
                   placeholder="Bangalore"
                 />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Status
-                </label>
+              </Field>
+              <Field id="new-job-status" label="Status">
                 <select
+                  id="new-job-status"
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                 >
                   {statusOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -269,191 +244,142 @@ export default function NewJobPage() {
                     </option>
                   ))}
                 </select>
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Department
-                  {departmentFlagged && <span className={ConfidenceBadge}>needs review</span>}
-                </label>
+              </Field>
+              <Field id="new-job-department" label="Department" flagged={departmentFlagged}>
                 <input
+                  id="new-job-department"
                   value={formData.department}
-                  onChange={(e) =>
-                    setFormData({ ...formData, department: e.target.value })
-                  }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(departmentFlagged)}`}
+                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                  className={`zh-input ${flagClass(departmentFlagged)}`}
                   placeholder="Engineering"
                 />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Work Mode
-                  {workModeFlagged && <span className={ConfidenceBadge}>needs review</span>}
-                </label>
+              </Field>
+              <Field id="new-job-work-mode" label="Work mode" flagged={workModeFlagged}>
                 <select
+                  id="new-job-work-mode"
                   value={formData.work_mode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, work_mode: e.target.value })
-                  }
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(workModeFlagged)}`}
+                  onChange={(e) => setFormData({ ...formData, work_mode: e.target.value })}
+                  className={`zh-input ${flagClass(workModeFlagged)}`}
                 >
                   <option value="onsite">Onsite</option>
                   <option value="hybrid">Hybrid</option>
                   <option value="remote">Remote</option>
                 </select>
-              </div>
+              </Field>
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-6">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Priority
-                </label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Field id="new-job-priority" label="Priority">
                 <select
+                  id="new-job-priority"
                   value={formData.priority}
                   onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
                   <option value="critical">Critical</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Experience Min
-                </label>
+              </Field>
+              <Field id="new-job-exp-min" label="Experience min (yrs)">
                 <input
+                  id="new-job-exp-min"
                   type="number"
                   min={0}
                   value={formData.experience_min}
                   onChange={(e) => setFormData({ ...formData, experience_min: Number(e.target.value) })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                 />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Experience Max
-                </label>
+              </Field>
+              <Field id="new-job-exp-max" label="Experience max (yrs)" error={expError}>
                 <input
+                  id="new-job-exp-max"
                   type="number"
                   min={0}
                   value={formData.experience_max}
                   onChange={(e) => setFormData({ ...formData, experience_max: Number(e.target.value) })}
                   aria-invalid={!!expError}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  aria-describedby={expError ? "new-job-exp-max-error" : undefined}
+                  className="zh-input"
                 />
-                {expError && <p className="text-xs text-red-600 mt-1 ml-1">{expError}</p>}
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-3 gap-6">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Budget Min
-                </label>
+              </Field>
+              <Field id="new-job-budget-min" label="Budget min (₹)">
                 <input
+                  id="new-job-budget-min"
                   type="number"
                   min={0}
                   value={formData.salary_min}
                   onChange={(e) => setFormData({ ...formData, salary_min: Number(e.target.value) })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                   placeholder="0"
                 />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Budget Max
-                </label>
+              </Field>
+              <Field id="new-job-budget-max" label="Budget max (₹)">
                 <input
+                  id="new-job-budget-max"
                   type="number"
                   min={0}
                   value={formData.salary_max}
                   onChange={(e) => setFormData({ ...formData, salary_max: Number(e.target.value) })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                   placeholder="0"
                 />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                  Headcount
-                </label>
+              </Field>
+              <Field id="new-job-headcount" label="Headcount">
                 <input
+                  id="new-job-headcount"
                   type="number"
                   min={1}
                   value={formData.headcount}
                   onChange={(e) => setFormData({ ...formData, headcount: Number(e.target.value) })}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                  className="zh-input"
                 />
-              </div>
+              </Field>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                Primary Skills
-                {mandatorySkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
+            <Field id="new-job-mandatory" label="Primary skills (comma-separated)" flagged={mandatorySkillsFlagged}>
               <input
+                id="new-job-mandatory"
                 value={formData.mandatory_skills}
-                onChange={(e) =>
-                  setFormData({ ...formData, mandatory_skills: e.target.value })
-                }
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(mandatorySkillsFlagged)}`}
+                onChange={(e) => setFormData({ ...formData, mandatory_skills: e.target.value })}
+                className={`zh-input ${flagClass(mandatorySkillsFlagged)}`}
                 placeholder="React, Node.js, Product Management"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                Preferred Skills
-                {preferredSkillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
+            <Field id="new-job-preferred" label="Preferred skills (comma-separated)" flagged={preferredSkillsFlagged}>
               <input
+                id="new-job-preferred"
                 value={formData.preferred_skills}
-                onChange={(e) =>
-                  setFormData({ ...formData, preferred_skills: e.target.value })
-                }
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(preferredSkillsFlagged)}`}
+                onChange={(e) => setFormData({ ...formData, preferred_skills: e.target.value })}
+                className={`zh-input ${flagClass(preferredSkillsFlagged)}`}
                 placeholder="GraphQL, Kubernetes (good to have)"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">
-                Description
-              </label>
+            <Field id="new-job-description" label="Description">
               <textarea
+                id="new-job-description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={6}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+                className="zh-input"
                 placeholder="Provide core JD, responsibilities and must-have skills."
               />
-            </div>
+            </Field>
+          </div>
 
-            <div className="flex gap-4 mt-6">
-              <button
-                type="button"
-                onClick={() => navigate("/jobs")}
-                disabled={creating}
-                className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={jdParsing || creating || !!expError}
-                className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {jdParsing ? "Parsing JD…" : creating ? "Saving…" : "Create Job"}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex flex-col-reverse gap-2 rounded-b-xl border-t border-line bg-surface px-5 py-3 sm:flex-row sm:justify-end sm:px-6">
+            <Button variant="secondary" onClick={() => navigate("/jobs")} disabled={creating}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={creating} loadingText="Saving…" disabled={jdParsing || !!expError}>
+              {jdParsing ? "Parsing JD…" : "Create job"}
+            </Button>
+          </div>
+        </form>
       </div>
-    </div>
+    </>
   );
 }

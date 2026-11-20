@@ -1,62 +1,86 @@
-import { ReactNode, Component, ErrorInfo } from "react";
-import { AlertCircle } from "lucide-react";
+import { Component } from "react";
+import type { ErrorInfo, ReactNode } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 
 interface Props {
   children: ReactNode;
+  /** "page" renders inside the app shell so the sidebar stays usable. */
+  variant?: "app" | "page";
+  /** Changing this (e.g. the route path) clears the error. */
+  resetKey?: string;
 }
 
 interface State {
-  hasError: boolean;
   error: Error | null;
 }
 
+/** After a deploy, an open tab may ask for page files that no longer exist. */
+function isStaleBundleError(error: Error | null): boolean {
+  const msg = error?.message ?? "";
+  return /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(msg);
+}
+
 export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-          <div className="bg-white rounded-xl shadow-lg p-8 max-w-md text-center">
-            <div className="flex justify-center mb-4">
-              <AlertCircle size={48} className="text-red-500" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              Something went wrong
-            </h1>
-            <p className="text-gray-600 mb-6">
-              {this.state.error?.message ||
-                "An unexpected error occurred. Please try refreshing the page."}
-            </p>
-            <button
-              onClick={() => (window.location.href = "/")}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-            >
-              Go to Home
-            </button>
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full mt-3 bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-            >
-              Refresh Page
-            </button>
-          </div>
-        </div>
-      );
-    }
+  componentDidUpdate(prev: Props) {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
+  }
 
-    return this.props.children;
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+
+    const stale = isStaleBundleError(error);
+    const page = this.props.variant === "page";
+
+    return (
+      <div className={`flex items-center justify-center px-4 ${page ? "flex-1 py-16" : "min-h-screen bg-surface"}`}>
+        <div role="alert" className="zh-card w-full max-w-md p-8 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-50 text-danger-600">
+            <AlertTriangle size={24} aria-hidden="true" />
+          </div>
+          <h1 className="text-lg font-semibold text-ink">
+            {stale ? "ZorHire has been updated" : "This screen hit a problem"}
+          </h1>
+          <p className="mt-2 text-sm text-muted">
+            {stale
+              ? "Reload to get the latest version. Nothing you saved is lost."
+              : "Something went wrong while showing this page. Reloading usually fixes it; if it keeps happening, tell us what you were doing."}
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-navy-600 px-4 text-sm font-semibold text-white hover:bg-navy-700"
+            >
+              <RefreshCw size={16} aria-hidden="true" />
+              Reload
+            </button>
+            {!stale && (
+              <button
+                type="button"
+                onClick={() => (window.location.href = "/")}
+                className="h-10 rounded-lg px-4 text-sm font-medium text-muted hover:bg-surface-sunken hover:text-ink"
+              >
+                Go to dashboard
+              </button>
+            )}
+          </div>
+          {!stale && import.meta.env.DEV && (
+            <pre className="mt-6 max-h-32 overflow-auto rounded bg-surface-sunken p-3 text-left text-xs text-ink-soft">{error.message}</pre>
+          )}
+        </div>
+      </div>
+    );
   }
 }
 

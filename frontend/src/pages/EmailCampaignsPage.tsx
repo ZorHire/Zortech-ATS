@@ -1,10 +1,10 @@
-import { useState, useRef } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
-  Mail, Send, Loader2, X, Users, BarChart2, Clock,
-  Search, ChevronDown, Plus, AlertCircle, CheckCircle2,
-  XCircle, Eye, MousePointer, Globe, Bold, Italic,
-  Underline, List, Link, Image, Smile, Trash2,
+  Mail, Send, X, Users, BarChart2, Clock,
+  Search, Plus, AlertCircle, CheckCircle2,
+  XCircle, Eye, MousePointer, Globe, Trash2, Lightbulb,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { EmailCampaign } from '../types';
 import {
@@ -12,6 +12,12 @@ import {
   useSendCampaignMutation, useDeleteCampaignMutation,
 } from '../store/api/emailApi';
 import { useGetCandidatesQuery } from '../store/api/candidateApi';
+import {
+  Badge, Button, DataTable, EmptyState, ErrorState, PageHeader, Skeleton, StatCard, useConfirm,
+} from '../components/ui';
+import type { BadgeTone, Column } from '../components/ui';
+import { useNotify } from '../hooks/useNotify';
+import { getErrorMessage } from '../lib/format';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -37,8 +43,10 @@ Best regards,
 {{recruiter_name}}
 {{company_name}}`;
 
+const DEFAULT_SUBJECT = 'We have exciting opportunities for you!';
+
 const CAMPAIGN_TEMPLATES = [
-  { label: 'Outreach', subject: 'We have exciting opportunities for you!', body: DEFAULT_BODY },
+  { label: 'Outreach', subject: DEFAULT_SUBJECT, body: DEFAULT_BODY },
   {
     label: 'Interview Invite',
     subject: 'Interview Invitation — next steps',
@@ -66,10 +74,10 @@ const TIMEZONES = [
 ];
 
 const STEPS = [
-  { n: 1, title: 'Recipients', sub: 'Select candidates' },
-  { n: 2, title: 'Email Content', sub: 'Compose email' },
-  { n: 3, title: 'Settings', sub: 'Configure campaign' },
-  { n: 4, title: 'Review & Send', sub: 'Confirm and send' },
+  { n: 1, title: 'Recipients', sub: 'Select candidates', anchor: 'recipients' },
+  { n: 2, title: 'Email content', sub: 'Compose email', anchor: 'content' },
+  { n: 3, title: 'Settings', sub: 'Configure campaign', anchor: 'settings' },
+  { n: 4, title: 'Review & send', sub: 'Confirm and send', anchor: 'review' },
 ];
 
 const TIPS = [
@@ -79,13 +87,17 @@ const TIPS = [
   'Schedule for optimal times',
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-600',
-  scheduled: 'bg-amber-100 text-amber-700',
-  sending: 'bg-blue-100 text-blue-700',
-  sent: 'bg-emerald-100 text-emerald-700',
-  failed: 'bg-red-100 text-red-600',
+/** Campaign status → badge tone (one mapping for the page). */
+const STATUS_TONES: Record<string, BadgeTone> = {
+  draft: 'neutral',
+  scheduled: 'warning',
+  sending: 'info',
+  sent: 'success',
+  failed: 'danger',
 };
+const statusLabel = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const FILTERS = ['all', 'draft', 'sent', 'scheduled', 'failed'] as const;
 
 const PAGE_SIZE = 5;
 
@@ -100,17 +112,25 @@ interface CandidateRow {
 
 // ─── Toggle component ─────────────────────────────────────────────────────────
 
-function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: () => void; label: string; hint: string }) {
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={on}
       onClick={onChange}
-      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${on ? 'bg-blue-600' : 'bg-gray-300'}`}
+      className="flex items-center gap-2.5 rounded-lg text-left"
     >
-      <span
-        className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform"
-        style={{ transform: on ? 'translateX(18px)' : 'translateX(2px)' }}
-      />
+      <span className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${on ? 'bg-navy-600' : 'bg-line-strong'}`}>
+        <span
+          className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform"
+          style={{ transform: on ? 'translateX(18px)' : 'translateX(2px)' }}
+        />
+      </span>
+      <span>
+        <span className="block text-sm font-medium text-ink">{label}</span>
+        <span className="block text-xs text-muted">{hint}</span>
+      </span>
     </button>
   );
 }
@@ -118,8 +138,13 @@ function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EmailCampaignsPage() {
+  const notify = useNotify();
+  const confirm = useConfirm();
+  const uid = useId();
+  const fid = (k: string) => `${uid}-${k}`;
+
   const [mode, setMode] = useState<'list' | 'create'>('list');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<string>('all');
 
   // Wizard
   const [activeStep, setActiveStep] = useState(1);
@@ -132,10 +157,9 @@ export default function EmailCampaignsPage() {
   const [candidatePage, setCandidatePage] = useState(1);
 
   // Step 2 — Email Content
-  const [subject, setSubject] = useState('We have exciting opportunities for you!');
+  const [subject, setSubject] = useState(DEFAULT_SUBJECT);
   const [emailBody, setEmailBody] = useState(DEFAULT_BODY);
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [showVarMenu, setShowVarMenu] = useState<'subject' | 'body' | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   // Step 3 — Settings
@@ -146,14 +170,17 @@ export default function EmailCampaignsPage() {
 
   const [sending, setSending] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [showFieldErrors, setShowFieldErrors] = useState(false);
 
   // ─── RTK Query ──────────────────────────────────────────────────────────────
 
-  const { data: campaigns = [], isFetching: listLoading } = useGetCampaignsQuery();
-  const { data: candidateData = [], isFetching: candidatesLoading } = useGetCandidatesQuery(
-    undefined,
-    { skip: mode !== 'create' },
-  );
+  const {
+    data: campaigns = [], isLoading: listLoading, isError: listIsError, error: listError, refetch: refetchList,
+  } = useGetCampaignsQuery();
+  const {
+    data: candidateData = [], isFetching: candidatesLoading, isError: candidatesIsError,
+    error: candidatesError, refetch: refetchCandidates,
+  } = useGetCandidatesQuery(undefined, { skip: mode !== 'create' });
   const candidates = candidateData as unknown as CandidateRow[];
 
   const [createCampaign, { isLoading: saving }] = useCreateCampaignMutation();
@@ -175,7 +202,7 @@ export default function EmailCampaignsPage() {
   const toggleCandidate = (id: string) => {
     setSelectedIds(prev => {
       const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id); else n.add(id);
       return n;
     });
   };
@@ -183,6 +210,7 @@ export default function EmailCampaignsPage() {
   // ─── Variable insertion ─────────────────────────────────────────────────────
 
   const insertVariable = (v: string, target: 'subject' | 'body') => {
+    if (!v) return;
     if (target === 'subject') {
       setSubject(prev => prev + v);
     } else {
@@ -199,13 +227,13 @@ export default function EmailCampaignsPage() {
         setEmailBody(prev => prev + v);
       }
     }
-    setShowVarMenu(null);
   };
 
   // ─── Save / Send ────────────────────────────────────────────────────────────
 
   const handleSaveDraft = async () => {
     if (!subject.trim() || !emailBody.trim()) {
+      setShowFieldErrors(true);
       setSaveError('Subject and body are required.'); return;
     }
     setSaveError('');
@@ -215,14 +243,18 @@ export default function EmailCampaignsPage() {
         subject: subject.trim(), body: emailBody.trim(), status: 'draft',
       }).unwrap();
       resetWizard(); setMode('list');
-    } catch (err: any) {
-      setSaveError(err?.message || 'Failed to save draft');
+      notify.success('Draft saved');
+    } catch (err) {
+      setSaveError(getErrorMessage(err, 'Failed to save draft'));
     }
   };
 
   const handleSendCampaign = async () => {
     if (selectedIds.size === 0) { setSaveError('Select at least one recipient.'); return; }
-    if (!subject.trim() || !emailBody.trim()) { setSaveError('Subject and body are required.'); return; }
+    if (!subject.trim() || !emailBody.trim()) {
+      setShowFieldErrors(true);
+      setSaveError('Subject and body are required.'); return;
+    }
     setSending(true); setSaveError('');
     try {
       const draft = await createCampaign({
@@ -236,8 +268,9 @@ export default function EmailCampaignsPage() {
         track_clicks: trackClicks,
       }).unwrap();
       resetWizard(); setMode('list');
-    } catch (err: any) {
-      setSaveError(err?.message || 'Failed to send campaign');
+      notify.success('Campaign sent');
+    } catch (err) {
+      setSaveError(getErrorMessage(err, 'Failed to send campaign'));
     } finally {
       setSending(false);
     }
@@ -245,10 +278,32 @@ export default function EmailCampaignsPage() {
 
   const resetWizard = () => {
     setActiveStep(1); setCampaignName(''); setRecipientSearch('');
-    setSelectedIds(new Set()); setSubject('We have exciting opportunities for you!');
+    setSelectedIds(new Set()); setSubject(DEFAULT_SUBJECT);
     setEmailBody(DEFAULT_BODY); setSelectedTemplate('');
     setSendMode('immediate'); setTrackOpens(true); setTrackClicks(true);
-    setSaveError(''); setCandidatePage(1);
+    setSaveError(''); setShowFieldErrors(false); setCandidatePage(1);
+  };
+
+  const isDirty =
+    selectedIds.size > 0 || !!campaignName || subject !== DEFAULT_SUBJECT || emailBody !== DEFAULT_BODY;
+
+  const handleCancelCreate = async () => {
+    if (isDirty) {
+      const ok = await confirm({
+        title: 'Discard this campaign?',
+        message: 'Your recipients and email content will be lost. Save it as a draft to keep it.',
+        confirmText: 'Discard',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    resetWizard();
+    setMode('list');
+  };
+
+  const goToStep = (n: number, anchor: string) => {
+    setActiveStep(n);
+    document.getElementById(fid(anchor))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // ─── Preview ────────────────────────────────────────────────────────────────
@@ -268,11 +323,18 @@ export default function EmailCampaignsPage() {
   // ─── Delete campaign ────────────────────────────────────────────────────────
 
   const handleDeleteCampaign = async (id: string, name: string) => {
-    if (!window.confirm(`Delete campaign "${name}"?\n\nThis cannot be undone.`)) return;
+    const ok = await confirm({
+      title: `Delete campaign "${name}"?`,
+      message: 'This cannot be undone.',
+      confirmText: 'Delete campaign',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteCampaign(id).unwrap();
-    } catch (err: any) {
-      alert(err?.message || 'Failed to delete campaign');
+      notify.success('Campaign deleted');
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Failed to delete campaign'));
     }
   };
 
@@ -290,517 +352,481 @@ export default function EmailCampaignsPage() {
     ? campaigns
     : campaigns.filter(c => c.status === filter);
 
+  const startCreate = () => { resetWizard(); setMode('create'); };
+
   // ─── CREATE MODE ─────────────────────────────────────────────────────────────
 
   if (mode === 'create') {
+    const subjectError = showFieldErrors && !subject.trim() ? 'Enter a subject line.' : '';
+    const bodyError = showFieldErrors && !emailBody.trim() ? 'Write the email body.' : '';
+    const allFilteredSelected = selectedIds.size === filteredCandidates.length && filteredCandidates.length > 0;
+
     return (
-      <div className="flex flex-col flex-1 overflow-hidden bg-white" onClick={() => setShowVarMenu(null)}>
+      <>
+        <PageHeader
+          breadcrumbs={[{ label: 'Campaigns' }, { label: 'New campaign' }]}
+          title="New campaign"
+          subtitle="Create and send targeted email campaigns to candidates"
+          actions={
+            <>
+              <Button variant="ghost" onClick={handleCancelCreate} disabled={saving || sending}>Cancel</Button>
+              <Button variant="secondary" onClick={handleSaveDraft} loading={saving && !sending} disabled={sending}>
+                Save as draft
+              </Button>
+              <Button icon={<Send size={16} />} onClick={handleSendCampaign} loading={sending} disabled={selectedIds.size === 0}>
+                Review & send
+              </Button>
+            </>
+          }
+        />
 
-        {/* Top header */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-b border-gray-100 flex-shrink-0">
-          <div>
-            <h1 className="text-lg font-black text-gray-900">Email Campaigns</h1>
-            <p className="text-[11px] text-gray-400 mt-0.5">Create and send targeted email campaigns to candidates</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleSaveDraft} disabled={saving}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all flex items-center gap-1.5 disabled:opacity-50">
-              {saving && <Loader2 size={13} className="animate-spin" />}
-              Save as Draft
-            </button>
-            <button onClick={handleSendCampaign} disabled={sending || selectedIds.size === 0}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-lg shadow-blue-100">
-              {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-              Review & Send
-            </button>
-          </div>
-        </div>
-
-        {/* Stats bar */}
-        <div className="grid grid-cols-5 divide-x divide-gray-100 border-b border-gray-100 flex-shrink-0">
-          {[
-            { icon: Mail,    label: 'Total Recipients', value: candidates.length, ic: 'text-blue-500',    bg: 'bg-blue-50' },
-            { icon: Send,    label: 'Sent',             value: stats.sent,        ic: 'text-emerald-500', bg: 'bg-emerald-50' },
-            { icon: Clock,   label: 'Scheduled',        value: stats.scheduled,   ic: 'text-amber-500',   bg: 'bg-amber-50' },
-            { icon: Users,   label: 'Delivered',        value: stats.delivered,   ic: 'text-violet-500',  bg: 'bg-violet-50' },
-            { icon: XCircle, label: 'Failed',           value: stats.failed,      ic: 'text-red-400',     bg: 'bg-red-50' },
-          ].map(({ icon: Icon, label, value, ic, bg }) => (
-            <div key={label} className="flex items-center gap-3 px-5 py-3">
-              <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-                <Icon size={16} className={ic} />
-              </div>
-              <div>
-                <p className="text-lg font-black text-gray-900 leading-none">{value}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* 3-column body */}
-        <div className="flex flex-1 overflow-hidden">
-
-          {/* LEFT — Steps */}
-          <div className="w-52 border-r border-gray-100 flex flex-col p-4 flex-shrink-0 overflow-y-auto">
-            <div className="space-y-1 mb-5">
-              {STEPS.map(step => (
-                <button key={step.n} onClick={() => setActiveStep(step.n)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left ${
-                    activeStep === step.n ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'hover:bg-gray-50 text-gray-600'
-                  }`}>
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${
-                    activeStep === step.n ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'
-                  }`}>{step.n}</div>
-                  <div className="min-w-0">
-                    <p className={`text-xs font-bold leading-tight ${activeStep === step.n ? 'text-white' : 'text-gray-800'}`}>{step.title}</p>
-                    <p className={`text-[10px] mt-0.5 ${activeStep === step.n ? 'text-blue-100' : 'text-gray-400'}`}>{step.sub}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="mt-auto bg-amber-50 border border-amber-100 rounded-xl p-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className="text-base">💡</span>
-                <p className="text-xs font-bold text-amber-800">Tips</p>
-              </div>
-              <ul className="space-y-1.5">
-                {TIPS.map(tip => (
-                  <li key={tip} className="text-[10px] text-amber-700 flex items-start gap-1.5">
-                    <span className="text-amber-400 flex-shrink-0 mt-0.5">•</span>
-                    {tip}
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          {/* Steps */}
+          <nav aria-label="Campaign steps">
+            <ol className="flex gap-2 overflow-x-auto pb-1">
+              {STEPS.map(step => {
+                const active = activeStep === step.n;
+                return (
+                  <li key={step.n} className="shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => goToStep(step.n, step.anchor)}
+                      aria-current={active ? 'step' : undefined}
+                      className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors ${
+                        active ? 'border-navy-600 bg-navy-50' : 'border-line bg-white hover:border-line-strong'
+                      }`}
+                    >
+                      <span className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                        active ? 'bg-navy-600 text-white' : 'bg-surface-sunken text-muted'
+                      }`}>{step.n}</span>
+                      <span>
+                        <span className="block text-sm font-medium text-ink">{step.title}</span>
+                        <span className="hidden text-xs text-muted sm:block">{step.sub}</span>
+                      </span>
+                    </button>
                   </li>
-                ))}
-              </ul>
-            </div>
-          </div>
+                );
+              })}
+            </ol>
+          </nav>
 
-          {/* MIDDLE — Recipients */}
-          <div className="w-[340px] border-r border-gray-100 flex flex-col flex-shrink-0 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
-              <h3 className="text-sm font-bold text-gray-900">Select Recipients</h3>
-              {selectedIds.size > 0 && (
-                <button onClick={() => setSelectedIds(new Set())} className="text-xs text-blue-600 font-semibold hover:underline">Clear All</button>
-              )}
-            </div>
-
-            <div className="flex border-b border-gray-100 flex-shrink-0">
-              {(['all', 'saved', 'manual'] as const).map(tab => (
-                <button key={tab} onClick={() => setRecipientTab(tab)}
-                  className={`flex-1 py-2.5 text-[11px] font-bold transition-colors ${
-                    recipientTab === tab ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/30' : 'text-gray-400 hover:text-gray-600'
-                  }`}>
-                  {tab === 'all' ? 'All Candidates' : tab === 'saved' ? 'Saved Filters' : 'Manual Select'}
-                </button>
-              ))}
-            </div>
-
-            <div className="px-3 py-2.5 border-b border-gray-50 flex-shrink-0">
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                <Search size={13} className="text-gray-400 flex-shrink-0" />
-                <input value={recipientSearch}
-                  onChange={e => { setRecipientSearch(e.target.value); setCandidatePage(1); }}
-                  placeholder="Search candidates by name, email, skills..."
-                  className="flex-1 bg-transparent text-xs outline-none text-gray-700 placeholder-gray-400" />
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {selectedCandidates.length > 0 && (
-                <div className="px-3 pt-3 pb-2 border-b border-gray-50">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Selected Candidates ({selectedCandidates.length})</p>
-                    <button onClick={() => setSelectedIds(new Set())} className="text-[10px] text-blue-600 font-semibold hover:underline">Clear</button>
-                  </div>
-                  <div className="space-y-1">
-                    {selectedCandidates.map(c => (
-                      <div key={c.id} className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-lg px-2.5 py-2">
-                        <div className="w-5 h-5 rounded-full bg-blue-200 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[8px] font-bold text-blue-700">{c.first_name[0]}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-800 truncate">{c.first_name} {c.last_name}</p>
-                          <p className="text-[10px] text-gray-400 truncate">{c.email}</p>
-                        </div>
-                        <button onClick={() => toggleCandidate(c.id)} className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0"><X size={13} /></button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="px-3 py-2.5">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">All Candidates</p>
-                  <button
-                    onClick={() => {
-                      const allIds = new Set(filteredCandidates.map(c => c.id));
-                      setSelectedIds(selectedIds.size === filteredCandidates.length && filteredCandidates.length > 0
-                        ? new Set() : allIds);
-                    }}
-                    className="text-[10px] text-blue-600 font-semibold hover:underline">
-                    {selectedIds.size === filteredCandidates.length && filteredCandidates.length > 0 ? 'Deselect All' : 'Select All'}
-                  </button>
-                </div>
-
-                {candidatesLoading ? (
-                  <div className="flex justify-center py-10"><Loader2 size={18} className="animate-spin text-blue-500" /></div>
-                ) : pageCandidates.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-10">No candidates found</p>
-                ) : (
-                  <div className="space-y-0.5">
-                    {pageCandidates.map(c => (
-                      <label key={c.id}
-                        className={`flex items-center gap-2.5 px-2 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                          selectedIds.has(c.id) ? 'bg-blue-50' : 'hover:bg-gray-50'
-                        }`}>
-                        <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleCandidate(c.id)}
-                          className="w-3.5 h-3.5 rounded text-blue-600 border-gray-300" />
-                        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                          {c.first_name[0]}{c.last_name[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-800 truncate">{c.first_name} {c.last_name}</p>
-                          <p className="text-[10px] text-gray-400 truncate">{c.email}</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          {c.current_title && <p className="text-[10px] text-gray-500 font-medium truncate max-w-[80px]">{c.current_title}</p>}
-                          {c.experience_years != null && <p className="text-[10px] text-gray-400">· {c.experience_years}+ yrs</p>}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+            {/* Recipients */}
+            <section id={fid('recipients')} aria-labelledby={fid('recipients-h')} className="zh-card flex min-w-0 scroll-mt-4 flex-col overflow-hidden lg:self-start">
+              <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                <h2 id={fid('recipients-h')} className="text-sm font-semibold text-ink">Select recipients</h2>
+                {selectedIds.size > 0 && (
+                  <Button variant="link" size="sm" className="text-xs" onClick={() => setSelectedIds(new Set())}>Clear all</Button>
                 )}
               </div>
-            </div>
 
-            {filteredCandidates.length > PAGE_SIZE && (
-              <div className="px-3 py-2 border-t border-gray-100 flex items-center justify-between flex-shrink-0 bg-gray-50/50">
-                <p className="text-[10px] text-gray-400">
-                  Showing {Math.min(PAGE_SIZE, filteredCandidates.length - (candidatePage - 1) * PAGE_SIZE)} of {filteredCandidates.length} candidates
-                </p>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(3, totalPages) }, (_, i) => i + 1).map(p => (
-                    <button key={p} onClick={() => setCandidatePage(p)}
-                      className={`w-6 h-6 text-[11px] rounded font-bold transition-colors ${
-                        candidatePage === p ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100'
-                      }`}>{p}</button>
-                  ))}
-                  {totalPages > 3 && <span className="text-[11px] text-gray-400">... {totalPages}</span>}
-                  {candidatePage < totalPages && (
-                    <button onClick={() => setCandidatePage(p => p + 1)} className="w-6 h-6 text-gray-400 hover:text-gray-700 font-bold">›</button>
+              <div role="tablist" aria-label="Recipient source" className="flex border-b border-line">
+                {(['all', 'saved', 'manual'] as const).map(tab => (
+                  <button key={tab} type="button" role="tab" aria-selected={recipientTab === tab} onClick={() => setRecipientTab(tab)}
+                    className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                      recipientTab === tab ? 'border-b-2 border-navy-600 text-navy-700' : 'text-muted hover:text-ink'
+                    }`}>
+                    {tab === 'all' ? 'All candidates' : tab === 'saved' ? 'Saved filters' : 'Manual select'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-b border-line px-3 py-2.5">
+                <label htmlFor={fid('recipient-search')} className="sr-only">Search candidates</label>
+                <div className="relative">
+                  <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+                  <input id={fid('recipient-search')} type="search" value={recipientSearch}
+                    onChange={e => { setRecipientSearch(e.target.value); setCandidatePage(1); }}
+                    placeholder="Search by name, email, title…"
+                    className="zh-input py-2 pl-9" />
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto lg:max-h-[60vh]">
+                {selectedCandidates.length > 0 && (
+                  <div className="border-b border-line px-3 pb-2 pt-3">
+                    <p className="mb-2 text-xs font-medium text-muted">Selected ({selectedCandidates.length})</p>
+                    <ul className="space-y-1">
+                      {selectedCandidates.map(c => (
+                        <li key={c.id} className="flex items-center gap-2 rounded-lg border border-navy-100 bg-navy-50 px-2.5 py-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-xs font-medium text-ink">{c.first_name} {c.last_name}</p>
+                            <p className="truncate text-xs text-muted">{c.email}</p>
+                          </div>
+                          <button type="button" onClick={() => toggleCandidate(c.id)}
+                            aria-label={`Remove ${c.first_name} ${c.last_name}`}
+                            className="flex-shrink-0 rounded p-1 text-muted hover:text-danger-600">
+                            <X size={14} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="px-3 py-2.5">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted">All candidates</p>
+                    <Button variant="link" size="sm" className="text-xs"
+                      disabled={filteredCandidates.length === 0}
+                      onClick={() => {
+                        const allIds = new Set(filteredCandidates.map(c => c.id));
+                        setSelectedIds(allFilteredSelected ? new Set() : allIds);
+                      }}>
+                      {allFilteredSelected ? 'Deselect all' : 'Select all'}
+                    </Button>
+                  </div>
+
+                  {candidatesLoading ? (
+                    <div className="space-y-2 py-2" role="status" aria-label="Loading candidates">
+                      {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
+                  ) : candidatesIsError ? (
+                    <ErrorState compact error={candidatesError} onRetry={refetchCandidates} title="Couldn't load candidates" />
+                  ) : pageCandidates.length === 0 ? (
+                    <EmptyState compact icon={<Users size={20} aria-hidden="true" />}
+                      title={candidates.length === 0 ? 'No candidates yet' : 'No candidates match'}
+                      description={candidates.length === 0 ? 'Add candidates before sending a campaign.' : 'Try a different search.'}
+                      action={recipientSearch ? (
+                        <Button variant="secondary" size="sm" onClick={() => { setRecipientSearch(''); setCandidatePage(1); }}>Clear search</Button>
+                      ) : undefined}
+                    />
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {pageCandidates.map(c => (
+                        <li key={c.id}>
+                          <label
+                            className={`flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2.5 transition-colors ${
+                              selectedIds.has(c.id) ? 'bg-navy-50' : 'hover:bg-surface'
+                            }`}>
+                            <input type="checkbox" checked={selectedIds.has(c.id)} onChange={() => toggleCandidate(c.id)}
+                              className="h-4 w-4 rounded border-line-strong accent-navy-600" />
+                            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-navy-100 text-xs font-semibold text-navy-700" aria-hidden="true">
+                              {c.first_name?.[0]}{c.last_name?.[0]}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-ink">{c.first_name} {c.last_name}</p>
+                              <p className="truncate text-xs text-muted">{c.email}</p>
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              {c.current_title && <p className="max-w-[80px] truncate text-xs text-ink-soft">{c.current_title}</p>}
+                              {c.experience_years != null && <p className="text-xs text-muted">{c.experience_years}+ yrs</p>}
+                            </div>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
               </div>
-            )}
-          </div>
 
-          {/* RIGHT — Email Content + Settings + Footer */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <h3 className="text-sm font-bold text-gray-900">Email Content</h3>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-600">Subject Line <span className="text-red-500">*</span></label>
-                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                  <div className="flex-1 flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
-                    <input value={subject} onChange={e => setSubject(e.target.value)}
-                      placeholder="Enter subject line..."
-                      className="flex-1 text-sm outline-none text-gray-800" />
-                    <button type="button" className="text-gray-300 hover:text-gray-500 transition-colors flex-shrink-0"><Smile size={15} /></button>
-                  </div>
-                  <div className="relative">
-                    <button type="button"
-                      onClick={e => { e.stopPropagation(); setShowVarMenu(v => v === 'subject' ? null : 'subject'); }}
-                      className="h-full px-3 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 flex items-center gap-1 whitespace-nowrap">
-                      Insert Variable <ChevronDown size={11} />
+              {filteredCandidates.length > PAGE_SIZE && (
+                <nav aria-label="Candidate pages" className="flex items-center justify-between border-t border-line bg-surface px-3 py-2">
+                  <p className="text-xs text-muted">
+                    Page {candidatePage} of {totalPages} · {filteredCandidates.length} candidates
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button type="button" aria-label="Previous page" disabled={candidatePage === 1}
+                      onClick={() => setCandidatePage(p => Math.max(1, p - 1))}
+                      className="rounded p-1.5 text-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-30">
+                      <ChevronLeft size={14} />
                     </button>
-                    {showVarMenu === 'subject' && (
-                      <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-30 w-48 py-1">
-                        {VARIABLES.map(v => (
-                          <button key={v.value} onClick={() => insertVariable(v.value, 'subject')}
-                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                            {v.label}<span className="text-gray-400 ml-1 text-[10px]">{v.value}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    <button type="button" aria-label="Next page" disabled={candidatePage >= totalPages}
+                      onClick={() => setCandidatePage(p => Math.min(totalPages, p + 1))}
+                      className="rounded p-1.5 text-muted hover:bg-surface-sunken hover:text-ink disabled:opacity-30">
+                      <ChevronRight size={14} />
+                    </button>
                   </div>
-                </div>
-              </div>
+                </nav>
+              )}
+            </section>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-600">Email Template</label>
-                <div className="flex gap-2 items-center">
-                  <select value={selectedTemplate}
+            <div className="min-w-0 space-y-6">
+              {/* Content */}
+              <section id={fid('content')} aria-labelledby={fid('content-h')} className="zh-card scroll-mt-4 space-y-4 p-4 sm:p-5">
+                <h2 id={fid('content-h')} className="text-sm font-semibold text-ink">Email content</h2>
+
+                <div>
+                  <label htmlFor={fid('name')} className="zh-label">Campaign name <span className="font-normal text-muted">(optional)</span></label>
+                  <input id={fid('name')} value={campaignName} onChange={e => setCampaignName(e.target.value)}
+                    placeholder={`Campaign ${new Date().toLocaleDateString('en-IN')}`}
+                    autoComplete="off" className="zh-input" />
+                </div>
+
+                <div>
+                  <label htmlFor={fid('subject')} className="zh-label">Subject line <span className="text-danger-600" aria-hidden="true">*</span></label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input id={fid('subject')} value={subject} onChange={e => setSubject(e.target.value)}
+                      placeholder="Enter subject line…" required autoComplete="off"
+                      aria-invalid={!!subjectError || undefined}
+                      aria-describedby={subjectError ? fid('subject-err') : undefined}
+                      className="zh-input flex-1" />
+                    <select aria-label="Insert variable into subject" value=""
+                      onChange={e => insertVariable(e.target.value, 'subject')}
+                      className="zh-input sm:w-44">
+                      <option value="">Insert variable…</option>
+                      {VARIABLES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  {subjectError && <p id={fid('subject-err')} className="mt-1 text-xs text-danger-600">{subjectError}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor={fid('template')} className="zh-label">Email template</label>
+                  <select id={fid('template')} value={selectedTemplate}
                     onChange={e => {
                       const t = CAMPAIGN_TEMPLATES.find(t => t.label === e.target.value);
                       if (t) { setSubject(t.subject); setEmailBody(t.body); }
                       setSelectedTemplate(e.target.value);
                     }}
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                    <option value="">Select Template</option>
+                    className="zh-input">
+                    <option value="">Select template</option>
                     {CAMPAIGN_TEMPLATES.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
                   </select>
-                  <button className="text-xs text-blue-600 font-semibold hover:underline whitespace-nowrap">Create New Template</button>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-gray-600">Email Body <span className="text-red-500">*</span></label>
-                <div className="border border-gray-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
-                  <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-100 bg-gray-50/60 flex-wrap" onClick={e => e.stopPropagation()}>
-                    <select className="text-xs bg-transparent text-gray-600 focus:outline-none cursor-pointer border-0 pr-1 mr-1">
-                      <option>Normal</option><option>Heading 1</option><option>Heading 2</option>
+                <div>
+                  <div className="mb-1.5 flex flex-wrap items-end justify-between gap-2">
+                    <label htmlFor={fid('body')} className="zh-label mb-0">Email body <span className="text-danger-600" aria-hidden="true">*</span></label>
+                    <select aria-label="Insert variable into body" value=""
+                      onChange={e => insertVariable(e.target.value, 'body')}
+                      className="h-8 rounded-md border border-line bg-white px-2 text-xs text-ink-soft">
+                      <option value="">Insert variable…</option>
+                      {VARIABLES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
                     </select>
-                    <div className="w-px h-4 bg-gray-200 mx-0.5" />
-                    {[Bold, Italic, Underline].map((Icon, i) => (
-                      <button key={i} type="button" className="p-1.5 hover:bg-gray-200 rounded text-gray-500 transition-colors"><Icon size={13} /></button>
+                  </div>
+                  <textarea id={fid('body')} ref={bodyRef} value={emailBody} onChange={e => setEmailBody(e.target.value)}
+                    rows={10} required
+                    aria-invalid={!!bodyError || undefined}
+                    aria-describedby={`${fid('body-count')}${bodyError ? ` ${fid('body-err')}` : ''}`}
+                    className="zh-input resize-y leading-relaxed"
+                    placeholder="Write your email body…" />
+                  <div className="mt-1 flex items-center justify-between">
+                    {bodyError ? <p id={fid('body-err')} className="text-xs text-danger-600">{bodyError}</p> : <span />}
+                    <span id={fid('body-count')} className="text-xs text-muted">Words: {wordCount}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-2 text-sm font-medium text-ink">Preview</h3>
+                  <div className="rounded-lg border border-line bg-surface p-4">
+                    <p className="mb-2 break-words text-xs font-medium text-ink-soft">
+                      Subject: {subject.replace(/\{\{first_name\}\}/g, firstSelected?.first_name || 'John')}
+                    </p>
+                    {previewBody.split('\n').map((line, i) => (
+                      <p key={i} className="min-h-[1em] break-words text-sm leading-relaxed text-ink-soft">{line || ' '}</p>
                     ))}
-                    <div className="w-px h-4 bg-gray-200 mx-0.5" />
-                    <button type="button" className="p-1.5 hover:bg-gray-200 rounded text-gray-500 transition-colors"><List size={13} /></button>
-                    <button type="button" className="p-1.5 hover:bg-gray-200 rounded text-gray-500 transition-colors"><Link size={13} /></button>
-                    <button type="button" className="p-1.5 hover:bg-gray-200 rounded text-gray-500 transition-colors"><Image size={13} /></button>
-                    <div className="ml-auto relative">
-                      <button type="button"
-                        onClick={e => { e.stopPropagation(); setShowVarMenu(v => v === 'body' ? null : 'body'); }}
-                        className="px-2.5 py-1 border border-gray-200 rounded-lg text-[11px] font-semibold text-gray-600 hover:bg-gray-100 flex items-center gap-1">
-                        Insert Variable <ChevronDown size={10} />
-                      </button>
-                      {showVarMenu === 'body' && (
-                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-xl shadow-xl z-30 w-48 py-1">
-                          {VARIABLES.map(v => (
-                            <button key={v.value} onClick={() => insertVariable(v.value, 'body')}
-                              className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors">
-                              {v.label}<span className="text-gray-400 ml-1 text-[10px]">{v.value}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <textarea ref={bodyRef} value={emailBody} onChange={e => setEmailBody(e.target.value)}
-                    rows={8} className="w-full px-4 py-3 text-sm text-gray-700 resize-none focus:outline-none leading-relaxed"
-                    placeholder="Write your email body..." />
-                  <div className="px-3 py-1.5 border-t border-gray-100 bg-gray-50/30 flex items-center justify-between">
-                    <span className="text-[10px] text-gray-400 font-medium">P</span>
-                    <span className="text-[10px] text-gray-400">Words: {wordCount}</span>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-gray-700">Preview</h4>
-                  <button className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-1.5">
-                    <Send size={11} /> Send Test Email
-                  </button>
+              {/* Settings */}
+              <section id={fid('settings')} aria-labelledby={fid('settings-h')} className="zh-card scroll-mt-4 p-4 sm:p-5">
+                <h2 id={fid('settings-h')} className="mb-4 text-sm font-semibold text-ink">Campaign settings</h2>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <fieldset className="space-y-2">
+                    <legend className="zh-label">When to send</legend>
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input type="radio" name={fid('sendMode')} value="immediate" checked={sendMode === 'immediate'}
+                        onChange={() => setSendMode('immediate')} className="mt-0.5 h-4 w-4 accent-navy-600" />
+                      <span><span className="block text-sm font-medium text-ink">Send immediately</span><span className="block text-xs text-muted">Send emails right away</span></span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input type="radio" name={fid('sendMode')} value="scheduled" checked={sendMode === 'scheduled'}
+                        onChange={() => setSendMode('scheduled')} className="mt-0.5 h-4 w-4 accent-navy-600" />
+                      <span><span className="block text-sm font-medium text-ink">Schedule for later</span><span className="block text-xs text-muted">Choose date and time</span></span>
+                    </label>
+                  </fieldset>
+                  <div>
+                    <label htmlFor={fid('tz')} className="zh-label flex items-center gap-1.5">
+                      <Globe size={14} className="text-muted" aria-hidden="true" /> Time zone
+                    </label>
+                    <select id={fid('tz')} value={timezone} onChange={e => setTimezone(e.target.value)} className="zh-input">
+                      {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
+                    </select>
+                  </div>
+                  <Toggle on={trackOpens} onChange={() => setTrackOpens(v => !v)} label="Track opens" hint="Track email opens" />
+                  <Toggle on={trackClicks} onChange={() => setTrackClicks(v => !v)} label="Track clicks" hint="Track link clicks" />
                 </div>
-                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/20">
-                  <p className="text-xs font-semibold text-gray-500 mb-2">Subject: {subject.replace(/\{\{first_name\}\}/g, firstSelected?.first_name || 'John')}</p>
-                  {previewBody.split('\n').map((line, i) => (
-                    <p key={i} className="text-xs text-gray-600 leading-relaxed min-h-[1em]">{line || ' '}</p>
+              </section>
+
+              {/* Review */}
+              <section id={fid('review')} aria-labelledby={fid('review-h')} className="zh-card scroll-mt-4 space-y-4 p-4 sm:p-5">
+                <h2 id={fid('review-h')} className="text-sm font-semibold text-ink">Campaign summary</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={selectedIds.size > 0 ? 'navy' : 'neutral'} icon={<Users size={12} aria-hidden="true" />}>
+                    {selectedIds.size} recipient{selectedIds.size === 1 ? '' : 's'}
+                  </Badge>
+                  {selectedIds.size > 0 && <Badge tone="success" icon={<CheckCircle2 size={12} aria-hidden="true" />}>Personalized</Badge>}
+                  {trackOpens && <Badge icon={<Eye size={12} aria-hidden="true" />}>Track opens</Badge>}
+                  {trackClicks && <Badge icon={<MousePointer size={12} aria-hidden="true" />}>Track clicks</Badge>}
+                </div>
+
+                {saveError && (
+                  <div role="alert" className="flex items-center gap-2 rounded-lg border border-danger-600/20 bg-danger-50 p-3 text-sm text-danger-700">
+                    <AlertCircle size={16} className="flex-shrink-0" aria-hidden="true" />
+                    {saveError}
+                  </div>
+                )}
+
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button variant="secondary" onClick={handleSaveDraft} loading={saving && !sending} disabled={sending}>
+                    Save as draft
+                  </Button>
+                  <Button icon={<Send size={16} />} onClick={handleSendCampaign} loading={sending}
+                    disabled={selectedIds.size === 0 || !subject.trim() || !emailBody.trim()}>
+                    Review & send campaign
+                  </Button>
+                </div>
+                {selectedIds.size === 0 && (
+                  <p className="text-xs text-muted sm:text-right">Select at least one recipient to send.</p>
+                )}
+              </section>
+
+              <aside className="rounded-xl border border-brand-100 bg-brand-50 p-4">
+                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-brand-900">
+                  <Lightbulb size={15} aria-hidden="true" /> Tips
+                </p>
+                <ul className="space-y-1.5">
+                  {TIPS.map(tip => (
+                    <li key={tip} className="flex items-start gap-1.5 text-xs text-brand-900">
+                      <span aria-hidden="true" className="mt-0.5 flex-shrink-0">•</span>
+                      {tip}
+                    </li>
                   ))}
-                </div>
-              </div>
-
-              {saveError && (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600">
-                  <AlertCircle size={13} className="flex-shrink-0" />
-                  {saveError}
-                </div>
-              )}
-            </div>
-
-            {/* Campaign Settings */}
-            <div className="border-t border-gray-100 px-5 py-3.5 flex-shrink-0 bg-gray-50/30">
-              <h4 className="text-xs font-bold text-gray-700 mb-3">Campaign Settings</h4>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="sendMode" value="immediate" checked={sendMode === 'immediate'}
-                    onChange={() => setSendMode('immediate')} className="w-3.5 h-3.5 text-blue-600 accent-blue-600" />
-                  <div><p className="text-xs font-semibold text-gray-700">Send Immediately</p><p className="text-[10px] text-gray-400">Send emails right away</p></div>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="sendMode" value="scheduled" checked={sendMode === 'scheduled'}
-                    onChange={() => setSendMode('scheduled')} className="w-3.5 h-3.5 text-blue-600 accent-blue-600" />
-                  <div><p className="text-xs font-semibold text-gray-700">Schedule for Later</p><p className="text-[10px] text-gray-400">Choose date and time</p></div>
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <Globe size={13} className="text-gray-400 flex-shrink-0" />
-                  <select value={timezone} onChange={e => setTimezone(e.target.value)}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    {TIMEZONES.map(tz => <option key={tz}>{tz}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-center gap-4 ml-auto">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Toggle on={trackOpens} onChange={() => setTrackOpens(v => !v)} />
-                    <div><p className="text-xs font-semibold text-gray-700">Track Opens</p><p className="text-[10px] text-gray-400">Track email opens</p></div>
-                  </label>
-                  <span className="text-gray-200 text-sm font-light">+</span>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <Toggle on={trackClicks} onChange={() => setTrackClicks(v => !v)} />
-                    <div><p className="text-xs font-semibold text-gray-700">Track Clicks</p><p className="text-[10px] text-gray-400">Track link clicks</p></div>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer summary bar */}
-            <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between flex-shrink-0 bg-white">
-              <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
-                <span className="font-bold text-gray-800">Campaign Summary</span>
-                <span className="flex items-center gap-1"><Users size={12} className="text-gray-400" /> {selectedIds.size} Recipients</span>
-                {selectedIds.size > 0 && <span className="flex items-center gap-1 text-emerald-600"><CheckCircle2 size={12} /> Personalized</span>}
-                {trackOpens && <span className="flex items-center gap-1"><Eye size={12} className="text-gray-400" /> Track Opens</span>}
-                {trackClicks && <span className="flex items-center gap-1"><MousePointer size={12} className="text-gray-400" /> Track Clicks</span>}
-              </div>
-              <button onClick={handleSendCampaign}
-                disabled={sending || selectedIds.size === 0 || !subject.trim() || !emailBody.trim()}
-                className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all disabled:opacity-50 shadow-lg shadow-blue-100 flex-shrink-0">
-                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                Review & Send Campaign
-              </button>
+                </ul>
+              </aside>
             </div>
           </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // ─── LIST MODE ────────────────────────────────────────────────────────────────
 
+  const columns: Column<EmailCampaign>[] = [
+    {
+      key: 'campaign',
+      header: 'Campaign',
+      cell: (c) => (
+        <div className="min-w-0">
+          <p className="font-medium text-ink">{c.name}</p>
+          <p className="mt-0.5 max-w-[260px] truncate text-xs text-muted">{c.subject}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (c) => <Badge tone={STATUS_TONES[c.status] ?? 'neutral'}>{statusLabel(c.status)}</Badge>,
+    },
+    {
+      key: 'recipients',
+      header: 'Recipients',
+      className: 'text-right',
+      cell: (c) => <span className="font-medium text-ink-soft">{c.recipient_count ?? '—'}</span>,
+    },
+    {
+      key: 'delivered',
+      header: 'Delivered',
+      className: 'text-right',
+      cell: (c) => c.delivered_count != null
+        ? <span className="font-medium text-success-700">{c.delivered_count}</span>
+        : <span className="text-muted">—</span>,
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      className: 'text-right whitespace-nowrap',
+      cell: (c) => (
+        <span className="text-xs text-muted">
+          {new Date(c.sent_at || c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: <span className="sr-only">Actions</span>,
+      className: 'text-right whitespace-nowrap',
+      cell: (c) => (
+        <div className="flex items-center justify-end gap-2">
+          {c.status === 'draft' && (
+            <Button size="sm" variant="secondary" icon={<Send size={12} />} onClick={startCreate}>Send</Button>
+          )}
+          {c.status === 'sent' && (
+            <RouterLink to={`/campaigns/${c.id}`}
+              className="flex items-center gap-1 text-xs font-medium text-navy-600 hover:underline">
+              <BarChart2 size={13} aria-hidden="true" /> Analytics
+            </RouterLink>
+          )}
+          <button type="button" onClick={() => handleDeleteCampaign(c.id, c.name)}
+            aria-label={`Delete campaign ${c.name}`} title="Delete campaign"
+            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-danger-50 hover:text-danger-600">
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white flex-shrink-0">
-        <div>
-          <h1 className="text-xl font-black text-gray-900">Email Campaigns</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Manage outreach, interview invites, and bulk candidate communications</p>
-        </div>
-        <button onClick={() => { resetWizard(); setMode('create'); }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-lg shadow-blue-100">
-          <Plus size={16} /> New Campaign
-        </button>
-      </div>
+    <>
+      <PageHeader
+        title="Email campaigns"
+        subtitle="Manage outreach, interview invites, and bulk candidate communications"
+        actions={<Button icon={<Plus size={16} />} onClick={startCreate}>New campaign</Button>}
+      />
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {[
-            { icon: Mail,    label: 'Total',     value: stats.total,     color: 'text-blue-600',    bg: 'bg-blue-50' },
-            { icon: Send,    label: 'Sent',      value: stats.sent,      color: 'text-emerald-600', bg: 'bg-emerald-50' },
-            { icon: Clock,   label: 'Scheduled', value: stats.scheduled, color: 'text-amber-600',   bg: 'bg-amber-50' },
-            { icon: Users,   label: 'Delivered', value: stats.delivered, color: 'text-violet-600',  bg: 'bg-violet-50' },
-            { icon: XCircle, label: 'Failed',    value: stats.failed,    color: 'text-red-500',     bg: 'bg-red-50' },
-          ].map(({ icon: Icon, label, value, color, bg }) => (
-            <div key={label} className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-3 shadow-sm">
-              <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center flex-shrink-0`}>
-                <Icon size={18} className={color} />
-              </div>
-              <div>
-                <p className="text-2xl font-black text-gray-900">{value}</p>
-                <p className="text-xs text-gray-400 font-medium">{label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        {!listIsError && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <StatCard label="Total" value={stats.total} icon={<Mail size={18} />} tone="navy" loading={listLoading} />
+            <StatCard label="Sent" value={stats.sent} icon={<Send size={18} />} tone="success" loading={listLoading} />
+            <StatCard label="Scheduled" value={stats.scheduled} icon={<Clock size={18} />} tone="brand" loading={listLoading} />
+            <StatCard label="Delivered" value={stats.delivered} icon={<Users size={18} />} tone="neutral" loading={listLoading} />
+            <StatCard label="Failed" value={stats.failed} icon={<XCircle size={18} />} tone="danger" loading={listLoading} />
+          </div>
+        )}
 
-        <div className="flex gap-2 flex-wrap">
-          {['all', 'draft', 'sent', 'scheduled', 'failed'].map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all capitalize ${
-                filter === f ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'bg-white text-gray-500 border border-gray-200 hover:border-blue-200 hover:text-blue-600'
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter campaigns by status">
+          {FILTERS.map(f => (
+            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                filter === f ? 'border-navy-600 bg-navy-600 text-white' : 'border-line bg-white text-ink-soft hover:border-line-strong'
               }`}>
-              {f === 'all' ? 'All Campaigns' : f}
+              {f === 'all' ? 'All campaigns' : statusLabel(f)}
               {f !== 'all' && <span className="ml-1 opacity-70">({campaigns.filter(c => c.status === f).length})</span>}
             </button>
           ))}
         </div>
 
-        {listLoading ? (
-          <div className="flex items-center justify-center py-24"><Loader2 size={28} className="animate-spin text-blue-500" /></div>
-        ) : filteredCampaigns.length === 0 ? (
-          <div className="bg-white rounded-2xl border-2 border-dashed border-gray-200 py-24 text-center">
-            <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Mail size={28} className="text-blue-400" />
-            </div>
-            <p className="text-gray-600 font-bold text-base">No campaigns yet</p>
-            <p className="text-sm text-gray-400 mt-1">Create your first campaign to reach candidates at scale</p>
-            <button onClick={() => { resetWizard(); setMode('create'); }}
-              className="mt-6 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 inline-flex items-center gap-2 transition-all">
-              <Plus size={16} /> Create Campaign
-            </button>
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Campaign</th>
-                  <th className="text-left px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                  <th className="text-right px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recipients</th>
-                  <th className="text-right px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Delivered</th>
-                  <th className="text-right px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Date</th>
-                  <th className="px-6 py-4" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filteredCampaigns.map((campaign: EmailCampaign) => (
-                  <tr key={campaign.id} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <p className="text-sm font-bold text-gray-900">{campaign.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[240px]">{campaign.subject}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wide ${STATUS_COLORS[campaign.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {campaign.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="text-sm font-semibold text-gray-700">{campaign.recipient_count ?? '—'}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {campaign.delivered_count != null
-                        ? <span className="text-sm font-semibold text-emerald-600">{campaign.delivered_count}</span>
-                        : <span className="text-sm text-gray-400">—</span>}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="text-xs text-gray-400">
-                        {new Date(campaign.sent_at || campaign.created_at).toLocaleDateString('en-IN', {
-                          day: 'numeric', month: 'short', year: 'numeric',
-                        })}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center gap-2 justify-end">
-                        {campaign.status === 'draft' && (
-                          <button onClick={() => { resetWizard(); setMode('create'); }}
-                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-1.5">
-                            <Send size={12} /> Send
-                          </button>
-                        )}
-                        {campaign.status === 'sent' && (
-                          <RouterLink
-                            to={`/campaigns/${campaign.id}`}
-                            className="flex items-center gap-1 text-xs text-emerald-600 font-bold hover:text-emerald-700 transition-colors"
-                          >
-                            <BarChart2 size={13} />
-                            Analytics
-                          </RouterLink>
-                        )}
-                        <button onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete campaign">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          caption="Email campaigns"
+          columns={columns}
+          rows={listIsError ? undefined : filteredCampaigns}
+          rowKey={(c) => c.id}
+          loading={listLoading}
+          error={listIsError ? listError : undefined}
+          onRetry={refetchList}
+          empty={
+            campaigns.length === 0 ? (
+              <EmptyState
+                icon={<Mail size={22} aria-hidden="true" />}
+                title="No campaigns yet"
+                description="Create your first campaign to reach candidates at scale."
+                action={<Button icon={<Plus size={16} />} onClick={startCreate}>Create campaign</Button>}
+              />
+            ) : (
+              <EmptyState
+                icon={<Mail size={22} aria-hidden="true" />}
+                title={`No ${filter} campaigns`}
+                action={<Button variant="secondary" onClick={() => setFilter('all')}>Show all campaigns</Button>}
+              />
+            )
+          }
+        />
       </div>
-    </div>
+    </>
   );
 }

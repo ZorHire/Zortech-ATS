@@ -1,97 +1,86 @@
 import { useNavigate } from "react-router-dom";
-import { Briefcase, ArrowRight, Users, BarChart3, ShieldCheck, Zap } from "lucide-react";
+import { ArrowRight, Users, BarChart3, ShieldCheck, Zap } from "lucide-react";
+import { Button } from "../components/ui";
 
 export default function SubscribePage() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#281a10] via-[#1a110a] to-[#0b0704] flex">
+    <div className="flex min-h-screen bg-surface">
       {/* Left panel */}
-      <div className="hidden lg:flex lg:flex-1 flex-col justify-center px-16 py-12">
+      <div className="hidden flex-col justify-center bg-navy-800 px-16 py-12 lg:flex lg:flex-1">
         <div className="max-w-lg">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-12 h-12 bg-[#b47b3b] rounded-xl flex items-center justify-center shadow-xl shadow-[#967043]/25">
-              <Briefcase size={24} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-[#f6e6d2]">ZorHire</h1>
-              <p className="text-[#d8b286] text-sm">Enterprise ATS Platform</p>
-            </div>
+          <div className="mb-12">
+            <img src="/brand/zortech-logo-white.png" alt="ZorTech" className="h-8 w-auto" />
+            <p className="mt-2 text-sm font-medium text-navy-200">ZorHire · Enterprise ATS Platform</p>
           </div>
 
-          <h2 className="text-4xl font-bold text-[#fff3e4] leading-tight mb-5">
+          <h2 className="mb-5 text-4xl font-semibold leading-tight text-white">
             Hire smarter,
             <br />
-            <span className="text-[#f0c491]">grow faster.</span>
+            <span className="text-brand-400">grow faster.</span>
           </h2>
-          <p className="text-[#c8b29d] text-lg leading-relaxed mb-10">
+          <p className="mb-10 text-lg leading-relaxed text-navy-100">
             ZorHire gives staffing agencies and HR teams a unified platform to
             source, screen, and place candidates — with AI-powered pipelines
             and real-time analytics built in.
           </p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <ul className="grid grid-cols-2 gap-4">
             {[
               { icon: Users, label: "Team Collaboration", sub: "role-based access" },
               { icon: BarChart3, label: "Real-time Analytics", sub: "live dashboards" },
               { icon: ShieldCheck, label: "Enterprise Security", sub: "invite-only access" },
-              { icon: Zap, label: "AI Screening", sub: "92% match accuracy" },
+              { icon: Zap, label: "AI Screening", sub: "resume parsing and matching" },
             ].map((item) => (
-              <div key={item.label} className="bg-[#1b120b]/80 border border-[#f2dbc0]/15 rounded-xl p-4 flex items-start gap-3">
-                <item.icon size={18} className="text-[#d4924a] mt-0.5 flex-shrink-0" />
+              <li key={item.label} className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+                <item.icon size={18} aria-hidden="true" className="mt-0.5 shrink-0 text-brand-400" />
                 <div>
-                  <p className="text-sm font-bold text-[#f9e8d1]">{item.label}</p>
-                  <p className="text-xs text-[#c2a687] mt-0.5">{item.sub}</p>
+                  <p className="text-sm font-semibold text-white">{item.label}</p>
+                  <p className="mt-0.5 text-xs text-navy-100">{item.sub}</p>
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 lg:max-w-md flex items-center justify-center px-6 py-12 bg-[#f7efe4]">
+      <div className="flex flex-1 items-center justify-center bg-white px-4 py-12 sm:px-6 lg:max-w-md">
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 bg-[#b47b3b] rounded-lg flex items-center justify-center shadow-sm shadow-[#9b713e]/25">
-              <Briefcase size={16} className="text-white" />
-            </div>
-            <span className="font-bold text-[#3a230f]">ZorHire</span>
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <img src="/brand/zortech-logo.png" alt="ZorTech" className="h-6 w-auto" />
+            <span className="border-l border-line pl-3 text-sm font-semibold text-navy-700">ZorHire</span>
           </div>
 
-          {/* Icon */}
-          <div className="w-14 h-14 bg-[#b47b3b]/10 rounded-2xl flex items-center justify-center mb-6">
-            <Zap size={26} className="text-[#b67031]" />
+          <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+            <Zap size={24} aria-hidden="true" />
           </div>
 
-          <h2 className="text-2xl font-bold text-[#3a230f] mb-2">
-            Start your journey
-          </h2>
-          <p className="text-sm text-[#7d6651] mb-8 leading-relaxed">
+          <h1 className="mb-2 text-2xl font-semibold text-navy-800">Start your journey</h1>
+          <p className="mb-8 text-sm leading-relaxed text-muted">
             Book a short demo with our team. If ZorHire is a fit, we set up
             your company workspace and send your team their logins.
           </p>
 
-          {/* Primary CTA */}
-          <button
+          <Button
+            size="lg"
+            fullWidth
+            className="group mb-3"
             onClick={() => navigate("/book-demo")}
-            className="w-full bg-[#b67031] text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#b67031]/20 hover:bg-[#9b5c27] transition-all flex items-center justify-center gap-2 group mb-4"
+            iconRight={<ArrowRight size={18} aria-hidden="true" className="transition-transform group-hover:translate-x-1" />}
           >
             Book a demo
-            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-          </button>
+          </Button>
 
-          <button
-            onClick={() => navigate("/pricing")}
-            className="w-full py-3.5 rounded-xl font-bold text-sm border border-[#e5d1bb] text-[#7d6651] hover:border-[#c88a3f] hover:text-[#3a230f] transition-all mb-4"
-          >
+          <Button variant="secondary" size="lg" fullWidth className="mb-5" onClick={() => navigate("/pricing")}>
             View plans &amp; pricing
-          </button>
+          </Button>
 
-          <p className="text-center text-sm text-[#7d6651]">
+          <p className="text-center text-sm text-muted">
             Already have a ZorHire login?{" "}
-            <button onClick={() => navigate("/login")} className="font-semibold text-[#3a230f] hover:underline">
+            <button type="button" onClick={() => navigate("/login")} className="font-semibold text-navy-600 hover:underline">
               Sign in
             </button>
           </p>

@@ -91,7 +91,7 @@ export default function SavedSearchesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8f6f2]">
+    <div className="min-h-screen bg-surface">
       <Header title="Saved Searches" />
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
@@ -127,7 +127,7 @@ export default function SavedSearchesPage() {
                 <Icon size={18} strokeWidth={2.5} />
               </div>
               <div>
-                <p className="text-2xl font-black text-[#111111]">{value}</p>
+                <p className="text-2xl font-semibold text-ink">{value}</p>
                 <p className="text-xs text-gray-400 font-semibold">{label}</p>
               </div>
             </div>
@@ -151,7 +151,7 @@ export default function SavedSearchesPage() {
           </div>
           <button
             onClick={() => navigate("/search")}
-            className="flex items-center gap-2 bg-[#111111] text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-[#333] transition-all shadow-sm flex-shrink-0"
+            className="flex items-center gap-2 bg-navy-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-navy-700 transition-all shadow-sm flex-shrink-0"
           >
             <Search size={15} />
             New Search
@@ -206,16 +206,16 @@ export default function SavedSearchesPage() {
                 {/* Details */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-black text-[#111111] truncate">
+                    <h3 className="text-sm font-semibold text-ink truncate">
                       {s.name}
                     </h3>
                     {s.email_alerts ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-full font-bold">
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-100 rounded-full font-bold">
                         <Bell size={9} />
                         Alerts on
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold">
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-gray-100 text-gray-400 border border-gray-200 rounded-full font-bold">
                         <BellOff size={9} />
                         No alerts
                       </span>
@@ -224,7 +224,7 @@ export default function SavedSearchesPage() {
                   <p className="text-xs text-gray-400 mt-0.5 truncate">
                     {summarizeQuery(s.query)}
                   </p>
-                  <p className="text-[10px] text-gray-300 mt-1">
+                  <p className="text-xs text-gray-300 mt-1">
                     Saved {fmtDate(s.created_at)}
                   </p>
                 </div>
@@ -233,7 +233,7 @@ export default function SavedSearchesPage() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     onClick={() => handleRun(s)}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-[#111111] bg-[#111111]/5 hover:bg-[#111111] hover:text-white rounded-xl transition-all"
+                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-ink bg-navy-600/5 hover:bg-navy-600 hover:text-white rounded-xl transition-all"
                   >
                     <Play size={12} />
                     Run
@@ -258,7 +258,7 @@ export default function SavedSearchesPage() {
             <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-5">
               <Trash2 size={20} className="text-red-500" />
             </div>
-            <h3 className="text-base font-black text-[#111111] mb-2">
+            <h3 className="text-base font-semibold text-ink mb-2">
               Delete Saved Search?
             </h3>
             <p className="text-sm text-gray-500 mb-6">
@@ -268,7 +268,7 @@ export default function SavedSearchesPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setConfirmDeleteId(null)}
-                className="flex-1 py-3 bg-gray-50 text-[#111111] font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
+                className="flex-1 py-3 bg-gray-50 text-ink font-bold text-sm rounded-xl border border-gray-100 hover:bg-gray-100 transition-all"
               >
                 Cancel
               </button>
@@ -289,7 +289,7 @@ export default function SavedSearchesPage() {
           className={`fixed bottom-6 right-6 z-[100] px-5 py-3.5 rounded-2xl text-sm font-bold shadow-xl transition-all animate-in slide-in-from-bottom-4 ${
             toast.type === "error"
               ? "bg-red-500 text-white"
-              : "bg-[#111111] text-white"
+              : "bg-navy-600 text-white"
           }`}
         >
           {toast.msg}

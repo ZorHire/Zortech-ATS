@@ -2,67 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ZorHire design tokens. Tailwind colour names (navy, brand, ink, muted, line,
+   surface) are defined in tailwind.config.js; these mirror them for the few
+   places that need raw CSS (inline styles, third-party widgets). */
 :root {
-  color-scheme: light; /* was "dark", which rendered native scrollbars, selects and date pickers dark on light pages */
-  --bg: #1c1510;
-  --surface: #f9efe1;
-  --surface-strong: #f0e2d2;
-  --text: #30221b;
-  --muted: #846c55;
-  --border: rgba(138, 102, 69, 0.22);
+  color-scheme: light;
+  --zh-navy: #1a4277;
+  --zh-navy-deep: #0f2a4f;
+  --zh-brand: #f7911e;
+  --zh-ink: #262626;
+  --zh-muted: #5f6b76;
+  --zh-line: #e3e7ec;
+  --zh-surface: #f6f8fb;
 }
 
-html {
-  scroll-behavior: smooth;
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply min-h-screen m-0 bg-surface text-ink font-sans antialiased;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display;
+  }
+
+  ::selection {
+    background: rgba(247, 145, 30, 0.25);
+  }
+
+  /* Visible keyboard focus for buttons and links (many have focus:outline-none). */
+  :where(a, button, [role="button"], summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--zh-brand);
+    outline-offset: 2px;
+  }
+
+  /* Inputs: one consistent focus ring. */
+  :where(input, select, textarea):focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(26, 66, 119, 0.18);
+    border-color: var(--zh-navy);
+  }
 }
 
-body {
-  min-height: 100vh;
-  margin: 0;
-  background:
-    radial-gradient(
-      circle at top left,
-      rgba(255, 245, 233, 0.22),
-      transparent 22%
-    ),
-    radial-gradient(
-      circle at bottom right,
-      rgba(216, 168, 113, 0.18),
-      transparent 16%
-    ),
-    linear-gradient(180deg, #24180f 0%, #140d08 100%);
-  color: var(--text);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+@layer components {
+  /* Form controls shared across screens. Use with <input className="zh-input">. */
+  .zh-input {
+    @apply w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/70 disabled:bg-surface-sunken disabled:text-muted;
+  }
+
+  .zh-label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+
+  .zh-card {
+    @apply rounded-xl border border-line bg-white shadow-card;
+  }
+
+  /* Absolutely positioned children of a horizontal scroller (e.g. sr-only
+     checkbox labels in wide tables) must be contained by it; otherwise they
+     escape and make the whole page scroll sideways. */
+  .overflow-x-auto {
+    position: relative;
+  }
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body,
-input,
-button,
-textarea,
-select {
-  font: inherit;
-}
-
-button,
-input,
-textarea,
-select {
-  font-family: inherit;
-}
-
-/* Visible keyboard focus for buttons and links (many have focus:outline-none). */
-:where(a, button, [role="button"], summary):focus-visible {
-  outline: 2px solid #F7911E;
-  outline-offset: 2px;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -6,16 +6,41 @@ import {
   Building2,
   Briefcase,
   Save,
-  Loader2,
   Calendar,
   Network,
 } from "lucide-react";
-import Header from "../components/layout/Header";
 import { useGetProfileQuery, useUpdateProfileMutation } from "../store/api/profileApi";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { setCredentials, selectCurrentUser, selectAccessToken } from "../store/slices/authSlice";
 import { useNotify } from "../hooks/useNotify";
+import { describeApiError } from "../store/api/baseApi";
+import { Badge, Button, ErrorState, PageHeader, Skeleton } from "../components/ui";
+
+const iconCls = "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted";
+
+function ProfileSkeleton() {
+  return (
+    <div className="space-y-5" role="status" aria-label="Loading profile">
+      <div className="zh-card flex items-center gap-5 p-6">
+        <Skeleton className="h-20 w-20 rounded-xl" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-3.5 w-56" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+      </div>
+      <div className="zh-card space-y-5 p-6">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="space-y-2">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const dispatch = useAppDispatch();
@@ -23,7 +48,7 @@ export default function ProfilePage() {
   const accessToken = useAppSelector(selectAccessToken);
   const notify = useNotify();
 
-  const { data: profile, isLoading } = useGetProfileQuery();
+  const { data: profile, isLoading, isError, error, refetch, isFetching } = useGetProfileQuery();
   const [updateProfile, { isLoading: isSaving }] = useUpdateProfileMutation();
 
   const [form, setForm] = React.useState({
@@ -31,6 +56,7 @@ export default function ProfilePage() {
     phone: "",
     department: "",
   });
+  const [nameError, setNameError] = React.useState("");
   const [initialized, setInitialized] = React.useState(false);
 
   React.useEffect(() => {
@@ -44,7 +70,14 @@ export default function ProfilePage() {
     }
   }, [profile, initialized]);
 
-  const handleSave = async () => {
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSaving) return;
+    if (!form.full_name.trim()) {
+      setNameError("Please enter your full name.");
+      return;
+    }
+    setNameError("");
     try {
       const updated = await updateProfile({
         full_name: form.full_name,
@@ -66,53 +99,57 @@ export default function ProfilePage() {
       }
 
       notify.success("Profile updated successfully");
-    } catch {
-      notify.error("Failed to update profile");
+    } catch (err) {
+      notify.error(describeApiError(err, "Failed to update profile"));
     }
   };
 
   const avatarLetter = (profile?.full_name || profile?.email || "U").charAt(0).toUpperCase();
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <Header title="My Profile" subtitle="View and edit your account information" />
+    <>
+      <PageHeader title="My Profile" subtitle="View and edit your account information" />
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-2xl mx-auto space-y-5">
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto max-w-2xl space-y-5">
           {isLoading ? (
-            <div className="flex justify-center py-24">
-              <Loader2 size={24} className="animate-spin text-gray-400" />
+            <ProfileSkeleton />
+          ) : isError || !profile ? (
+            // Never show an empty, saveable form when the profile didn't load.
+            <div className="zh-card">
+              <ErrorState
+                error={error}
+                title="Couldn't load your profile"
+                onRetry={refetch}
+                retrying={isFetching}
+              />
             </div>
           ) : (
             <>
               {/* Avatar + identity card */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <div className="flex items-center gap-5">
-                  <div className="w-20 h-20 rounded-2xl overflow-hidden border-4 border-white shadow-md flex-shrink-0">
-                    {profile?.avatar_url ? (
-                      <img
-                        src={profile.avatar_url}
-                        alt="avatar"
-                        className="w-full h-full object-cover"
-                      />
+              <div className="zh-card p-5 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
+                  <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-line">
+                    {profile.avatar_url ? (
+                      <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center">
-                        <span className="text-3xl font-bold text-white">{avatarLetter}</span>
+                      <div className="flex h-full w-full items-center justify-center bg-navy-600">
+                        <span className="text-3xl font-semibold text-white">{avatarLetter}</span>
                       </div>
                     )}
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">
-                      {profile?.full_name || "—"}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-0.5">{profile?.email}</p>
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700 capitalize">
-                        {profile?.role?.replace(/_/g, " ")}
-                      </span>
-                      {profile?.tenant_name && (
-                        <span className="text-xs text-gray-400 flex items-center gap-1">
-                          <Network size={11} />
+                  <div className="min-w-0">
+                    <h2 className="truncate text-xl font-semibold text-ink">{profile.full_name || "—"}</h2>
+                    <p className="mt-0.5 break-all text-sm text-muted">{profile.email}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {profile.role && (
+                        <Badge tone="brand" className="capitalize">
+                          {profile.role.replace(/_/g, " ")}
+                        </Badge>
+                      )}
+                      {profile.tenant_name && (
+                        <span className="flex items-center gap-1 text-xs text-muted">
+                          <Network size={12} aria-hidden="true" />
                           {profile.tenant_name}
                         </span>
                       )}
@@ -122,136 +159,123 @@ export default function ProfilePage() {
               </div>
 
               {/* Editable fields */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
-                <h3 className="font-semibold text-gray-900">Edit Information</h3>
+              <form onSubmit={handleSave} noValidate className="zh-card space-y-5 p-5 sm:p-6">
+                <h3 className="text-base font-semibold text-ink">Edit Information</h3>
 
-                {/* Full name */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                    Full Name
+                  <label htmlFor="profile-name" className="zh-label">
+                    Full name
                   </label>
                   <div className="relative">
-                    <User
-                      size={15}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                    <User size={15} aria-hidden="true" className={iconCls} />
                     <input
+                      id="profile-name"
+                      autoComplete="name"
                       value={form.full_name}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, full_name: e.target.value }))
-                      }
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"
+                      onChange={(e) => {
+                        setForm((f) => ({ ...f, full_name: e.target.value }));
+                        if (nameError) setNameError("");
+                      }}
+                      aria-invalid={nameError ? true : undefined}
+                      aria-describedby={nameError ? "profile-name-error" : undefined}
+                      className="zh-input pl-9"
                       placeholder="Your full name"
                     />
                   </div>
+                  {nameError && (
+                    <p id="profile-name-error" className="mt-1 text-xs text-danger-600">
+                      {nameError}
+                    </p>
+                  )}
                 </div>
 
-                {/* Email — read-only */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="profile-email" className="zh-label">
                     Email
                   </label>
                   <div className="relative">
-                    <Mail
-                      size={15}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                    <Mail size={15} aria-hidden="true" className={iconCls} />
                     <input
-                      value={profile?.email || ""}
+                      id="profile-email"
+                      value={profile.email || ""}
                       readOnly
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-sm text-gray-500 cursor-not-allowed"
+                      aria-describedby="profile-email-hint"
+                      className="zh-input cursor-not-allowed bg-surface-sunken pl-9 text-muted"
                     />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">Email address cannot be changed</p>
+                  <p id="profile-email-hint" className="mt-1 text-xs text-muted">
+                    Email address cannot be changed
+                  </p>
                 </div>
 
-                {/* Phone */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="profile-phone" className="zh-label">
                     Phone
                   </label>
                   <div className="relative">
-                    <Phone
-                      size={15}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                    <Phone size={15} aria-hidden="true" className={iconCls} />
                     <input
+                      id="profile-phone"
+                      type="tel"
+                      autoComplete="tel"
                       value={form.phone}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, phone: e.target.value }))
-                      }
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"
+                      onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                      className="zh-input pl-9"
                       placeholder="+91 XXXXX XXXXX"
                     />
                   </div>
                 </div>
 
-                {/* Department */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="profile-department" className="zh-label">
                     Department
                   </label>
                   <div className="relative">
-                    <Building2
-                      size={15}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                    <Building2 size={15} aria-hidden="true" className={iconCls} />
                     <input
+                      id="profile-department"
+                      autoComplete="organization-title"
                       value={form.department}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, department: e.target.value }))
-                      }
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"
+                      onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
+                      className="zh-input pl-9"
                       placeholder="e.g. Engineering, HR"
                     />
                   </div>
                 </div>
 
-                {/* Role — read-only */}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  <label htmlFor="profile-role" className="zh-label">
                     Role
                   </label>
                   <div className="relative">
-                    <Briefcase
-                      size={15}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                    />
+                    <Briefcase size={15} aria-hidden="true" className={iconCls} />
                     <input
-                      value={(profile?.role || "").replace(/_/g, " ")}
+                      id="profile-role"
+                      value={(profile.role || "").replace(/_/g, " ")}
                       readOnly
-                      className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-100 bg-gray-50 text-sm text-gray-500 cursor-not-allowed capitalize"
+                      className="zh-input cursor-not-allowed bg-surface-sunken pl-9 capitalize text-muted"
                     />
                   </div>
                 </div>
 
                 <div className="flex justify-end pt-1">
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSaving ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
-                      <Save size={14} />
-                    )}
+                  <Button type="submit" loading={isSaving} loadingText="Saving…" icon={<Save size={14} aria-hidden="true" />}>
                     Save Changes
-                  </button>
+                  </Button>
                 </div>
-              </div>
+              </form>
 
               {/* Account details */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <h3 className="font-semibold text-gray-900 mb-4">Account Details</h3>
+              <div className="zh-card p-5 sm:p-6">
+                <h3 className="mb-4 text-base font-semibold text-ink">Account Details</h3>
                 <dl className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <dt className="flex items-center gap-1.5 text-xs text-gray-400 uppercase tracking-wide">
-                      <Calendar size={12} />
-                      Member Since
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="flex items-center gap-1.5 text-sm text-muted">
+                      <Calendar size={14} aria-hidden="true" />
+                      Member since
                     </dt>
-                    <dd className="text-sm font-medium text-gray-700">
-                      {profile?.created_at
+                    <dd className="text-right text-sm font-medium text-ink">
+                      {profile.created_at
                         ? new Date(profile.created_at).toLocaleDateString("en-IN", {
                             day: "numeric",
                             month: "long",
@@ -260,14 +284,12 @@ export default function ProfilePage() {
                         : "—"}
                     </dd>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <dt className="flex items-center gap-1.5 text-xs text-gray-400 uppercase tracking-wide">
-                      <Network size={12} />
+                  <div className="flex items-center justify-between gap-4">
+                    <dt className="flex items-center gap-1.5 text-sm text-muted">
+                      <Network size={14} aria-hidden="true" />
                       Organization
                     </dt>
-                    <dd className="text-sm font-medium text-gray-700">
-                      {profile?.tenant_name || "—"}
-                    </dd>
+                    <dd className="text-right text-sm font-medium text-ink">{profile.tenant_name || "—"}</dd>
                   </div>
                 </dl>
               </div>
@@ -275,6 +297,6 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

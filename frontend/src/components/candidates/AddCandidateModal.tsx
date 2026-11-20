@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { X } from "lucide-react";
-import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../../lib/confidenceIndicator";
+import { isLowConfidence } from "../../lib/confidenceIndicator";
 import { useParseResumeMutation, useAddCandidateToJobMutation } from "../../store/api/candidateApi";
 import { useNotify } from "../../hooks/useNotify";
-import { useEscapeKey } from "../../hooks/useEscapeKey";
+import { Badge, Button, Modal } from "../ui";
 
 interface Props {
   jobId: string;
@@ -50,8 +49,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
   const [addCandidateToJob, { isLoading: submitting }] = useAddCandidateToJobMutation();
   const notify = useNotify();
 
-  // Esc closes (not mid-submit). No backdrop-close: it would discard the typed form.
-  useEscapeKey(onClose, !submitting);
+  const [contactTouched, setContactTouched] = useState(false);
 
   const parseResumeFile = async (file: File) => {
     setResumeParseMessage("");
@@ -96,6 +94,7 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.email.trim() && !formData.phone.trim()) {
+      setContactTouched(true);
       notify.warning("Please provide at least an email or phone number.");
       return;
     }
@@ -130,260 +129,122 @@ export default function AddCandidateModal({ jobId, onClose, onSuccess }: Props) 
     }
   };
 
-  const nameFlagged = isLowConfidence(lowConfidenceFields, "name");
-  const emailFlagged = isLowConfidence(lowConfidenceFields, "email");
-  const phoneFlagged = isLowConfidence(lowConfidenceFields, "phone");
-  const currentTitleFlagged = isLowConfidence(lowConfidenceFields, "current_title");
-  const currentCompanyFlagged = isLowConfidence(lowConfidenceFields, "current_company");
-  const currentLocationFlagged = isLowConfidence(lowConfidenceFields, "current_location");
-  const preferredLocationFlagged = isLowConfidence(lowConfidenceFields, "preferred_location");
-  const noticePeriodFlagged = isLowConfidence(lowConfidenceFields, "notice_period_days");
-  const currentCtcFlagged = isLowConfidence(lowConfidenceFields, "current_ctc");
-  const expectedCtcFlagged = isLowConfidence(lowConfidenceFields, "expected_ctc");
-  const skillsFlagged = isLowConfidence(lowConfidenceFields, "skills");
+  const flagged = (...keys: string[]) => isLowConfidence(lowConfidenceFields, ...keys);
+  const inputClass = (isFlagged: boolean) => `zh-input ${isFlagged ? "border-warning-600 bg-warning-50" : ""}`;
+
+  type FieldKey = keyof typeof emptyForm;
+  const FIELDS: { key: FieldKey; label: string; type: string; placeholder?: string; required?: boolean; aliases: string[] }[] = [
+    { key: "first_name", label: "First name", type: "text", placeholder: "e.g. John", required: true, aliases: ["name"] },
+    { key: "last_name", label: "Last name", type: "text", placeholder: "e.g. Doe", required: true, aliases: ["name"] },
+    { key: "email", label: "Email address", type: "email", placeholder: "john.doe@example.com", aliases: ["email"] },
+    { key: "phone", label: "Phone number", type: "text", placeholder: "+91 XXXXX XXXXX", aliases: ["phone"] },
+    { key: "current_title", label: "Current title", type: "text", placeholder: "e.g. Senior Software Engineer", aliases: ["current_title"] },
+    { key: "current_company", label: "Current company", type: "text", placeholder: "e.g. Google", aliases: ["current_company"] },
+    { key: "experience_years", label: "Experience (years)", type: "number", aliases: [] },
+    { key: "current_location", label: "Location", type: "text", placeholder: "e.g. Pune", aliases: ["current_location"] },
+    { key: "preferred_location", label: "Preferred location", type: "text", placeholder: "e.g. Bangalore or Remote", aliases: ["preferred_location"] },
+    { key: "notice_period_days", label: "Notice period (days)", type: "number", aliases: ["notice_period_days"] },
+    { key: "current_ctc", label: "Current CTC (annual)", type: "number", placeholder: "e.g. 1200000", aliases: ["current_ctc"] },
+    { key: "expected_ctc", label: "Expected CTC (annual)", type: "number", placeholder: "e.g. 1500000", aliases: ["expected_ctc"] },
+    { key: "skills", label: "Skills (comma separated)", type: "text", placeholder: "React, Node.js, TypeScript", aliases: ["skills"] },
+  ];
+  const numeric: FieldKey[] = ["experience_years", "notice_period_days"];
+  const contactMissing = contactTouched && !formData.email.trim() && !formData.phone.trim();
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-          <h2 className="text-xl font-black text-[#111111] tracking-tight">Add Candidate to Job</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="p-2 hover:bg-white rounded-xl transition-all text-gray-400 hover:text-[#111111]"
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      preventClose={submitting}
+      title="Add candidate to job"
+      description="Upload a resume to auto-fill, then review the details."
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="add-candidate-to-job-form"
+            disabled={resumeParsing}
+            loading={submitting}
+            loadingText="Adding…"
           >
-            <X size={20} />
-          </button>
+            {resumeParsing ? "Parsing…" : "Add to job"}
+          </Button>
+        </>
+      }
+    >
+      <form id="add-candidate-to-job-form" onSubmit={handleSubmit} className="space-y-5">
+        <div>
+          <label htmlFor="acm-resume" className="zh-label">Resume</label>
+          <input
+            id="acm-resume"
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={(e) => {
+              if (e.target.files?.[0]) {
+                const file = e.target.files[0];
+                setResumeFile(file);
+                parseResumeFile(file);
+              }
+            }}
+            className="zh-input file:mr-3 file:rounded-md file:border-0 file:bg-navy-50 file:px-3 file:py-1 file:text-sm file:font-medium file:text-navy-700"
+          />
+          <p className="mt-1 text-xs text-muted">PDF, DOC or DOCX. We'll fill in the fields below.</p>
+          {resumeFile && <p className="mt-1 text-xs text-muted">Selected: {resumeFile.name}</p>}
+          {resumeParsing && <p className="mt-1 text-xs text-navy-600" role="status">Parsing resume, please wait…</p>}
+          {resumeParseMessage && <p className="mt-1 text-xs text-success-700" role="status">{resumeParseMessage}</p>}
+          {resumeParseError && <p className="mt-1 text-xs text-danger-600" role="alert">{resumeParseError}</p>}
         </div>
-        <form onSubmit={handleSubmit} className="p-8 overflow-y-auto max-h-[75vh]">
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                First Name
-                {nameFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                required
-                type="text"
-                value={formData.first_name}
-                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(nameFlagged)}`}
-                placeholder="e.g. John"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Last Name
-                {nameFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                required
-                type="text"
-                value={formData.last_name}
-                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(nameFlagged)}`}
-                placeholder="e.g. Doe"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Email Address
-                {emailFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(emailFlagged)}`}
-                placeholder="john.doe@example.com"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Phone Number
-                {phoneFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(phoneFlagged)}`}
-                placeholder="+91 XXXXX XXXXX"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Current Title
-                {currentTitleFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.current_title}
-                onChange={(e) => setFormData({ ...formData, current_title: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentTitleFlagged)}`}
-                placeholder="e.g. Senior Software Engineer"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Current Company
-                {currentCompanyFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.current_company}
-                onChange={(e) => setFormData({ ...formData, current_company: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentCompanyFlagged)}`}
-                placeholder="e.g. Google"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Experience (years)</label>
-              <input
-                type="number"
-                min={0}
-                value={formData.experience_years}
-                onChange={(e) => setFormData({ ...formData, experience_years: Number(e.target.value) })}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Location
-                {currentLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.current_location}
-                onChange={(e) => setFormData({ ...formData, current_location: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentLocationFlagged)}`}
-                placeholder="e.g. New York"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Preferred Location
-                {preferredLocationFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.preferred_location}
-                onChange={(e) => setFormData({ ...formData, preferred_location: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(preferredLocationFlagged)}`}
-                placeholder="e.g. Bangalore or Remote"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Notice Period (days)
-                {noticePeriodFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={formData.notice_period_days}
-                onChange={(e) => setFormData({ ...formData, notice_period_days: Number(e.target.value) })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(noticePeriodFlagged)}`}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Current CTC (annual)
-                {currentCtcFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={formData.current_ctc}
-                onChange={(e) => setFormData({ ...formData, current_ctc: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(currentCtcFlagged)}`}
-                placeholder="e.g. 1200000"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Expected CTC (annual)
-                {expectedCtcFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={formData.expected_ctc}
-                onChange={(e) => setFormData({ ...formData, expected_ctc: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(expectedCtcFlagged)}`}
-                placeholder="e.g. 1500000"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-                Skills (comma separated)
-                {skillsFlagged && <span className={ConfidenceBadge}>needs review</span>}
-              </label>
-              <input
-                type="text"
-                value={formData.skills}
-                onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all ${confidenceInputClass(skillsFlagged)}`}
-                placeholder="React, Node.js, TypeScript"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Source</label>
-              <div className="relative">
-                <select
-                  value={formData.source}
-                  onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                  className="w-full px-4 py-3 pr-10 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all appearance-none"
-                >
-                  {Object.entries(sourceLabels).map(([k, v]) => (
-                    <option key={k} value={k}>{v}</option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-            <div className="col-span-2 space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Upload Resume</label>
-              <input
-                type="file"
-                accept=".pdf,.doc,.docx"
-                onChange={(e) => {
-                  if (e.target.files?.[0]) {
-                    const file = e.target.files[0];
-                    setResumeFile(file);
-                    parseResumeFile(file);
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {FIELDS.map((f) => {
+            const isFlagged = f.aliases.length > 0 && flagged(...f.aliases);
+            const id = `acm-${f.key}`;
+            return (
+              <div key={f.key}>
+                <label htmlFor={id} className="zh-label">
+                  {f.label}
+                  {f.required && <span className="text-danger-600"> *</span>}
+                  {isFlagged && <Badge tone="warning" className="ml-2">Needs review</Badge>}
+                </label>
+                <input
+                  id={id}
+                  required={f.required}
+                  type={f.type}
+                  min={f.type === "number" ? 0 : undefined}
+                  value={formData[f.key]}
+                  onChange={(e) =>
+                    setFormData({ ...formData, [f.key]: numeric.includes(f.key) ? Number(e.target.value) : e.target.value })
                   }
-                }}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {resumeFile && <p className="text-xs text-gray-500 mt-1">Selected: {resumeFile.name}</p>}
-              {resumeParsing && <p className="text-xs text-blue-600 mt-1">Parsing resume, please wait...</p>}
-              {resumeParseMessage && <p className="text-xs text-emerald-700 mt-1">{resumeParseMessage}</p>}
-              {resumeParseError && <p className="text-xs text-red-600 mt-1">{resumeParseError}</p>}
-            </div>
-          </div>
-          <div className="flex gap-4 mt-10">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all"
+                  aria-invalid={f.key === "email" && contactMissing ? true : undefined}
+                  aria-describedby={f.key === "email" && contactMissing ? "acm-contact-error" : undefined}
+                  className={inputClass(isFlagged)}
+                  placeholder={f.placeholder}
+                />
+                {f.key === "email" && contactMissing && (
+                  <p id="acm-contact-error" className="mt-1 text-xs text-danger-600">Add an email or a phone number.</p>
+                )}
+              </div>
+            );
+          })}
+          <div>
+            <label htmlFor="acm-source" className="zh-label">Source</label>
+            <select
+              id="acm-source"
+              value={formData.source}
+              onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+              className="zh-input"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={resumeParsing || submitting}
-              className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {resumeParsing ? "Parsing..." : submitting ? "Adding..." : "Add to Job"}
-            </button>
+              {Object.entries(sourceLabels).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+    </Modal>
   );
 }
