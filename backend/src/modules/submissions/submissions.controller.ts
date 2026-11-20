@@ -1,4 +1,3 @@
-import fs from "fs";
 import path from "path";
 import { Response } from "express";
 import { z } from "zod";
@@ -6,7 +5,7 @@ import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { claudeStructured } from "../../lib/ai/claudeClient";
 import { extractFileText } from "../parse/parse.utils";
-import { resolveStoredUpload } from "../../lib/uploadPaths";
+import { readResumeBuffer } from "../../services/resumeStorage";
 import { getTenantTransporter, getUserTransporter } from "../email/email.controller";
 
 /**
@@ -54,14 +53,11 @@ Rules:
 
 const MUST_LEVEL = (text: string, skill: string) => (text.toLowerCase().includes(skill.toLowerCase()) ? "strong" : "not_shown");
 
-async function resumeText(resumeUrl: string | null): Promise<string> {
-  const file = resolveStoredUpload(resumeUrl);
-  if (!file) return "";
+async function resumeText(tenantId: string, resumeUrl: string | null): Promise<string> {
   try {
-    const buffer = fs.readFileSync(file);
-    const name = path.basename(file);
-    const mimetype = /\.pdf$/i.test(name) ? "application/pdf" : /\.docx$/i.test(name) ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : /\.doc$/i.test(name) ? "application/msword" : "text/plain";
-    return await extractFileText({ buffer, originalname: name, mimetype } as Express.Multer.File);
+    const f = await readResumeBuffer(tenantId, resumeUrl);
+    if (!f) return "";
+    return await extractFileText({ buffer: f.buffer, originalname: f.filename, mimetype: f.mimetype } as Express.Multer.File);
   } catch (err) {
     console.error("submission resume read failed:", err);
     return "";
@@ -180,7 +176,7 @@ export const generateSubmission = async (req: AuthRequest, res: Response) => {
     const tenantId = req.user!.tenant_id;
     const row = await load(tenantId, String(req.params.id));
     if (!row) return res.status(404).json({ message: "Application not found" });
-    const text = (await resumeText(row.resume_url)).slice(0, 30000);
+    const text = (await resumeText(tenantId, row.resume_url)).slice(0, 30000);
     const f = facts(row);
     const ai = await claudeStructured({
       agentId: "submission_writer",
@@ -320,11 +316,11 @@ export const sendSubmission = async (req: AuthRequest, res: Response) => {
       ? req.body.subject.trim().slice(0, 200)
       : `Profile: ${v.facts.name} for ${row.job_title}`;
     const message = typeof req.body?.message === "string" ? req.body.message.slice(0, 3000) : null;
-    const attachments: { filename: string; path: string }[] = [];
+    const attachments: { filename: string; content: Buffer; contentType: string }[] = [];
     if (req.body?.attach_resume === true) {
-      const file = resolveStoredUpload(row.resume_url);
+      const file = await readResumeBuffer(tenantId, row.resume_url);
       if (!file) return res.status(400).json({ message: "This candidate has no resume file to attach." });
-      attachments.push({ filename: `${v.facts.name.replace(/[^\w ]/g, "").trim() || "candidate"} - resume${path.extname(file)}`, path: file });
+      attachments.push({ filename: `${v.facts.name.replace(/[^\w ]/g, "").trim() || "candidate"} - resume${path.extname(file.filename)}`, content: file.buffer, contentType: file.mimetype });
     }
     await mail.transporter.sendMail({ from: mail.fromEmail, to, cc: cc.length ? cc : undefined, subject, html: renderPackHtml(v, message), attachments });
 

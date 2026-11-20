@@ -1,9 +1,8 @@
-import fs from "fs";
-import path from "path";
 import { Response } from "express";
 import pool from "../../db";
 import { invalidatePrefix } from "../../lib/cache";
 import { extractFileText, parseResumeText } from "../parse/parse.utils";
+import { saveResume } from "../../services/resumeStorage";
 import { ExtRequest, UUID_RE } from "./linkedinStore";
 
 /**
@@ -254,10 +253,9 @@ export const captureResume = async (req: ExtRequest, res: Response) => {
     if (!UUID_RE.test(id)) return res.status(404).json({ message: "Candidate not found" });
     const c = await pool.query(`SELECT id FROM candidates WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`, [id, tenantId]);
     if (!c.rows[0]) return res.status(404).json({ message: "Candidate not found" });
-    // Same storage as the Add candidate form in this version (UPLOAD_DIR/resumes; see middleware/fileUpload.ts).
-    const resumeUrl = `/uploads/resumes/${path.basename(file.path)}`;
-    // Disk uploads have no buffer; the text extractor needs one.
-    const text = await extractFileText({ ...file, buffer: file.buffer ?? fs.readFileSync(file.path) }).catch(() => "");
+    // Same storage as the Add candidate form: private R2 bucket when configured, else local disk.
+    const resumeUrl = await saveResume(tenantId, file);
+    const text = await extractFileText(file).catch(() => "");
     const parsed = text ? await parseResumeText(text, tenantId) : {};
     const p = parsed as Record<string, any>;
     await pool.query(
