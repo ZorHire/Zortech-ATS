@@ -11,6 +11,7 @@ const ROUTES = {
   interview: () => "/interviews",
   application: () => "/candidates",
   vendor_submission: () => "/assigned-jds",
+  ai_usage: () => "/settings/ai-usage",
 };
 
 class Alerts {

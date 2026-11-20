@@ -64,7 +64,7 @@ export const submissionsApi = baseApi.injectEndpoints({
     getSubmission: b.query<SubmissionView, string>({ query: (id) => `/submissions/applications/${id}`, providesTags: (_r, _e, id) => tag(id) }),
     generateSubmission: b.mutation<SubmissionView, string>({
       query: (id) => ({ url: `/submissions/applications/${id}/generate`, method: "POST" }),
-      invalidatesTags: (_r, _e, id) => tag(id),
+      invalidatesTags: (_r, _e, id) => [...tag(id), "AiUsage"],
     }),
     saveSubmission: b.mutation<SubmissionView, { id: string; content?: PackContent; hide_contacts?: boolean; show_ctc?: boolean }>({
       query: ({ id, ...body }) => ({ url: `/submissions/applications/${id}`, method: "PUT", body }),

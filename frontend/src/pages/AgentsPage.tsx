@@ -32,6 +32,7 @@ import { describeApiError } from "../store/api/baseApi";
 import { useNotify } from "../hooks/useNotify";
 import { AGENT_META, formatUsd } from "../lib/agents";
 import type { AgentEvent } from "../types/agents";
+import AiUsageBanner from "../components/ai/AiUsageBanner";
 
 const AGENT_FILTERS = Object.entries(AGENT_META) as [AgentEvent["agent"], (typeof AGENT_META)[AgentEvent["agent"]]][];
 // The activity endpoint filters by job only; agent / Needs review are filtered here.
@@ -128,6 +129,7 @@ export default function AgentsPage() {
       />
 
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <AiUsageBanner meters={["shortlists", "screenings"]} />
         {/* Today */}
         <section aria-labelledby="agents-today">
           <h2 id="agents-today" className="mb-3 text-sm font-semibold text-ink">

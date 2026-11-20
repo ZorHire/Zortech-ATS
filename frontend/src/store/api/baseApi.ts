@@ -127,6 +127,7 @@ export const baseApi = createApi({
     "FreeJobBoards",
     "Submission",
     "WhatsApp",
+    "AiUsage",
   ],
   endpoints: () => ({}),
 });

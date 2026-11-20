@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { allowanceErrorBody, canRun, type Meter } from "../../services/aiAllowance";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
 import { enqueueTask, getSettings, recordEvent, upsertSettings } from "./agentStore";
@@ -137,6 +138,7 @@ export const pauseAll = async (req: AuthRequest, res: Response) => {
 };
 
 const MANUAL_AGENTS: Record<string, AgentName> = { shortlister: "shortlister", screener: "screener", scheduler: "scheduler" };
+const MANUAL_METER: Partial<Record<AgentName, Meter>> = { shortlister: "shortlists", screener: "screenings" };
 
 /** POST /v1/agents/applications/:id/run  { agent } */
 export const runAgentNow = async (req: AuthRequest, res: Response) => {
@@ -148,6 +150,8 @@ export const runAgentNow = async (req: AuthRequest, res: Response) => {
   try {
     const r = await pool.query(`SELECT id, job_id FROM job_applications WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
     if (!r.rows[0]) return res.status(404).json({ message: "Application not found" });
+    const meter = MANUAL_METER[agent];
+    if (meter && !(await canRun(tenantId, meter, id))) return res.status(402).json(allowanceErrorBody(meter));
     const queued = await enqueueTask({ tenantId, jobId: r.rows[0].job_id, applicationId: id, agent, manual: true });
     res.status(202).json({ queued: true, already_queued: !queued });
   } catch (err) {
