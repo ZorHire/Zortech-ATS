@@ -8,7 +8,10 @@ export type AgentId =
   | "candidate_summariser"
   | "outreach_writer"
   | "interview_kit_generator"
-  | "boolean_search_builder";
+  | "boolean_search_builder"
+  | "candidate_shortlister"
+  | "screening_interviewer"
+  | "screening_evaluator";
 
 interface AgentModelConfig {
   model: string;
@@ -59,6 +62,11 @@ const MODEL_CONFIG: Record<AgentId, AgentModelConfig> = {
     fallback: "gemini-2.5-flash",
     capUsdMonth: 15,
   },
+  // Claude-powered recruiting agents (lib/ai/claudeClient.ts). Fallback on a
+  // policy refusal is handled server-side by the API (fallbacks: "default").
+  candidate_shortlister: { model: "claude-opus-5-5", capUsdMonth: 60 },
+  screening_interviewer: { model: "claude-opus-5-5", capUsdMonth: 120 },
+  screening_evaluator: { model: "claude-opus-5-5", capUsdMonth: 40 },
 };
 
 export const getAgentModelConfig = (agentId: AgentId): AgentModelConfig =>

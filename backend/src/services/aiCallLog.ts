@@ -24,6 +24,12 @@ const RATE_CARD_USD_PER_M_TOKENS: Record<
   "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
   "gemini-embedding-001": { input: 0.15, output: 0 },
+  // Anthropic list prices (cache reads are cheaper; estimate treats all input as uncached,
+  // so it errs on the high side for the monthly caps).
+  "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-opus-5": { input: 5, output: 25 },
+  "claude-opus-4-8": { input: 5, output: 25 },
+  "claude-sonnet-5-5": { input: 2, output: 10 },
 };
 
 /** Returns undefined (not 0) when the model has no rate-card entry or either token count is missing — an unknown cost should never be reported as free. */
@@ -57,7 +63,8 @@ export type AiCallEntityType =
   | "candidate"
   | "job"
   | "job_application"
-  | "screening_session";
+  | "screening_session"
+  | "interview_booking";
 
 export interface LogAiCallParams {
   tenantId: string;

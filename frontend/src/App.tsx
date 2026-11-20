@@ -49,6 +49,8 @@ const OnboardingPage = lazy(() => import("./pages/OnboardingPage"));
 const CompaniesPage = lazy(() => import("./pages/CompaniesPage"));
 const AssignedJDsPage = lazy(() => import("./pages/AssignedJDsPage"));
 const ScreeningChatPage = lazy(() => import("./pages/ScreeningChatPage"));
+const ScheduleInterviewPage = lazy(() => import("./pages/ScheduleInterviewPage"));
+const AgentsPage = lazy(() => import("./pages/AgentsPage"));
 const InterviewsPage = lazy(() => import("./pages/InterviewsPage"));
 const OffersPage = lazy(() => import("./pages/OffersPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
@@ -247,6 +249,7 @@ function AppRoutes() {
       <Route path="/book-demo" element={<BookDemoPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/screening/:sessionId" element={<ScreeningChatPage />} />
+      <Route path="/schedule/:token" element={<ScheduleInterviewPage />} />
       {/* Pricing: public (no auth) shows standalone page; authenticated shows within Layout */}
       <Route
         path="/pricing"
@@ -437,6 +440,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute path="/interviews">
             <InterviewsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agents"
+        element={
+          <ProtectedRoute path="/agents">
+            <AgentsPage />
           </ProtectedRoute>
         }
       />

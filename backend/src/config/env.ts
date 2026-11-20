@@ -16,6 +16,11 @@ export const env = {
   ENCRYPTION_KEY: process.env.EMAIL_ENCRYPTION_KEY || "",
   REDIS_URL: process.env.REDIS_URL || "redis://localhost:6379",
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+  // Claude powers the AI recruiting agents (shortlister, screening interviewer).
+  // Without it those agents fall back to Gemini (screening) or skip (shortlisting).
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
+  // Master switch for autopilot agents; per-job settings still apply.
+  AI_AGENTS_ENABLED: process.env.AI_AGENTS_ENABLED !== "false",
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",
   RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET || "",
   RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET || "",

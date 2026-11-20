@@ -142,6 +142,8 @@ export interface JobApplication {
     model: string;
     scored_at: string;
   };
+  /** Latest AI shortlister result (autopilot); the pipeline API may not return it yet. */
+  ai_shortlist?: { score: number; decision?: "shortlist" | "review" | "not_a_fit" } | null;
   rejection_reason?: string;
   notes?: string;
   assigned_to?: string;

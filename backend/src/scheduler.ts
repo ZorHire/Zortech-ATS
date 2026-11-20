@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import pool from "./db";
 import { dispatchScheduledCampaign } from "./modules/email/campaigns.controller";
+import { agentTick } from "./modules/agents/orchestrator";
 
 export function startScheduler(): void {
   // Nightly at 00:05 — expire overdue jobs and vendor contracts
@@ -37,6 +38,11 @@ export function startScheduler(): void {
   });
 
   // Scheduled campaigns — every 5 minutes
+  // Every minute — AI recruiting agents (autopilot sweep + task worker). See docs/ai-agents.md.
+  cron.schedule("* * * * *", () => {
+    void agentTick();
+  });
+
   cron.schedule('*/5 * * * *', async () => {
     try {
       const now = new Date().toISOString();
@@ -129,6 +135,9 @@ export function startScheduler(): void {
 
   console.log(
     "[Scheduler] Nightly expiry cron registered — runs daily at 00:05",
+  );
+  console.log(
+    "[Scheduler] AI agents cron registered — runs every minute",
   );
   console.log("[Scheduler] Scheduled campaigns cron registered — runs every 5 minutes");
   console.log("[Scheduler] Vendor document expiry alerts cron registered — runs daily at 08:00");

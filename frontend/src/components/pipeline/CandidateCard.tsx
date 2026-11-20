@@ -108,6 +108,25 @@ export default function CandidateCard({
                 </Badge>
               </span>
             )}
+            {typeof application.ai_shortlist?.score === "number" && (
+              <span
+                className={`flex-shrink-0 rounded-full px-1.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+                  application.ai_shortlist.score >= 75
+                    ? "bg-success-50 text-success-700 ring-emerald-100"
+                    : application.ai_shortlist.score >= 50
+                      ? "bg-warning-50 text-warning-700 ring-brand-100"
+                      : "bg-surface-sunken text-ink-soft ring-line"
+                }`}
+                title={`AI shortlist score ${Math.round(application.ai_shortlist.score)}/100${
+                  application.ai_shortlist.decision === "review" || application.ai_shortlist.decision === "not_a_fit"
+                    ? " · needs review"
+                    : ""
+                }`}
+                aria-label={`AI shortlist score ${Math.round(application.ai_shortlist.score)} out of 100`}
+              >
+                AI {Math.round(application.ai_shortlist.score)}
+              </span>
+            )}
           </div>
 
           {/* Title */}

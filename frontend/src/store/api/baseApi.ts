@@ -118,6 +118,9 @@ export const baseApi = createApi({
     "SavedSearches",
     "VendorDocuments",
     "Client",
+    "Autopilot",
+    "AgentActivity",
+    "AgentInsights",
   ],
   endpoints: () => ({}),
 });

@@ -156,19 +156,24 @@ export const postScreeningMessage = async (req: Request, res: Response) => {
       await pool.query(`UPDATE screening_sessions SET status = 'expired' WHERE id = $1`, [id]);
       return res.status(410).json({ message: "This screening link has expired" });
     }
-    // Atomically claim a message slot before any Gemini call to prevent concurrent
+    // Atomically claim a message slot before any model call to prevent concurrent
     // requests from both passing the limit check and double-sending.
+    // New sessions start as 'pending' (schema default); the first message activates
+    // them. Previously only 'active' was accepted, so the first message of every
+    // session was rejected and the session was closed as "message limit reached".
     const claimed = await pool.query(
       `UPDATE screening_sessions
-       SET message_count = message_count + 1
-       WHERE id = $1 AND message_count < $2 AND status = 'active'
+       SET message_count = message_count + 1, status = 'active'
+       WHERE id = $1 AND message_count < $2 AND status IN ('pending','active')
        RETURNING message_count`,
       [id, MAX_MESSAGES],
     );
     if (claimed.rows.length === 0) {
+      // Only close the session when the limit was genuinely reached.
       await pool.query(
-        `UPDATE screening_sessions SET status = 'completed', completed_at = COALESCE(completed_at, now()) WHERE id = $1 AND status != 'completed'`,
-        [id],
+        `UPDATE screening_sessions SET status = 'completed', completed_at = COALESCE(completed_at, now())
+          WHERE id = $1 AND status = 'active' AND message_count >= $2`,
+        [id, MAX_MESSAGES],
       );
       return res.status(410).json({ message: "This screening session has reached its message limit" });
     }
