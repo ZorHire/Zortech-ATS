@@ -1,6 +1,7 @@
 import { Response } from "express";
 import pool from "../../db";
 import { AuthRequest } from "../../middleware/auth";
+import { deleteResumeFromR2 } from "../../services/resumeStorage";
 
 export const updateGdprConsent = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
@@ -46,8 +47,16 @@ export const anonymizeCandidate = async (req: AuthRequest, res: Response) => {
   const tenantId = req.user?.tenant_id;
   const { id } = req.params;
   try {
-    const exists = await pool.query('SELECT id FROM candidates WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
+    const exists = await pool.query('SELECT id, resume_url FROM candidates WHERE id=$1 AND tenant_id=$2', [id, tenantId]);
     if (!exists.rows[0]) return res.status(404).json({ message: 'Candidate not found' });
+
+    // Right-to-forget must remove the stored resume file, not just the link to it.
+    try {
+      await deleteResumeFromR2(exists.rows[0].resume_url);
+    } catch (fileErr) {
+      console.error('anonymizeCandidate: failed to delete resume from R2:', (fileErr as Error).message);
+      return res.status(502).json({ message: 'Could not delete the stored resume file. Please retry.' });
+    }
 
     // Anonymize PII fields
     await pool.query(
