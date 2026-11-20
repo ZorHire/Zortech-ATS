@@ -5,8 +5,13 @@ import {
   Video, PhoneCall, Users, Link, CheckCircle2, XCircle, AlertCircle,
 } from 'lucide-react';
 import { Candidate } from '../../types';
-import api from '../../lib/api';
+import api, { ApiError } from '../../lib/api';
 import ComposeEmailModal from './ComposeEmailModal';
+import { useNotify } from '../../hooks/useNotify';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { baseApi } from '../../store/api/baseApi';
+import { formatINR, getErrorMessage } from '../../lib/format';
 
 const RESUME_API = import.meta.env.VITE_API_URL || '/v1';
 
@@ -90,8 +95,13 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   // Compose email modal
   const [showCompose, setShowCompose] = React.useState(false);
 
-  // Shared message state
-  const [emailMsg, setEmailMsg] = React.useState("");
+  const notify = useNotify();
+  const dispatch = useAppDispatch();
+
+  // Raw api.* calls bypass RTK Query — invalidate cached lists so Pipeline/Dashboard/Candidates refresh.
+  const invalidateCaches = () => {
+    dispatch(baseApi.util.invalidateTags(["Pipeline", "Dashboard", "Candidates", { type: "Candidate", id: candidate.id }]));
+  };
 
   // Schedule interview state
   const [showScheduler, setShowScheduler] = React.useState(false);
@@ -108,6 +118,11 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
   const [interviews, setInterviews] = React.useState<any[]>([]);
   const [activityLoading, setActivityLoading] = React.useState(false);
   const [updatingInterview, setUpdatingInterview] = React.useState<string | null>(null);
+  const [activityError, setActivityError] = React.useState<string | null>(null);
+  const [appError, setAppError] = React.useState<string | null>(null);
+
+  // Esc closes the modal (unless the compose window on top handles it)
+  useEscapeKey(onClose, !showCompose);
 
   React.useEffect(() => {
     fetchApplications();
@@ -121,12 +136,17 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
   const fetchApplications = async () => {
     setAppLoading(true);
+    setAppError(null);
     try {
       const data = await api.get(`/pipeline/candidates/${candidate.id}/applications`);
-      setApplications(data);
-      if (data.length > 0) setSelectedApp(data[0]);
-    } catch {
-      // candidate may not be in any pipeline yet
+      const list = Array.isArray(data) ? data : [];
+      setApplications(list);
+      if (list.length > 0) setSelectedApp(list[0]);
+    } catch (err) {
+      // 404 means the candidate is not in any pipeline yet; anything else is a real failure
+      if (!(err instanceof ApiError && err.status === 404)) {
+        setAppError(getErrorMessage(err, "Could not load applications"));
+      }
     } finally {
       setAppLoading(false);
     }
@@ -134,6 +154,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
   const fetchActivity = async (appId: string) => {
     setActivityLoading(true);
+    setActivityError(null);
     try {
       const [history, ivs] = await Promise.all([
         api.get(`/pipeline/applications/${appId}/history`),
@@ -141,8 +162,8 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       ]);
       setPipelineHistory(Array.isArray(history) ? history : []);
       setInterviews(Array.isArray(ivs) ? ivs : []);
-    } catch {
-      // silent — keep whatever was loaded before
+    } catch (err) {
+      setActivityError(getErrorMessage(err, "Could not load activity"));
     } finally {
       setActivityLoading(false);
     }
@@ -167,11 +188,10 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       const updated = await api.patch(`/pipeline/applications/${selectedApp.id}/stage`, { to_stage: nextStage });
       setSelectedApp({ ...selectedApp, stage: updated.stage });
       setApplications(prev => prev.map(a => a.id === updated.id ? { ...a, stage: updated.stage } : a));
-      setEmailMsg(`Moved to ${STAGE_LABELS[updated.stage]}`);
-      setTimeout(() => setEmailMsg(""), 3000);
-    } catch (err: any) {
-      setEmailMsg(err?.message || "Failed to move stage");
-      setTimeout(() => setEmailMsg(""), 4000);
+      invalidateCaches();
+      notify.success(`Moved to ${STAGE_LABELS[updated.stage] || updated.stage}`);
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to move stage"));
     } finally {
       setStageSaving(false);
     }
@@ -180,12 +200,14 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
   const handleScheduleInterview = async () => {
     if (!interviewDate || !interviewTime) {
-      setEmailMsg("Please select date and time.");
-      setTimeout(() => setEmailMsg(""), 3000);
+      notify.warning("Please select date and time.");
+      return;
+    }
+    if (!candidate.email) {
+      notify.error("This candidate has no email address.");
       return;
     }
     setScheduleSending(true);
-    setEmailMsg("");
     try {
       const jobTitle = selectedApp?.job?.title || candidate.current_title || "the position";
       const scheduledAt = new Date(`${interviewDate}T${interviewTime}`);
@@ -205,7 +227,8 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
         body,
       });
 
-      // Persist interview record (non-blocking failure)
+      // Persist interview record — the email has already gone out, so report a save failure separately
+      let saveError: string | null = null;
       if (selectedApp) {
         try {
           const dbType = interviewType === "in_person" ? "face_to_face" : interviewType;
@@ -218,22 +241,28 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
             meeting_link: meetingLink || null,
           });
           setInterviews(prev => [created, ...prev]);
-        } catch {
-          // email sent successfully, just couldn't persist record
+          dispatch(baseApi.util.invalidateTags(["Interviews", "Dashboard"]));
+        } catch (err) {
+          saveError = getErrorMessage(err, "unknown error");
         }
       }
 
-      setEmailMsg("Interview invite sent!");
+      if (saveError) {
+        notify.warning(`Invite email sent, but the interview could not be saved (${saveError}). Please add it manually.`);
+      } else if (!selectedApp) {
+        notify.success("Invite email sent. Not saved as an interview because the candidate is not in any pipeline.");
+      } else {
+        notify.success("Interview invite sent and saved.");
+      }
       setShowScheduler(false);
       setInterviewDate("");
       setInterviewTime("");
       setInterviewerName("");
       setMeetingLink("");
-    } catch (err: any) {
-      setEmailMsg(err?.message || "Failed to send interview invite");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to send interview invite. Nothing was saved."));
     } finally {
       setScheduleSending(false);
-      setTimeout(() => setEmailMsg(""), 4000);
     }
   };
 
@@ -242,8 +271,9 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
     try {
       const updated = await api.patch(`/interviews/${interviewId}`, { status });
       setInterviews(prev => prev.map(iv => iv.id === interviewId ? { ...iv, ...updated } : iv));
-    } catch {
-      // silent
+      dispatch(baseApi.util.invalidateTags(["Interviews", "Dashboard"]));
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Could not update interview status"));
     } finally {
       setUpdatingInterview(null);
     }
@@ -300,8 +330,10 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
       const updated = await api.patch(`/candidates/${localCandidate.id}`, form);
       setLocalCandidate(updated);
       onUpdate(updated);
-    } catch (err: any) {
-      alert(err?.message || 'Failed to upload resume');
+      dispatch(baseApi.util.invalidateTags(["Candidates", { type: "Candidate", id: localCandidate.id }]));
+      notify.success('Resume uploaded');
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Failed to upload resume'));
     } finally {
       setResumeUploading(false);
     }
@@ -309,7 +341,10 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="p-6 border-b border-gray-100 flex items-start justify-between bg-gradient-to-r from-white to-blue-50/30">
@@ -324,16 +359,17 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   {candidate.source}
                 </span>
               </div>
-              <p className="text-gray-500 font-medium mt-1">
-                {candidate.current_title} at <span className="text-gray-900">{candidate.current_company}</span>
-              </p>
+              {(candidate.current_title || candidate.current_company) && (
+                <p className="text-gray-500 font-medium mt-1">
+                  {candidate.current_title}
+                  {candidate.current_title && candidate.current_company && " at "}
+                  {candidate.current_company && <span className="text-gray-900">{candidate.current_company}</span>}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => onDelete(candidate.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all" title="Delete">
-              <Trash2 size={20} />
-            </button>
-            <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+            <button onClick={onClose} aria-label="Close" className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
               <X size={24} />
             </button>
           </div>
@@ -387,14 +423,16 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                       <MapPin size={18} className="text-red-500" />
                       <div>
                         <p className="text-[10px] text-gray-400 font-bold uppercase">Location</p>
-                        <p className="text-sm text-gray-700 font-medium">{candidate.current_location}</p>
+                        <p className="text-sm text-gray-700 font-medium">{candidate.current_location || 'Not provided'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                       <Clock size={18} className="text-amber-500" />
                       <div>
                         <p className="text-[10px] text-gray-400 font-bold uppercase">Notice Period</p>
-                        <p className="text-sm text-gray-700 font-medium">{candidate.notice_period_days} Days</p>
+                        <p className="text-sm text-gray-700 font-medium">
+                          {candidate.notice_period_days != null ? `${candidate.notice_period_days} Days` : 'Not provided'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -406,7 +444,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   <div className="pt-4">
                     <h4 className="text-[10px] text-gray-400 font-bold uppercase mb-3">Core Skills</h4>
                     <div className="flex flex-wrap gap-2">
-                      {candidate.skills.map(skill => (
+                      {(candidate.skills ?? []).map(skill => (
                         <span key={skill} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100">{skill}</span>
                       ))}
                     </div>
@@ -435,6 +473,11 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   {appLoading ? (
                     <div className="flex items-center justify-center py-4">
                       <Loader2 size={18} className="animate-spin text-blue-500" />
+                    </div>
+                  ) : appError ? (
+                    <div className="p-4 bg-red-50 rounded-2xl text-center space-y-2">
+                      <p className="text-xs text-red-600 font-medium">{appError}</p>
+                      <button onClick={fetchApplications} className="text-xs text-blue-600 font-bold hover:underline">Retry</button>
                     </div>
                   ) : selectedApp ? (
                     <>
@@ -477,7 +520,7 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   </button>
 
                   <button
-                    onClick={() => { setShowScheduler(!showScheduler); setEmailMsg(""); }}
+                    onClick={() => setShowScheduler(!showScheduler)}
                     className="w-full py-3 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
                   >
                     <Calendar size={16} />
@@ -545,20 +588,11 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                         className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                       >
                         {scheduleSending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-                        Send Invite & Save
+                        {scheduleSending ? 'Sending…' : 'Send Invite & Save'}
                       </button>
                     </div>
                   )}
 
-                  {emailMsg && (
-                    <p className={`text-xs font-medium text-center px-3 py-2 rounded-xl ${
-                      emailMsg.includes("sent") || emailMsg.includes("Moved")
-                        ? "bg-emerald-50 text-emerald-700"
-                        : "bg-red-50 text-red-600"
-                    }`}>
-                      {emailMsg}
-                    </p>
-                  )}
                 </div>
 
                 <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
@@ -566,14 +600,21 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-500">Current CTC</span>
-                      <span className="text-sm font-bold text-gray-900">₹{candidate.current_ctc ? (candidate.current_ctc / 100000).toFixed(1) + 'L' : 'N/A'}</span>
+                      <span className="text-sm font-bold text-gray-900">{formatINR(candidate.current_ctc, 'N/A')}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-500">Expected CTC</span>
-                      <span className="text-sm font-bold text-gray-900">₹{candidate.expected_ctc ? (candidate.expected_ctc / 100000).toFixed(1) + 'L' : 'N/A'}</span>
+                      <span className="text-sm font-bold text-gray-900">{formatINR(candidate.expected_ctc, 'N/A')}</span>
                     </div>
                   </div>
                 </div>
+
+                <button
+                  onClick={() => onDelete(candidate.id)}
+                  className="w-full py-2 text-xs font-semibold text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={14} /> Delete candidate
+                </button>
               </div>
             </div>
           )}
@@ -676,6 +717,13 @@ const CandidateModal: React.FC<CandidateModalProps> = ({ candidate, onClose, onD
               {activityLoading ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 size={24} className="animate-spin text-blue-500" />
+                </div>
+              ) : activityError ? (
+                <div className="bg-white rounded-2xl border border-red-100 p-10 text-center space-y-2">
+                  <p className="text-sm text-red-600">{activityError}</p>
+                  {selectedApp && (
+                    <button onClick={() => fetchActivity(selectedApp.id)} className="text-xs text-blue-600 font-bold hover:underline">Retry</button>
+                  )}
                 </div>
               ) : !selectedApp ? (
                 <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">

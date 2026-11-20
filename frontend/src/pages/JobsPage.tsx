@@ -25,6 +25,20 @@ import ClientDetailModal from "../components/clients/ClientDetailModal";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import BulkJdUploadModal from "../components/bulk/BulkJdUploadModal";
 import { useGetPendingApprovalsQuery } from "../store/api/jdLifecycleApi";
+import { useNotify } from "../hooks/useNotify";
+import { useEscapeKey } from "../hooks/useEscapeKey";
+import { getErrorMessage } from "../lib/format";
+
+/** Statuses that end hiring on a job — changing to these needs confirmation. */
+const CLOSING_STATUSES = new Set(["closed_filled", "closed_cancelled"]);
+
+/** Returns an inline validation message for the experience range, or null when valid. */
+function experienceRangeError(min: number | "", max: number | ""): string | null {
+  if (min === "" || max === "") return "Enter both minimum and maximum experience.";
+  if (min < 0 || max < 0) return "Experience cannot be negative.";
+  if (min > max) return "Minimum experience cannot be greater than maximum.";
+  return null;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -96,11 +110,11 @@ function StatusSelect({ job, onStatusChange, readOnly }: { job: Job; onStatusCha
   );
 }
 
-function RowMenu({ onView, onDelete }: { onView: () => void; onDelete: () => void }) {
+function RowMenu({ viewTo, onDelete }: { viewTo: string; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative flex items-center justify-end gap-1">
-      <Link to="#" onClick={onView} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+      <Link to={viewTo} title="View job" className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
         <Eye size={14} />
       </Link>
       <div className="relative">
@@ -176,14 +190,15 @@ export default function JobsPage() {
 
   const isApprover = profile?.role === "super_admin" || profile?.role === "accounts_manager";
 
-  const { data: jobs = [], isLoading } = useGetJobsQuery();
+  const { data: jobs = [], isLoading, refetch: refetchJobs } = useGetJobsQuery();
   const { data: clients = [], refetch: refetchClients } = useGetClientsQuery();
   const { data: pendingApprovals = [] } = useGetPendingApprovalsQuery(undefined, { skip: !isApprover });
-  const [createJob] = useCreateJobMutation();
+  const [createJob, { isLoading: creatingJob }] = useCreateJobMutation();
   const [updateJob] = useUpdateJobMutation();
   const [deleteJob] = useDeleteJobMutation();
   const [parseJd] = useParseJdMutation();
   const [deleteClient] = useDeleteClientMutation();
+  const notify = useNotify();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -200,7 +215,7 @@ export default function JobsPage() {
   const [formData, setFormData] = useState({
     title: "", client_id: "", department: "", location: "",
     work_mode: "onsite" as string, employment_type: "full_time",
-    experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0,
+    experience_min: 0 as number | "", experience_max: 5 as number | "", salary_min: 0, salary_max: 0,
     headcount: 1, priority: "medium" as const, description: "", mandatory_skills: "",
     preferred_skills: "",
   });
@@ -209,6 +224,11 @@ export default function JobsPage() {
   const [jobParsing, setJobParsing] = useState(false);
   const [jobParseMessage, setJobParseMessage] = useState("");
   const [jobParseError, setJobParseError] = useState("");
+
+  const expError = experienceRangeError(formData.experience_min, formData.experience_max);
+  const closeAddModal = () => { setIsAddModalOpen(false); setJobFile(null); };
+  // Esc closes the JD form (not while saving). No backdrop-close: it would discard typed input.
+  useEscapeKey(closeAddModal, isAddModalOpen && !creatingJob);
 
   const parseJDFile = async (file: File) => {
     setJobParsing(true); setJobParseMessage(""); setJobParseError("");
@@ -241,9 +261,13 @@ export default function JobsPage() {
 
   const handleAddJD = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (creatingJob) return;
+    if (expError) { notify.warning(expError); return; }
     try {
       const payload = {
         ...formData,
+        experience_min: Number(formData.experience_min),
+        experience_max: Number(formData.experience_max),
         mandatory_skills: formData.mandatory_skills.split(",").map((s) => s.trim()).filter(Boolean),
         preferred_skills: formData.preferred_skills.split(",").map((s) => s.trim()).filter(Boolean),
       };
@@ -252,24 +276,44 @@ export default function JobsPage() {
       setFormData({ title: "", client_id: "", department: "", location: "", work_mode: "onsite", employment_type: "full_time", experience_min: 0, experience_max: 5, salary_min: 0, salary_max: 0, headcount: 1, priority: "medium", description: "", mandatory_skills: "", preferred_skills: "" });
       setJobLowConfidenceFields([]);
       setJobFile(null);
-    } catch { alert("Failed to add job description"); }
+      notify.success("Job created");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to add job description"));
+    }
   };
 
   const handleDeleteJob = async (id: string) => {
     if (!window.confirm("Delete this job opening? This cannot be undone.")) return;
-    try { await deleteJob(id).unwrap(); }
-    catch { alert("Failed to delete job"); }
+    try {
+      await deleteJob(id).unwrap();
+      notify.success("Job deleted");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to delete job"));
+    }
   };
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    try { await updateJob({ id, body: { status: newStatus } }).unwrap(); }
-    catch { alert("Failed to update status"); }
+    if (CLOSING_STATUSES.has(newStatus)) {
+      const job = jobs.find((j) => j.id === id);
+      const label = STATUS_OPTIONS.find((o) => o.value === newStatus)?.label ?? newStatus;
+      if (!window.confirm(`Change "${job?.title ?? "this job"}" to ${label}? This stops hiring on the job.`)) return;
+    }
+    try {
+      await updateJob({ id, body: { status: newStatus } }).unwrap();
+      notify.success("Job status updated");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to update status"));
+    }
   };
 
   const handleDeleteClient = async (id: string) => {
     if (!window.confirm("Delete this client? This cannot be undone.")) return;
-    try { await deleteClient(id).unwrap(); }
-    catch { alert("Failed to delete client"); }
+    try {
+      await deleteClient(id).unwrap();
+      notify.success("Client deleted");
+    } catch (err) {
+      notify.error(getErrorMessage(err, "Failed to delete client"));
+    }
   };
 
   const filtered = jobs.filter((job) => {
@@ -304,8 +348,10 @@ export default function JobsPage() {
         subtitle={canManage ? `${counts.active} active · ${counts.total_candidates} total candidates` : `${jobs.length} job${jobs.length !== 1 ? "s" : ""}`}
         actions={canManage ? (
           <div className="flex gap-2">
-            <button onClick={() => jobs.length > 0 && setIsPipelineSelectorOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all">
+            <button onClick={() => setIsPipelineSelectorOpen(true)}
+              disabled={jobs.length === 0}
+              title={jobs.length === 0 ? "Create a job first to open its pipeline" : undefined}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
               <TrendingUp size={15} /> Pipeline
             </button>
             <button onClick={() => setIsClientInfoOpen(true)}
@@ -476,7 +522,7 @@ export default function JobsPage() {
                             </td>
                             <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                               {canManage ? (
-                                <RowMenu onView={() => {}} onDelete={() => handleDeleteJob(job.id)} />
+                                <RowMenu viewTo={`/jobs/${job.id}`} onDelete={() => handleDeleteJob(job.id)} />
                               ) : (
                                 <Link to={`/jobs/${job.id}`} className="text-xs text-blue-600 hover:underline">View</Link>
                               )}
@@ -548,7 +594,7 @@ export default function JobsPage() {
       {isBulkJdUploadOpen && (
         <BulkJdUploadModal
           onClose={() => setIsBulkJdUploadOpen(false)}
-          onSuccess={() => {}}
+          onSuccess={() => refetchJobs()}
         />
       )}
 
@@ -557,7 +603,7 @@ export default function JobsPage() {
           <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-8 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
               <h2 className="text-xl font-black text-[#111111] tracking-tight">Create New Job Description</h2>
-              <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-[#111111]">
+              <button onClick={closeAddModal} aria-label="Close" className="p-2 hover:bg-white rounded-xl text-gray-400 hover:text-[#111111]">
                 <X size={20} />
               </button>
             </div>
@@ -605,12 +651,15 @@ export default function JobsPage() {
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Experience (Min–Max yrs)</label>
                   <div className="flex items-center gap-2">
-                    <input type="number" value={formData.experience_min} onChange={(e) => setFormData({ ...formData, experience_min: parseInt(e.target.value) })}
+                    <input type="number" min={0} value={formData.experience_min} onChange={(e) => setFormData({ ...formData, experience_min: e.target.value === "" ? "" : Number(e.target.value) })}
+                      aria-invalid={!!expError}
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     <span className="text-gray-400">—</span>
-                    <input type="number" value={formData.experience_max} onChange={(e) => setFormData({ ...formData, experience_max: parseInt(e.target.value) })}
+                    <input type="number" min={0} value={formData.experience_max} onChange={(e) => setFormData({ ...formData, experience_max: e.target.value === "" ? "" : Number(e.target.value) })}
+                      aria-invalid={!!expError}
                       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
+                  {expError && <p className="text-xs text-red-600 ml-1">{expError}</p>}
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">Priority</label>
@@ -651,12 +700,13 @@ export default function JobsPage() {
                 </div>
               </div>
               <div className="flex gap-4 mt-8">
-                <button type="button" onClick={() => { setIsAddModalOpen(false); setJobFile(null); }}
-                  className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100">
+                <button type="button" onClick={closeAddModal} disabled={creatingJob}
+                  className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 disabled:opacity-50">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:opacity-90 shadow-xl shadow-gray-200">
-                  Post Job
+                <button type="submit" disabled={creatingJob || jobParsing || !!expError}
+                  className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:opacity-90 shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {creatingJob ? "Saving…" : "Post Job"}
                 </button>
               </div>
             </form>

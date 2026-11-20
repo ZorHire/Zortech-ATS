@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search,
   MapPin,
-  Building2,
   Clock,
   Star,
   BookmarkPlus,
@@ -11,27 +10,26 @@ import {
   RefreshCw,
   Loader2,
   X,
-  ArrowLeft,
-  CheckCircle2,
   Download,
-  SlidersHorizontal,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  MoreHorizontal,
   Users,
   Tag,
 } from "lucide-react";
 import Header from "../components/layout/Header";
-import { useLazySearchCandidatesQuery } from "../store/api/candidateApi";
-import { useGetJobsQuery } from "../store/api/jobApi";
-import { useAddApplicationToJobMutation } from "../store/api/pipelineApi";
-import type { SearchFilters } from "../store/api/candidateApi";
-import { Candidate, Job, PipelineStage } from "../types";
+import { useLazySearchCandidatesQuery, buildSearchQueryString } from "../store/api/candidateApi";
+import type { SearchParams, SearchSort } from "../store/api/candidateApi";
+import { Candidate } from "../types";
 import { useSendEmail } from "../hooks/useSendEmail";
+import { useNotify } from "../hooks/useNotify";
+import { useAppSelector } from "../hooks/useAppSelector";
 import EmailToast from "../components/ui/EmailToast";
+import AddToPipelineModal from "../components/resume-search/AddToPipelineModal";
+import BulkEmailModal from "../components/resume-search/BulkEmailModal";
 
 // ─── constants ───────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 20;
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/v1";
 
 const SOURCE_BADGE: Record<string, string> = {
   linkedin: "bg-blue-50 text-blue-700",
@@ -44,30 +42,20 @@ const SOURCE_BADGE: Record<string, string> = {
   monster: "bg-purple-50 text-purple-700",
 };
 
+// Option labels must match the keys handled by the backend search filters.
 const LOCATION_OPTIONS = ["All", "Bangalore", "Mumbai", "Hyderabad", "Delhi", "Pune", "Chennai", "Noida", "Gurugram"];
 const EXPERIENCE_OPTIONS = ["All", "0-2 Years", "2-4 Years", "4-8 Years", "8-12 Years", "12+ Years"];
 const NOTICE_OPTIONS = ["Any", "Immediate", "< 15 days", "< 30 days", "30-60 days", "60+ days"];
 const SOURCE_OPTIONS = ["All", "LinkedIn", "Naukri", "Indeed", "Monster", "Referral", "Direct", "Vendor"];
-const AVAILABILITY_OPTIONS = ["All", "Available", "Open to Offers", "Not Looking"];
 const ROLE_OPTIONS = [
-  "", "Platform Engineer", "DevOps Engineer", "Software Engineer", "Data Scientist",
+  "Platform Engineer", "DevOps Engineer", "Software Engineer", "Data Scientist",
   "Product Manager", "Full Stack Developer", "Frontend Developer", "Backend Developer",
   "Cloud Architect", "QA Engineer", "ML Engineer", "Security Engineer",
 ];
-
-const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = [
-  { key: "new", label: "New" },
-  { key: "sourced", label: "Sourced" },
-  { key: "screened", label: "Screened" },
-  { key: "shortlisted", label: "Shortlisted" },
-  { key: "submitted_to_client", label: "Submitted to Client" },
-  { key: "client_interview_scheduled", label: "Interview Scheduled" },
-  { key: "interview_completed", label: "Interview Completed" },
-  { key: "selected", label: "Selected" },
-  { key: "offer_extended", label: "Offer Extended" },
-  { key: "offer_accepted", label: "Offer Accepted" },
-  { key: "joined", label: "Joined" },
-  { key: "disqualified", label: "Disqualified" },
+const SORT_OPTIONS: { value: SearchSort; label: string }[] = [
+  { value: "relevance", label: "Sort by: Relevance" },
+  { value: "recent", label: "Sort by: Last Updated" },
+  { value: "experience", label: "Sort by: Experience" },
 ];
 
 function matchColor(score: number) {
@@ -91,165 +79,9 @@ function avatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
 }
 
-// ─── Add to Pipeline wizard ──────────────────────────────────────────────────
-
-function AddToPipelineWizard({ candidates, onClose }: { candidates: Candidate[]; onClose: () => void }) {
-  const [step, setStep] = useState<"job" | "stage">("job");
-  const [jobSearch, setJobSearch] = useState("");
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [selectedStage, setSelectedStage] = useState<PipelineStage>("new");
-  const [done, setDone] = useState(false);
-  const [error, setError] = useState("");
-
-  const { data: jobs = [], isLoading: fetching } = useGetJobsQuery();
-  const [addApplicationToJob, { isLoading: loading }] = useAddApplicationToJobMutation();
-
-  const filteredJobs = jobs.filter((j) => {
-    const q = jobSearch.toLowerCase();
-    return !q || j.title.toLowerCase().includes(q) || (j.client?.name ?? "").toLowerCase().includes(q);
-  });
-
-  const handleAdd = async () => {
-    if (!selectedJob) return;
-    setError("");
-    try {
-      await Promise.all(
-        candidates.map((c) =>
-          addApplicationToJob({ jobId: selectedJob.id, candidateId: c.id, stage: selectedStage }).unwrap()
-        )
-      );
-      setDone(true);
-    } catch (err: any) {
-      setError(err.message || "Failed to add to pipeline");
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            {step === "stage" && (
-              <button onClick={() => setStep("job")} className="text-gray-400 hover:text-gray-600">
-                <ArrowLeft size={18} />
-              </button>
-            )}
-            <div>
-              <h3 className="font-semibold text-gray-900">
-                {step === "job" ? "Select a Job" : "Select Pipeline Stage"}
-              </h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {step === "job"
-                  ? "Choose which job to add candidates to"
-                  : `Adding ${candidates.length} candidate${candidates.length > 1 ? "s" : ""} to ${selectedJob?.title}`}
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {done ? (
-            <div className="flex flex-col items-center py-10 gap-3">
-              <CheckCircle2 size={44} className="text-emerald-500" />
-              <p className="font-semibold text-gray-900">Added to pipeline!</p>
-              <p className="text-sm text-gray-500 text-center">
-                {candidates.length > 1 ? `${candidates.length} candidates` : `${candidates[0].first_name} ${candidates[0].last_name}`}
-                {" "}added to{" "}
-                <span className="font-medium text-gray-700">{selectedJob?.title}</span>
-                {" — "}
-                <span className="font-medium text-gray-700">
-                  {PIPELINE_STAGES.find((s) => s.key === selectedStage)?.label}
-                </span>
-              </p>
-              <button onClick={onClose} className="mt-2 text-sm px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Done</button>
-            </div>
-          ) : step === "job" ? (
-            <>
-              <div className="relative mb-4">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  value={jobSearch}
-                  onChange={(e) => setJobSearch(e.target.value)}
-                  placeholder="Search jobs…"
-                  className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              {fetching ? (
-                <div className="flex justify-center py-8"><Loader2 size={22} className="animate-spin text-gray-300" /></div>
-              ) : filteredJobs.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-8">No jobs found</p>
-              ) : (
-                <div className="space-y-2">
-                  {filteredJobs.map((job) => (
-                    <button
-                      key={job.id}
-                      onClick={() => setSelectedJob(job)}
-                      className={`w-full text-left rounded-xl border px-4 py-3 transition-all ${selectedJob?.id === job.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-400" : "border-gray-200 hover:border-blue-200 hover:bg-gray-50"}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${job.status === "active" ? "bg-emerald-400" : "bg-gray-300"}`} />
-                        <span className="font-medium text-sm text-gray-900 truncate">{job.title}</span>
-                      </div>
-                      {job.client?.name && (
-                        <p className="text-xs text-gray-500 mt-1 ml-4">
-                          <Building2 size={10} className="inline mr-1" />{job.client.name}
-                        </p>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="space-y-2">
-              {PIPELINE_STAGES.map((s) => (
-                <button
-                  key={s.key}
-                  onClick={() => setSelectedStage(s.key)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all text-sm ${selectedStage === s.key ? "border-blue-500 bg-blue-50 ring-1 ring-blue-400" : "border-gray-200 hover:border-blue-200"}`}
-                >
-                  <span className="font-medium text-gray-800">{s.label}</span>
-                  {selectedStage === s.key && <CheckCircle2 size={15} className="text-blue-500" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {!done && (
-          <div className="px-6 py-4 border-t border-gray-100">
-            {error && <p className="text-xs text-red-500 mb-3 text-center">{error}</p>}
-            {step === "job" ? (
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400">{filteredJobs.length} jobs</p>
-                <button
-                  onClick={() => setStep("stage")}
-                  disabled={!selectedJob}
-                  className="flex items-center gap-2 text-sm px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium"
-                >
-                  Next <ArrowLeft size={14} className="rotate-180" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-3 justify-end">
-                <button onClick={() => setStep("job")} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Back</button>
-                <button
-                  onClick={handleAdd}
-                  disabled={loading}
-                  className="flex items-center gap-2 text-sm px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
-                >
-                  {loading && <Loader2 size={13} className="animate-spin" />}
-                  Add {candidates.length > 1 ? `${candidates.length} Candidates` : "Candidate"}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function errorMessage(err: unknown, fallback: string): string {
+  const e = err as { data?: { message?: string }; error?: string; message?: string } | undefined;
+  return e?.data?.message ?? e?.error ?? e?.message ?? fallback;
 }
 
 // ─── Top Match Card ───────────────────────────────────────────────────────────
@@ -456,9 +288,6 @@ function CandidateRow({
           >
             <BookmarkPlus size={14} />
           </button>
-          <button title="More" className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-            <MoreHorizontal size={14} />
-          </button>
         </div>
       </td>
     </tr>
@@ -543,172 +372,222 @@ function SkillsTagInput({
   );
 }
 
-// ─── Extended filter type ─────────────────────────────────────────────────────
+// ─── Filter form state ────────────────────────────────────────────────────────
 
-interface ExtendedFilters extends SearchFilters {
+interface FilterForm {
+  location: string;
+  experience: string;
+  noticePeriod: string;
   skills: string[];
-  currentRole: string;
+  role: string;
   source: string;
-  availability: string;
 }
 
-const DEFAULT_FILTERS: ExtendedFilters = {
+const DEFAULT_FILTERS: FilterForm = {
   location: "All",
   experience: "All",
   noticePeriod: "Any",
   skills: [],
-  currentRole: "",
+  role: "",
   source: "All",
-  availability: "All",
 };
+
+type ActiveSearch = Omit<SearchParams, "page" | "limit">;
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ResumeSearchPage() {
+  // Draft form values (what the user is editing)
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<ExtendedFilters>({ ...DEFAULT_FILTERS });
+  const [filters, setFilters] = useState<FilterForm>({ ...DEFAULT_FILTERS });
+  const [sort, setSort] = useState<SearchSort>("relevance");
+
+  // The search that produced the current results; load-more/export/sort use this
+  const [activeSearch, setActiveSearch] = useState<ActiveSearch | null>(null);
   const [results, setResults] = useState<{ candidate: Candidate; score: number }[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [searched, setSearched] = useState(false);
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [wizardCandidates, setWizardCandidates] = useState<Candidate[] | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [emailCandidates, setEmailCandidates] = useState<Candidate[] | null>(null);
   const { sendEmail, sending: emailSending, emailToast } = useSendEmail();
+  const notify = useNotify();
+  const accessToken = useAppSelector((s) => s.auth.accessToken);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  // Incremented per new search so late responses from an older search are ignored
+  const requestIdRef = useRef(0);
 
-  const [triggerSearch, { isFetching: loading, error: searchError }] = useLazySearchCandidatesQuery();
+  const [triggerSearch] = useLazySearchCandidatesQuery();
 
-  const setFilter = <K extends keyof ExtendedFilters>(key: K, value: ExtendedFilters[K]) =>
+  const setFilter = <K extends keyof FilterForm>(key: K, value: FilterForm[K]) =>
     setFilters((prev) => ({ ...prev, [key]: value }));
 
-  const search = useCallback(async (resetPage = true) => {
-    const targetPage = resetPage ? 1 : page + 1;
-    try {
-      const data = await triggerSearch({
-        query,
-        location: filters.location,
-        experience: filters.experience,
-        noticePeriod: filters.noticePeriod,
-        page: targetPage,
-        limit: 10,
-      }).unwrap();
+  const formToSearch = (q: string): ActiveSearch => ({
+    query: q,
+    location: filters.location,
+    experience: filters.experience,
+    noticePeriod: filters.noticePeriod,
+    skills: filters.skills,
+    role: filters.role,
+    source: filters.source,
+    sort,
+  });
 
-      if (resetPage) {
-        setResults(data.results);
-        setPage(1);
-      } else {
-        setResults((prev) => [...prev, ...data.results]);
-        setPage(data.page);
-      }
+  /** Start a new search (page 1). Shows the skeleton, clears selection. */
+  const runSearch = useCallback(async (params: ActiveSearch) => {
+    const id = ++requestIdRef.current;
+    setActiveSearch(params);
+    setStatus("loading");
+    setSearchError(null);
+    setLoadingMore(false);
+    setLoadMoreError(null);
+    setSelectedIds(new Set());
+    try {
+      const data = await triggerSearch({ ...params, page: 1, limit: PAGE_SIZE }).unwrap();
+      if (id !== requestIdRef.current) return;
+      setResults(data.results);
       setTotal(data.total);
-      setTotalPages(data.totalPages);
-      setSearched(true);
-    } catch {
-      setSearched(true);
-    }
-  }, [query, filters.location, filters.experience, filters.noticePeriod, page, triggerSearch]);
-
-  const loadMore = useCallback(async () => {
-    if (page >= totalPages || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const data = await triggerSearch({
-        query,
-        location: filters.location,
-        experience: filters.experience,
-        noticePeriod: filters.noticePeriod,
-        page: page + 1,
-        limit: 10,
-      }).unwrap();
-      setResults((prev) => [...prev, ...data.results]);
       setPage(data.page);
       setTotalPages(data.totalPages);
-    } catch {
-      // silently fail on load more
-    } finally {
-      setLoadingMore(false);
+      setStatus("ready");
+    } catch (err) {
+      if (id !== requestIdRef.current) return;
+      setResults([]);
+      setTotal(0);
+      setSearchError(errorMessage(err, "Search failed"));
+      setStatus("error");
     }
-  }, [query, filters, page, totalPages, loadingMore, triggerSearch]);
+  }, [triggerSearch]);
 
-  const handleExport = useCallback(() => {
-    const qs = new URLSearchParams();
-    if (filters.location !== "All") qs.set("location", filters.location);
-    if (filters.experience !== "All") qs.set("experience", filters.experience);
-    if (filters.noticePeriod !== "Any") qs.set("noticePeriod", filters.noticePeriod);
-    window.open(`${import.meta.env.VITE_API_URL || '/v1'}/candidates/export?${qs.toString()}`, '_blank');
-  }, [filters]);
+  /** Append the next page without unmounting the table. */
+  const loadMore = useCallback(async () => {
+    if (!activeSearch || status !== "ready" || loadingMore || page >= totalPages) return;
+    const id = requestIdRef.current;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const data = await triggerSearch({ ...activeSearch, page: page + 1, limit: PAGE_SIZE }).unwrap();
+      if (id !== requestIdRef.current) return;
+      setResults((prev) => {
+        const seen = new Set(prev.map((r) => r.candidate.id));
+        return [...prev, ...data.results.filter((r) => !seen.has(r.candidate.id))];
+      });
+      setTotal(data.total);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
+    } catch (err) {
+      if (id !== requestIdRef.current) return;
+      setLoadMoreError(errorMessage(err, "Could not load more results"));
+    } finally {
+      if (id === requestIdRef.current) setLoadingMore(false);
+    }
+  }, [activeSearch, status, loadingMore, page, totalPages, triggerSearch]);
+
+  const handleSearch = () => runSearch(formToSearch(query));
+
+  const handleQuickSearch = (q: string) => {
+    setQuery(q);
+    runSearch(formToSearch(q));
+  };
+
+  const handleSortChange = (value: SearchSort) => {
+    setSort(value);
+    if (activeSearch) runSearch({ ...activeSearch, sort: value });
+  };
+
+  const handleExport = useCallback(async () => {
+    if (!activeSearch || exporting) return;
+    setExporting(true);
+    try {
+      const qs = buildSearchQueryString(activeSearch);
+      const token = accessToken ?? localStorage.getItem("jwt");
+      const res = await fetch(`${API_BASE}/candidates/export?${qs.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message || `Export failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "candidates_export.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      notify.error(errorMessage(err, "Export failed"));
+    } finally {
+      setExporting(false);
+    }
+  }, [activeSearch, exporting, accessToken, notify]);
 
   const handleClearAll = () => {
+    requestIdRef.current++;
     setFilters({ ...DEFAULT_FILTERS });
     setQuery("");
+    setSort("relevance");
+    setActiveSearch(null);
     setResults([]);
-    setSearched(false);
+    setStatus("idle");
+    setSearchError(null);
+    setLoadingMore(false);
+    setLoadMoreError(null);
+    setSelectedIds(new Set());
     setPage(1);
     setTotalPages(1);
     setTotal(0);
   };
 
-  // client-side filtered results (skills + source + availability)
-  const displayResults = results.filter((r) => {
-    const c = r.candidate;
-    if (filters.skills.length > 0) {
-      const cSkills = c.skills.map((s) => s.toLowerCase());
-      const hasAll = filters.skills.every((s) => cSkills.some((cs) => cs.includes(s.toLowerCase())));
-      if (!hasAll) return false;
-    }
-    if (filters.currentRole && c.current_title) {
-      if (!c.current_title.toLowerCase().includes(filters.currentRole.toLowerCase())) return false;
-    }
-    if (filters.source !== "All" && filters.source) {
-      if (c.source.toLowerCase() !== filters.source.toLowerCase()) return false;
-    }
-    return true;
-  });
-
-  const topMatches = displayResults.filter((r) => r.score >= 75).slice(0, 8);
+  const topMatches = results.filter((r) => r.score >= 75).slice(0, 8);
+  const selectedCandidates = results.filter((r) => selectedIds.has(r.candidate.id)).map((r) => r.candidate);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
+  const allSelected = results.length > 0 && results.every((r) => selectedIds.has(r.candidate.id));
   const toggleSelectAll = () => {
-    if (selectedIds.size === displayResults.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(displayResults.map((r) => r.candidate.id)));
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(results.map((r) => r.candidate.id)));
   };
 
-  const handleBulkPipeline = () => {
-    const selected = displayResults.filter((r) => selectedIds.has(r.candidate.id)).map((r) => r.candidate);
-    if (selected.length > 0) setWizardCandidates(selected);
-  };
-
+  // Infinite scroll: auto-load when the sentinel is visible (paused after an error)
+  const canLoadMore = status === "ready" && page < totalPages;
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el) return;
+    if (!el || !canLoadMore || loadMoreError) return;
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting && !loadingMore && page < totalPages) loadMore(); },
+      ([entry]) => { if (entry.isIntersecting) loadMore(); },
       { threshold: 0.1 }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [loadingMore, page, totalPages, loadMore]);
+  }, [canLoadMore, loadMoreError, loadMore]);
 
   const hasActiveFilters =
     filters.location !== "All" ||
     filters.experience !== "All" ||
     filters.noticePeriod !== "Any" ||
     filters.skills.length > 0 ||
-    filters.currentRole !== "" ||
+    filters.role !== "" ||
     filters.source !== "All";
 
-  const error = searchError ? ("message" in searchError ? (searchError as any).message : "Search failed") : null;
+  const loading = status === "loading";
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -716,20 +595,17 @@ export default function ResumeSearchPage() {
         title="Resume Search"
         subtitle="Search across your entire candidate database"
         actions={
-          selectedIds.size > 0 ? (
+          selectedCandidates.length > 0 ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">{selectedIds.size} selected</span>
+              <span className="text-xs text-gray-500">{selectedCandidates.length} selected</span>
               <button
-                onClick={() => Promise.all(
-                  displayResults.filter((r) => selectedIds.has(r.candidate.id))
-                    .map((r) => sendEmail(r.candidate.email, { firstName: r.candidate.first_name }))
-                )}
+                onClick={() => setEmailCandidates(selectedCandidates)}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 font-medium"
               >
                 <Mail size={13} /> Email
               </button>
               <button
-                onClick={handleBulkPipeline}
+                onClick={() => setWizardCandidates(selectedCandidates)}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
               >
                 <BookmarkPlus size={13} /> Add to Pipeline
@@ -757,7 +633,9 @@ export default function ResumeSearchPage() {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && search()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading && (query.trim() || hasActiveFilters)) handleSearch();
+                  }}
                   placeholder="React OR Vue AND TypeScript"
                   className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 />
@@ -778,12 +656,12 @@ export default function ResumeSearchPage() {
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Current Role</label>
               <div className="relative">
                 <select
-                  value={filters.currentRole}
-                  onChange={(e) => setFilter("currentRole", e.target.value)}
+                  value={filters.role}
+                  onChange={(e) => setFilter("role", e.target.value)}
                   className="w-full appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
                 >
-                  <option value="">Select role</option>
-                  {ROLE_OPTIONS.filter(Boolean).map((r) => (
+                  <option value="">Any role</option>
+                  {ROLE_OPTIONS.map((r) => (
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
@@ -801,7 +679,7 @@ export default function ResumeSearchPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">Location</label>
               <SelectDropdown
@@ -827,70 +705,27 @@ export default function ResumeSearchPage() {
                 onChange={(v) => setFilter("source", v)}
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Availability</label>
-              <SelectDropdown
-                value={filters.availability}
-                options={AVAILABILITY_OPTIONS}
-                onChange={(v) => setFilter("availability", v)}
-              />
-            </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center justify-end gap-2 flex-wrap">
             <button
-              onClick={() => setShowAdvanced((v) => !v)}
-              className={`flex items-center gap-2 text-sm px-3 py-2 border rounded-lg font-medium transition-colors ${showAdvanced ? "border-blue-300 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+              onClick={handleClearAll}
+              className="text-sm px-4 py-2 text-gray-500 hover:text-gray-700 font-medium"
             >
-              <SlidersHorizontal size={14} />
-              Advanced Filters
-              {hasActiveFilters && <span className="w-2 h-2 bg-blue-500 rounded-full" />}
+              Clear All
             </button>
-
-            <div className="flex items-center gap-2 ml-auto">
-              <button
-                onClick={handleClearAll}
-                className="text-sm px-4 py-2 text-gray-500 hover:text-gray-700 font-medium"
-              >
-                Clear All
-              </button>
-              <button
-                onClick={() => search()}
-                disabled={loading || (!query.trim() && !hasActiveFilters)}
-                className="flex items-center gap-2 bg-[#2a1f14] text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-[#3d2e1e] transition-colors disabled:opacity-50"
-              >
-                {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-                Search Candidates
-              </button>
-            </div>
+            <button
+              onClick={handleSearch}
+              disabled={loading || (!query.trim() && !hasActiveFilters)}
+              className="flex items-center gap-2 bg-[#2a1f14] text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-[#3d2e1e] transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
+              Search Candidates
+            </button>
           </div>
-
-          {showAdvanced && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Min Experience (yrs)</label>
-                  <input type="number" min={0} max={30} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. 3" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Max CTC (LPA)</label>
-                  <input type="number" min={0} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g. 25" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Work Mode</label>
-                  <select className="w-full appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                    <option value="">Any</option>
-                    <option>Remote</option>
-                    <option>Hybrid</option>
-                    <option>Onsite</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* ── Skeleton ── */}
+        {/* ── Skeleton (first load of a new search only) ── */}
         {loading && (
           <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100">
@@ -905,23 +740,26 @@ export default function ResumeSearchPage() {
         )}
 
         {/* ── Error ── */}
-        {!loading && error && (
+        {status === "error" && (
           <div className="flex flex-col items-center py-12 gap-4">
             <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
               <AlertCircle size={24} className="text-red-500" />
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-gray-900">Search failed</p>
-              <p className="text-xs text-gray-500 mt-1">{error}</p>
+              <p className="text-xs text-gray-500 mt-1">{searchError}</p>
             </div>
-            <button onClick={() => search()} className="flex items-center gap-2 text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <button
+              onClick={() => activeSearch && runSearch(activeSearch)}
+              className="flex items-center gap-2 text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
               <RefreshCw size={14} /> Retry
             </button>
           </div>
         )}
 
         {/* ── Empty pre-search state ── */}
-        {!loading && !searched && !error && (
+        {status === "idle" && (
           <div className="flex flex-col items-center py-16 gap-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center">
               <Search size={28} className="text-blue-500" />
@@ -934,7 +772,7 @@ export default function ResumeSearchPage() {
               {["React TypeScript Node.js", "Python Machine Learning", "Java Spring Boot", "DevOps Kubernetes AWS"].map((q) => (
                 <button
                   key={q}
-                  onClick={() => { setQuery(q); search(); }}
+                  onClick={() => handleQuickSearch(q)}
                   className="text-xs px-3 py-1.5 border border-gray-200 text-gray-600 rounded-full hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors"
                 >
                   {q}
@@ -945,7 +783,7 @@ export default function ResumeSearchPage() {
         )}
 
         {/* ── Results ── */}
-        {!loading && searched && !error && (
+        {status === "ready" && (
           <>
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
@@ -954,26 +792,29 @@ export default function ResumeSearchPage() {
                     <Star size={12} className="text-amber-600 fill-amber-600" />
                   </div>
                   <p className="text-base font-bold text-gray-900">
-                    {total.toLocaleString("en-IN")} Candidates Found
+                    {total.toLocaleString("en-IN")} Candidate{total === 1 ? "" : "s"} Found
                   </p>
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5 ml-8">Showing results for your search</p>
               </div>
               <div className="flex items-center gap-2">
-                <button className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium">
-                  <BookmarkPlus size={13} /> Save Search
-                </button>
                 <button
                   onClick={handleExport}
-                  className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
+                  disabled={exporting || total === 0}
+                  className="flex items-center gap-1.5 text-xs px-3 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium disabled:opacity-50"
                 >
-                  <Download size={13} /> Export CSV
+                  {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} Export CSV
                 </button>
                 <div className="relative">
-                  <select className="appearance-none text-xs pl-2 pr-7 py-2 border border-gray-200 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium">
-                    <option>Sort by: Relevance</option>
-                    <option>Sort by: Experience</option>
-                    <option>Sort by: Last Updated</option>
+                  <select
+                    value={sort}
+                    onChange={(e) => handleSortChange(e.target.value as SearchSort)}
+                    aria-label="Sort results"
+                    className="appearance-none text-xs pl-2 pr-7 py-2 border border-gray-200 rounded-lg text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                  >
+                    {SORT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
                   </select>
                   <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
@@ -982,15 +823,12 @@ export default function ResumeSearchPage() {
 
             {topMatches.length > 0 && (
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
-                      <Star size={14} className="text-amber-500 fill-amber-500" />
-                      Top Matches
-                    </p>
-                    <p className="text-xs text-gray-400">Best matched candidates based on your search criteria</p>
-                  </div>
-                  <button className="text-xs text-blue-600 hover:underline font-medium">View all →</button>
+                <div className="mb-3">
+                  <p className="text-sm font-bold text-gray-900 flex items-center gap-1.5">
+                    <Star size={14} className="text-amber-500 fill-amber-500" />
+                    Top Matches
+                  </p>
+                  <p className="text-xs text-gray-400">Best matched candidates based on your search criteria</p>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-thin">
                   {topMatches.map(({ candidate, score }) => (
@@ -1013,7 +851,7 @@ export default function ResumeSearchPage() {
                 )}
               </div>
 
-              {displayResults.length === 0 ? (
+              {results.length === 0 ? (
                 <div className="flex flex-col items-center py-16 gap-3">
                   <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
                     <Users size={24} className="text-gray-400" />
@@ -1029,9 +867,10 @@ export default function ResumeSearchPage() {
                         <th className="px-4 py-3 w-10">
                           <input
                             type="checkbox"
-                            checked={selectedIds.size === displayResults.length && displayResults.length > 0}
+                            aria-label="Select all loaded candidates"
+                            checked={allSelected}
                             ref={(el) => {
-                              if (el) el.indeterminate = selectedIds.size > 0 && selectedIds.size < displayResults.length;
+                              if (el) el.indeterminate = selectedIds.size > 0 && !allSelected;
                             }}
                             onChange={toggleSelectAll}
                             className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
@@ -1045,7 +884,7 @@ export default function ResumeSearchPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {displayResults.map(({ candidate, score }) => (
+                      {results.map(({ candidate, score }) => (
                         <CandidateRow
                           key={candidate.id}
                           candidate={candidate}
@@ -1055,7 +894,7 @@ export default function ResumeSearchPage() {
                           onAddToPipeline={(c) => setWizardCandidates([c])}
                           onSendEmail={(c) => sendEmail(c.email, { firstName: c.first_name })}
                           emailSending={emailSending}
-                          updatedAt={(candidate as any).updated_at}
+                          updatedAt={(candidate as Candidate & { updated_at?: string }).updated_at}
                         />
                       ))}
                     </tbody>
@@ -1065,44 +904,34 @@ export default function ResumeSearchPage() {
 
               <div ref={sentinelRef} className="h-1" />
               {loadingMore && (
-                <div className="flex justify-center py-4">
-                  <Loader2 size={18} className="animate-spin text-gray-400" />
+                <div className="flex items-center justify-center gap-2 py-4 text-xs text-gray-500">
+                  <Loader2 size={14} className="animate-spin text-gray-400" /> Loading more…
                 </div>
               )}
-              {displayResults.length > 0 && (
+              {loadMoreError && !loadingMore && (
+                <div className="flex items-center justify-center gap-3 py-4 text-xs">
+                  <span className="text-red-600 flex items-center gap-1"><AlertCircle size={13} /> {loadMoreError}</span>
+                  <button
+                    onClick={loadMore}
+                    className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
+                  >
+                    <RefreshCw size={12} /> Retry
+                  </button>
+                </div>
+              )}
+              {results.length > 0 && (
                 <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
                   <p className="text-xs text-gray-500">
-                    Showing 1 to {displayResults.length} of {total.toLocaleString("en-IN")} candidates
+                    Showing {results.length.toLocaleString("en-IN")} of {total.toLocaleString("en-IN")} candidates
                   </p>
-                  <div className="flex items-center gap-1.5">
+                  {canLoadMore && !loadingMore && !loadMoreError && (
                     <button
-                      disabled={page <= 1}
-                      className="p-1.5 border border-gray-200 rounded-lg text-gray-500 disabled:opacity-40 hover:bg-gray-50"
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
-                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map((p) => (
-                      <button
-                        key={p}
-                        className={`w-7 h-7 text-xs font-medium rounded-lg transition-colors ${p === page ? "bg-blue-600 text-white" : "text-gray-500 hover:bg-gray-100"}`}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                    {totalPages > 5 && <span className="text-xs text-gray-400">…</span>}
-                    <button
-                      disabled={page >= totalPages}
                       onClick={loadMore}
-                      className="p-1.5 border border-gray-200 rounded-lg text-gray-500 disabled:opacity-40 hover:bg-gray-50"
+                      className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 font-medium"
                     >
-                      <ChevronRight size={14} />
+                      Load more
                     </button>
-                    <select className="appearance-none text-xs pl-2 pr-6 py-1.5 border border-gray-200 rounded-lg text-gray-500 bg-white ml-1">
-                      <option>10 / page</option>
-                      <option>20 / page</option>
-                      <option>50 / page</option>
-                    </select>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1111,7 +940,10 @@ export default function ResumeSearchPage() {
       </div>
 
       {wizardCandidates && (
-        <AddToPipelineWizard candidates={wizardCandidates} onClose={() => setWizardCandidates(null)} />
+        <AddToPipelineModal candidates={wizardCandidates} onClose={() => setWizardCandidates(null)} />
+      )}
+      {emailCandidates && (
+        <BulkEmailModal candidates={emailCandidates} onClose={() => setEmailCandidates(null)} />
       )}
       {emailToast && <EmailToast {...emailToast} />}
     </div>

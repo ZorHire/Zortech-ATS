@@ -1,12 +1,14 @@
+import { useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Briefcase, MapPin, Clock, Send } from "lucide-react";
+import { GripVertical, Briefcase, MapPin, Clock, Send, Loader2 } from "lucide-react";
 import { JobApplication } from "../../types";
 
 interface CandidateCardProps {
   application: JobApplication;
   isOverlay?: boolean;
-  onScreeningInvite?: (application: JobApplication) => void;
+  /** May return a promise; the button shows a pending state until it settles. */
+  onScreeningInvite?: (application: JobApplication) => void | Promise<unknown>;
 }
 
 export default function CandidateCard({
@@ -16,6 +18,7 @@ export default function CandidateCard({
 }: CandidateCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: application.id });
+  const [sendingInvite, setSendingInvite] = useState(false);
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -125,14 +128,22 @@ export default function CandidateCard({
           {/* Screening invite trigger — dark by default (SCREENING_CHAT_ENABLED gate) */}
           {onScreeningInvite && !isOverlay && (
             <button
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                onScreeningInvite(application);
+                if (sendingInvite) return;
+                if (!window.confirm(`Send a screening invite email to ${fullName}?`)) return;
+                setSendingInvite(true);
+                try {
+                  await onScreeningInvite(application);
+                } finally {
+                  setSendingInvite(false);
+                }
               }}
-              className="mt-2.5 flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 transition-colors"
+              disabled={sendingInvite}
+              className="mt-2.5 flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-60 disabled:cursor-wait"
             >
-              <Send size={10} />
-              Send Screening Invite
+              {sendingInvite ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
+              {sendingInvite ? "Sending…" : "Send Screening Invite"}
             </button>
           )}
         </div>

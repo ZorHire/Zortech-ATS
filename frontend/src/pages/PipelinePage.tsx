@@ -11,7 +11,7 @@ import {
   useSensors,
   closestCenter,
 } from "@dnd-kit/core";
-import { ArrowLeft, RefreshCw, Users, AlertCircle, Sparkles } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertCircle, Sparkles } from "lucide-react";
 import Header from "../components/layout/Header";
 import KanbanColumn from "../components/pipeline/KanbanColumn";
 import CandidateCard from "../components/pipeline/CandidateCard";
@@ -19,6 +19,9 @@ import { JobApplication, PipelineStage } from "../types";
 import { useGetJobQuery } from "../store/api/jobApi";
 import { useGetPipelineApplicationsQuery, useUpdateApplicationStageMutation } from "../store/api/pipelineApi";
 import api from "../lib/api";
+import { useNotify } from "../hooks/useNotify";
+import { useAppDispatch } from "../hooks/useAppDispatch";
+import { baseApi } from "../store/api/baseApi";
 
 const STAGES: {
   key: PipelineStage;
@@ -56,7 +59,8 @@ export default function PipelinePage() {
   const [movingId, setMovingId] = useState<string | null>(null);
   // feat/agents: AI shortlisting state
   const [shortlisting, setShortlisting] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const notify = useNotify();
+  const dispatch = useAppDispatch();
 
   // origin/main: derived loading / error values from RTK Query
   const loading = jobLoading || appsLoading;
@@ -73,24 +77,17 @@ export default function PipelinePage() {
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  const showToast = (message: string, type: "success" | "error") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   // feat/agents: run AI match-scoring and auto-shortlisting for all eligible candidates
   const handleRunShortlisting = async () => {
     if (!jobId) return;
     setShortlisting(true);
     try {
       const data = await api.post(`/jobs/${jobId}/shortlist`, {});
-      showToast(
-        `Scored ${data.scored}/${data.total_eligible}, auto-shortlisted ${data.shortlisted}`,
-        "success",
-      );
-      await refetchPipeline();
+      notify.success(`Scored ${data.scored}/${data.total_eligible}, auto-shortlisted ${data.shortlisted}`);
+      // Raw api call bypasses RTK Query — refresh this board and anything else showing stage counts.
+      dispatch(baseApi.util.invalidateTags(["Pipeline", "Dashboard", "Candidates"]));
     } catch (err: any) {
-      showToast(err.message || "Failed to run AI shortlisting", "error");
+      notify.error(err?.message || "Failed to run AI shortlisting");
     } finally {
       setShortlisting(false);
     }
@@ -100,12 +97,10 @@ export default function PipelinePage() {
   const handleScreeningInvite = async (application: JobApplication) => {
     try {
       const data = await api.post(`/pipeline/applications/${application.id}/screening-invite`, {});
-      showToast(
-        data.emailSent ? "Screening invite sent" : "Screening invite created, but the email failed to send",
-        data.emailSent ? "success" : "error",
-      );
+      if (data.emailSent) notify.success("Screening invite sent");
+      else notify.warning("Screening invite created, but the email failed to send");
     } catch (err: any) {
-      showToast(err.message || "Failed to send screening invite", "error");
+      notify.error(err?.message || "Failed to send screening invite");
     }
   };
 
@@ -134,11 +129,11 @@ export default function PipelinePage() {
 
     try {
       await updateStage({ applicationId, stage: newStage }).unwrap();
-      showToast(`Moved to ${STAGES.find((s) => s.key === newStage)?.label ?? newStage}`, "success");
+      notify.success(`Moved to ${STAGES.find((s) => s.key === newStage)?.label ?? newStage}`);
     } catch (err: any) {
-      // Revert on failure
+      // Revert on failure. RTK unwrap() errors carry the server message in `data`, not `message`.
       setApplications((prev) => prev.map((a) => (a.id === applicationId ? { ...a, stage: prevStage } : a)));
-      showToast(err.message || "Failed to move candidate", "error");
+      notify.error(err?.data?.message ?? err?.error ?? "Could not move candidate");
     } finally {
       setMovingId(null);
     }
@@ -252,16 +247,6 @@ export default function PipelinePage() {
         </div>
       )}
 
-      {toast && (
-        <div
-          className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium transition-all
-            ${toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}
-          `}
-        >
-          {toast.type === "success" ? <Users size={14} /> : <AlertCircle size={14} />}
-          {toast.message}
-        </div>
-      )}
     </div>
   );
 }

@@ -9,6 +9,14 @@ export interface EmailToast {
   showConfigLink?: boolean;
 }
 
+/** Outcome of a send attempt. Callers that ignore the return value keep working as before. */
+export interface SendEmailResult {
+  ok: boolean;
+  message: string;
+  /** True when the user was redirected to email settings (email not configured). */
+  redirected?: boolean;
+}
+
 export interface SendEmailOptions {
   subject?: string;
   body?: string;
@@ -26,10 +34,11 @@ export function useSendEmail() {
   };
 
   const sendEmail = useCallback(
-    async (to: string, options: SendEmailOptions = {}) => {
+    async (to: string, options: SendEmailOptions = {}): Promise<SendEmailResult> => {
       if (!to) {
-        showToast({ message: "No email address available for this contact.", type: "error" });
-        return;
+        const message = "No email address available for this contact.";
+        showToast({ message, type: "error" });
+        return { ok: false, message };
       }
 
       setSending(true);
@@ -40,7 +49,9 @@ export function useSendEmail() {
           subject: options.subject ?? "Exciting Opportunity from ZorHire",
           body: options.body,
         });
-        showToast({ message: `Email sent to ${to}`, type: "success" });
+        const message = `Email sent to ${to}`;
+        showToast({ message, type: "success" });
+        return { ok: true, message };
       } catch (err: any) {
         // ApiError carries the full response body including `code`
         const code =
@@ -55,39 +66,30 @@ export function useSendEmail() {
           navigate(
             `/settings/email?returnTo=${encodeURIComponent(window.location.pathname)}`,
           );
-          return;
+          return { ok: false, message: "Email is not configured. Connect your email to send.", redirected: true };
         }
 
         if (code === "SMTP_AUTH_FAILED" || code === "EMAIL_DECRYPT_FAILED") {
-          showToast({
-            message: serverMsg ?? "Invalid email credentials. Please reconnect your email.",
-            type: "error",
-            showConfigLink: true,
-          });
-          return;
+          const message = serverMsg ?? "Invalid email credentials. Please reconnect your email.";
+          showToast({ message, type: "error", showConfigLink: true });
+          return { ok: false, message };
         }
 
         if (code === "SMTP_NOT_ENABLED") {
-          showToast({
-            message: serverMsg ?? "SMTP access is disabled on your Zoho account. Enable it in Zoho Mail → Settings → Security.",
-            type: "error",
-            showConfigLink: true,
-          });
-          return;
+          const message = serverMsg ?? "SMTP access is disabled on your Zoho account. Enable it in Zoho Mail → Settings → Security.";
+          showToast({ message, type: "error", showConfigLink: true });
+          return { ok: false, message };
         }
 
         if (code === "SMTP_LIMIT_REACHED") {
-          showToast({
-            message: "Email sending limit reached. Please try again later.",
-            type: "error",
-          });
-          return;
+          const message = "Email sending limit reached. Please try again later.";
+          showToast({ message, type: "error" });
+          return { ok: false, message };
         }
 
-        showToast({
-          message: serverMsg ?? "Failed to send email. Please try again.",
-          type: "error",
-        });
+        const message = serverMsg ?? "Failed to send email. Please try again.";
+        showToast({ message, type: "error" });
+        return { ok: false, message };
       } finally {
         setSending(false);
       }

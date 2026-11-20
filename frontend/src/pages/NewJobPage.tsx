@@ -5,6 +5,7 @@ import { Plus, ArrowLeft, Upload, CheckCircle, AlertCircle, Loader } from "lucid
 import Header from "../components/layout/Header";
 import { isLowConfidence, confidenceInputClass, ConfidenceBadge } from "../lib/confidenceIndicator";
 import { useGetClientsQuery, useParseJdMutation, useCreateJobMutation } from "../store/api/jobApi";
+import { useNotify } from "../hooks/useNotify";
 
 const statusOptions = [
   { value: "draft", label: "Draft" },
@@ -17,7 +18,8 @@ export default function NewJobPage() {
   const navigate = useNavigate();
   const { data: clients = [] } = useGetClientsQuery();
   const [parseJd, { isLoading: jdParsing }] = useParseJdMutation();
-  const [createJob] = useCreateJobMutation();
+  const [createJob, { isLoading: creating }] = useCreateJobMutation();
+  const notify = useNotify();
   const [jdParseMessage, setJdParseMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [lowConfidenceFields, setLowConfidenceFields] = useState<string[]>([]);
   const [formData, setFormData] = useState({
@@ -91,8 +93,15 @@ export default function NewJobPage() {
     }
   };
 
+  const expError =
+    formData.experience_min > formData.experience_max
+      ? "Minimum experience cannot be greater than maximum."
+      : null;
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (creating) return;
+    if (expError) { notify.warning(expError); return; }
     try {
       await createJob({
         ...formData,
@@ -105,9 +114,10 @@ export default function NewJobPage() {
           .map((s) => s.trim())
           .filter((s) => s !== ""),
       }).unwrap();
+      notify.success("Job created");
       navigate("/jobs");
     } catch (error: any) {
-      alert(error?.data?.message || error?.message || "Unable to create job. Please verify all fields and try again.");
+      notify.error(error?.data?.message || error?.message || "Unable to create job. Please verify all fields and try again.");
     }
   };
 
@@ -333,8 +343,10 @@ export default function NewJobPage() {
                   min={0}
                   value={formData.experience_max}
                   onChange={(e) => setFormData({ ...formData, experience_max: Number(e.target.value) })}
+                  aria-invalid={!!expError}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 />
+                {expError && <p className="text-xs text-red-600 mt-1 ml-1">{expError}</p>}
               </div>
             </div>
 
@@ -426,16 +438,17 @@ export default function NewJobPage() {
               <button
                 type="button"
                 onClick={() => navigate("/jobs")}
-                className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all"
+                disabled={creating}
+                className="flex-1 py-4 bg-gray-50 text-[#111111] font-black text-sm rounded-[20px] border border-gray-100 hover:bg-gray-100 transition-all disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={jdParsing}
+                disabled={jdParsing || creating || !!expError}
                 className="flex-1 py-4 bg-[#111111] text-white font-black text-sm rounded-[20px] hover:scale-[1.02] transition-all shadow-xl shadow-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {jdParsing ? "Parsing JD…" : "Create Job"}
+                {jdParsing ? "Parsing JD…" : creating ? "Saving…" : "Create Job"}
               </button>
             </div>
           </form>

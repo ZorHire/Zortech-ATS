@@ -28,6 +28,8 @@ import JdApprovalPanel from '../components/jobs/JdApprovalPanel';
 import JdVersionHistory from '../components/jobs/JdVersionHistory';
 import JobBoardStatusSection from '../components/jobs/JobBoardStatusSection';
 import JobBoardPublishModal from '../components/jobs/JobBoardPublishModal';
+import { useNotify } from '../hooks/useNotify';
+import { formatINR, getErrorMessage } from '../lib/format';
 
 const priorityColors: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
@@ -82,6 +84,7 @@ export default function JobDetailPage() {
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesError, setMatchesError] = useState<string | null>(null);
   const [isPublishBoardsOpen, setIsPublishBoardsOpen] = useState(false);
+  const notify = useNotify();
 
   const handleFindMatches = async () => {
     if (!id) return;
@@ -102,12 +105,23 @@ export default function JobDetailPage() {
     profile?.role === 'accounts_manager' ||
     profile?.role === 'recruiter';
 
+  // Roles that can reach the Assign-JD flow on the Vendors page (mirrors the sidebar's /vendors roles).
+  const canAssignVendors =
+    profile?.role === 'super_admin' ||
+    profile?.role === 'accounts_manager' ||
+    profile?.role === 'vendor_manager';
+
   const handleStatusChange = async (newStatus: string) => {
     if (!job || !id) return;
+    if (newStatus === 'closed_filled' || newStatus === 'closed_cancelled') {
+      const label = STATUS_OPTIONS.find((o) => o.value === newStatus)?.label ?? newStatus;
+      if (!window.confirm(`Change this job to ${label}? This stops hiring on the job.`)) return;
+    }
     try {
       await updateJob({ id, body: { status: newStatus } }).unwrap();
-    } catch {
-      alert('Failed to update job status');
+      notify.success('Job status updated');
+    } catch (err) {
+      notify.error(getErrorMessage(err, 'Failed to update job status'));
     }
   };
 
@@ -143,7 +157,7 @@ export default function JobDetailPage() {
 
   const salary =
     job.salary_min && job.salary_max
-      ? `INR ${(Number(job.salary_min) / 100000).toFixed(0)}L – INR ${(Number(job.salary_max) / 100000).toFixed(0)}L`
+      ? `${formatINR(job.salary_min)} – ${formatINR(job.salary_max)}`
       : 'Not specified';
 
   const booleanQueries = generateBooleanQueries({
@@ -176,10 +190,16 @@ export default function JobDetailPage() {
               <UserPlus size={14} />
               Add Candidate
             </button>
-            <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-              <Mail size={14} />
-              Send to Vendors
-            </button>
+            {canAssignVendors && (
+              <Link
+                to="/vendors"
+                title="Open Vendors and use “Assign JD” to send this job to vendors"
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                <Mail size={14} />
+                Send to Vendors
+              </Link>
+            )}
             {canEditStatus && (
               <button
                 onClick={() => setIsPublishBoardsOpen(true)}

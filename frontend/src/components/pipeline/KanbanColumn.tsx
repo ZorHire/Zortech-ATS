@@ -12,7 +12,7 @@ interface KanbanColumnProps {
     dot: string;
   };
   applications: JobApplication[];
-  onScreeningInvite?: (application: JobApplication) => void;
+  onScreeningInvite?: (application: JobApplication) => void | Promise<unknown>;
 }
 
 export default function KanbanColumn({

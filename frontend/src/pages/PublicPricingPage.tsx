@@ -14,7 +14,7 @@ export default function PublicPricingPage() {
       {/* Top navbar */}
       <nav className="flex items-center justify-between px-6 py-4 bg-[#1d170f]">
         <button
-          onClick={() => navigate("/subscribe")}
+          onClick={() => navigate("/")}
           className="flex items-center gap-2 text-[#c8a97a] hover:text-[#f0c491] text-sm font-semibold transition-colors"
         >
           <ArrowLeft size={16} />
@@ -28,13 +28,21 @@ export default function PublicPricingPage() {
           <span className="font-bold text-[#f6e6d2] text-sm">ZorHire</span>
         </div>
 
-        <button
-          onClick={() => navigate("/login")}
-          className="flex items-center gap-1.5 text-sm font-bold text-white bg-[#b47b3b] hover:bg-[#9b5c27] px-4 py-2 rounded-xl transition-all"
-        >
-          <LogIn size={14} />
-          Log In
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/login")}
+            className="flex items-center gap-1.5 text-sm font-semibold text-[#c8a97a] hover:text-[#f0c491] px-3 py-2 transition-colors"
+          >
+            <LogIn size={14} />
+            Sign in
+          </button>
+          <button
+            onClick={() => navigate("/book-demo")}
+            className="text-sm font-bold text-white bg-[#b47b3b] hover:bg-[#9b5c27] px-4 py-2 rounded-xl transition-all"
+          >
+            Book a demo
+          </button>
+        </div>
       </nav>
 
       {/* Pricing content */}

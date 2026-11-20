@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { X, Mail, Loader2 } from "lucide-react";
 import { useSendEmail } from "../../hooks/useSendEmail";
+import { useNotify } from "../../hooks/useNotify";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 
 interface Props {
   to: string;
@@ -50,6 +52,10 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
   const [body, setBody] = useState("");
   const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
   const { sendEmail, sending } = useSendEmail();
+  const notify = useNotify();
+
+  // Esc closes (not while a send is in flight). No backdrop-close: it would discard the draft.
+  useEscapeKey(onClose, !sending);
 
   const applyTemplate = (idx: number) => {
     const t = TEMPLATES[idx];
@@ -59,10 +65,21 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
   };
 
   const handleSend = async () => {
-    if (!subject.trim() || !body.trim()) return;
-    await sendEmail(to, { subject, body, firstName });
-    onSent?.();
-    onClose();
+    if (!subject.trim() || !body.trim() || sending) return;
+    const result = await sendEmail(to, { subject, body, firstName });
+    if (result.ok) {
+      notify.success(result.message);
+      onSent?.();
+      onClose();
+      return;
+    }
+    // Keep the modal open with the draft intact so the user can retry.
+    if (result.redirected) {
+      notify.warning(result.message);
+      onClose();
+      return;
+    }
+    notify.error(result.message);
   };
 
   const canSend = subject.trim().length > 0 && body.trim().length > 0 && !sending;
@@ -82,7 +99,7 @@ export default function ComposeEmailModal({ to, toName, positionHint = "the posi
               <p className="text-xs text-gray-400 mt-0.5">to {toName} · {to}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-all text-gray-400 hover:text-gray-700">
+          <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-gray-100 rounded-xl transition-all text-gray-400 hover:text-gray-700">
             <X size={18} />
           </button>
         </div>

@@ -26,6 +26,8 @@ import {
   useGetCandidateTimelineQuery,
 } from "../store/api/candidateApi";
 import type { ApplicationEntry, InterviewEntry } from "../store/api/candidateApi";
+import { useNotify } from "../hooks/useNotify";
+import { formatINR, getErrorMessage, getErrorStatus } from "../lib/format";
 
 const STAGE_LABELS: Record<string, string> = {
   new: "New",
@@ -164,18 +166,37 @@ export default function CandidateDetailPage() {
   const navigate = useNavigate();
   const token = useSelector((s: any) => s.auth?.accessToken) ?? localStorage.getItem("jwt");
 
-  const { data: candidate, isLoading: candidateLoading } = useGetCandidateByIdQuery(id!);
-  const { data: timeline = [], isLoading: timelineLoading } = useGetCandidateTimelineQuery(id!);
+  const notify = useNotify();
+  const {
+    data: candidate,
+    isLoading: candidateLoading,
+    error: candidateError,
+    refetch: refetchCandidate,
+    isFetching: candidateFetching,
+  } = useGetCandidateByIdQuery(id!);
+  const {
+    data: timeline = [],
+    isLoading: timelineLoading,
+    error: timelineError,
+    refetch: refetchTimeline,
+  } = useGetCandidateTimelineQuery(id!);
 
   const isLoading = candidateLoading || timelineLoading;
+  const candidateNotFound = getErrorStatus(candidateError) === 404;
 
   const openResume = useCallback(async () => {
     if (!id) return;
     const base = import.meta.env.VITE_API_URL || "http://localhost:5000/v1";
-    const resp = await fetch(`${base}/candidates/${id}/resume`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!resp.ok) { alert("Resume not available"); return; }
+    let resp: Response;
+    try {
+      resp = await fetch(`${base}/candidates/${id}/resume`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      notify.error("Could not load resume. Check your connection and try again.");
+      return;
+    }
+    if (!resp.ok) { notify.error("Resume not available"); return; }
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -184,7 +205,7 @@ export default function CandidateDetailPage() {
     a.rel = "noopener noreferrer";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }, [id, token]);
+  }, [id, token, notify]);
 
   const avatarInitials = candidate
     ? `${candidate.first_name.charAt(0)}${candidate.last_name.charAt(0)}`
@@ -219,6 +240,19 @@ export default function CandidateDetailPage() {
           {isLoading ? (
             <div className="flex justify-center py-24">
               <Loader2 size={24} className="animate-spin text-gray-400" />
+            </div>
+          ) : candidateError && !candidateNotFound ? (
+            <div className="text-center py-24 space-y-3">
+              <p className="text-sm text-red-600">
+                {getErrorMessage(candidateError, "Could not load this candidate.")}
+              </p>
+              <button
+                onClick={() => { refetchCandidate(); refetchTimeline(); }}
+                disabled={candidateFetching}
+                className="px-4 py-2 text-sm font-semibold text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 disabled:opacity-50"
+              >
+                {candidateFetching ? "Retrying…" : "Retry"}
+              </button>
             </div>
           ) : !candidate ? (
             <div className="text-center py-24 text-gray-400 text-sm">
@@ -314,9 +348,9 @@ export default function CandidateDetailPage() {
                   {(candidate.current_ctc != null || candidate.expected_ctc != null) && (
                     <div className="flex items-center gap-2 text-sm text-gray-700">
                       <DollarSign size={13} className="text-gray-400 flex-shrink-0" />
-                      {candidate.current_ctc != null && `Current: ₹${candidate.current_ctc}L`}
+                      {candidate.current_ctc != null && `Current: ${formatINR(candidate.current_ctc)}`}
                       {candidate.current_ctc != null && candidate.expected_ctc != null && " · "}
-                      {candidate.expected_ctc != null && `Expected: ₹${candidate.expected_ctc}L`}
+                      {candidate.expected_ctc != null && `Expected: ${formatINR(candidate.expected_ctc)}`}
                     </div>
                   )}
                   {candidate.source && (
@@ -346,7 +380,14 @@ export default function CandidateDetailPage() {
                     </span>
                   )}
                 </h3>
-                {timeline.length === 0 ? (
+                {timelineError ? (
+                  <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-8 text-center text-sm space-y-2">
+                    <p className="text-red-600">Could not load application history.</p>
+                    <button onClick={() => refetchTimeline()} className="text-xs font-semibold text-blue-600 hover:underline">
+                      Retry
+                    </button>
+                  </div>
+                ) : timeline.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center text-sm text-gray-400">
                     No job applications yet.
                   </div>

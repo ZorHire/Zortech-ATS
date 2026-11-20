@@ -7,6 +7,7 @@ import {
   useRejectJobMutation,
   type JobApproval,
 } from "../../store/api/jdLifecycleApi";
+import { useEscapeKey } from "../../hooks/useEscapeKey";
 
 interface Props {
   jobId: string;
@@ -31,6 +32,12 @@ export default function JdApprovalPanel({ jobId, jobStatus, userRole }: Props) {
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [notes, setNotes] = useState("");
   const [actionError, setActionError] = useState("");
+
+  // Esc closes whichever confirm modal is open (not mid-request). No backdrop-close: it holds a typed note.
+  const closeModals = () => {
+    setShowApproveModal(false); setShowRejectModal(false); setNotes(""); setActionError("");
+  };
+  useEscapeKey(closeModals, (showApproveModal || showRejectModal) && !approving && !rejecting);
 
   const isApprover = userRole === "super_admin" || userRole === "accounts_manager";
   const canSubmit =

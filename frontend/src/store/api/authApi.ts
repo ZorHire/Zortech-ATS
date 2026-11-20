@@ -45,11 +45,12 @@ export interface MeResponse {
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     login: builder.mutation<LoginResponse, LoginPayload>({
-      query: (body) => ({ url: "/auth/login", method: "POST", body }),
+      query: (body) => ({ url: "/auth/login", method: "POST", body, timeout: 20000 }),
     }),
 
     me: builder.query<MeResponse, void>({
-      query: () => "/auth/me",
+      // Short timeout: this gates the whole app on load, so fail fast to the "can't reach" screen.
+      query: () => ({ url: "/auth/me", timeout: 10000 }),
       providesTags: ["Auth"],
     }),
 

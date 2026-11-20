@@ -51,9 +51,7 @@ export default function Header({ title, subtitle, actions }: HeaderProps) {
               {profile?.full_name || "User"}
             </p>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mt-1 flex items-center gap-1">
-               {profile?.role?.replace("_", " ") || "Member"}
-              <span className="w-1 h-1 bg-green-400 rounded-full"></span>
-              Online
+              {profile?.role?.replace(/_/g, " ") || "Member"}
             </p>
           </div>
         </Link>
