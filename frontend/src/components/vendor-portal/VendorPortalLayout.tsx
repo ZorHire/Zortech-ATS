@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Briefcase, Users } from "lucide-react";
+import { Briefcase, LifeBuoy, Users } from "lucide-react";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectCurrentUser, clearCredentials } from "../../store/slices/authSlice";
@@ -15,6 +15,7 @@ interface Props {
 const NAV: PortalNavItem[] = [
   { to: "/vendor-portal/jobs", label: "Assigned jobs", icon: Briefcase },
   { to: "/vendor-portal/submissions", label: "My submissions", icon: Users },
+  { to: "/help", label: "Help", icon: LifeBuoy },
 ];
 
 export default function VendorPortalLayout({ children }: Props) {

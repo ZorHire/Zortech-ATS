@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Briefcase } from "lucide-react";
+import { Briefcase, LifeBuoy } from "lucide-react";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectCurrentUser, clearCredentials } from "../../store/slices/authSlice";
@@ -12,7 +12,10 @@ interface Props {
   children: React.ReactNode;
 }
 
-const NAV: PortalNavItem[] = [{ to: "/client-portal/jobs", label: "Open positions", icon: Briefcase }];
+const NAV: PortalNavItem[] = [
+  { to: "/client-portal/jobs", label: "Open positions", icon: Briefcase },
+  { to: "/help", label: "Help", icon: LifeBuoy },
+];
 
 export default function ClientPortalLayout({ children }: Props) {
   const user = useAppSelector(selectCurrentUser);

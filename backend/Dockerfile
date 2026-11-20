@@ -8,7 +8,7 @@ RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 RUN npx tsc && \
-    find src -name "*.sql" | while IFS= read -r f; do \
+    find src \( -name "*.sql" -o -name "*.md" \) | while IFS= read -r f; do \
       dest="dist/${f#src/}"; mkdir -p "$(dirname "$dest")"; cp "$f" "$dest"; \
     done && \
     npm prune --omit=dev

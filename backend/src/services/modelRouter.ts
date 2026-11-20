@@ -14,7 +14,8 @@ export type AgentId =
   | "screening_evaluator"
   | "linkedin_search_builder"
   | "linkedin_prospect_scorer"
-  | "submission_writer";
+  | "submission_writer"
+  | "help_assistant";
 
 interface AgentModelConfig {
   model: string;
@@ -75,6 +76,11 @@ const MODEL_CONFIG: Record<AgentId, AgentModelConfig> = {
   linkedin_prospect_scorer: { model: "claude-opus-5-5", capUsdMonth: 60 },
   // Client submission pack (modules/submissions).
   submission_writer: { model: "claude-opus-5-5", capUsdMonth: 40 },
+  // In-app help assistant (modules/help): answers questions about using ZorHire from the
+  // help articles. Haiku keeps it near-free (~$0.001 a question); the cap is a hard ceiling
+  // per company (~3,000 questions), after which it falls back to keyword search. Move to
+  // Sonnet/Opus later if answer quality needs it.
+  help_assistant: { model: "claude-haiku-5-5", capUsdMonth: 2 },
 };
 
 export const getAgentModelConfig = (agentId: AgentId): AgentModelConfig =>

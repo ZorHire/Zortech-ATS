@@ -19,6 +19,8 @@ export const env = {
   // Claude powers the AI recruiting agents (shortlister, screening interviewer).
   // Without it those agents fall back to Gemini (screening) or skip (shortlisting).
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "",
+  // Shown by the help assistant when it can't answer ("Contact support"). Optional.
+  HELP_SUPPORT_EMAIL: process.env.HELP_SUPPORT_EMAIL || "",
   // Master switch for autopilot agents; per-job settings still apply.
   AI_AGENTS_ENABLED: process.env.AI_AGENTS_ENABLED !== "false",
   RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID || "",

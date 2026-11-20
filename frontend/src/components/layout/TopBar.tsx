@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
-import { Menu, Search } from "lucide-react";
+import { HelpCircle, Menu, Search } from "lucide-react";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectCurrentUser } from "../../store/slices/authSlice";
 import NotificationBell from "../ui/NotificationBell";
 import { useAvatarSrc } from "../../hooks/useAvatarSrc";
 import { PALETTE_SHORTCUT_LABEL } from "./CommandPalette";
+import { useHelp } from "../help/HelpContext";
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Admin",
@@ -24,6 +25,7 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
   const profile = useAppSelector(selectCurrentUser);
   const name = profile?.full_name || profile?.email || "User";
   const avatarSrc = useAvatarSrc(profile?.id ? "me" : undefined, profile?.avatar_url);
+  const { setOpen: setHelpOpen } = useHelp();
 
   return (
     <div className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-line bg-white/95 px-3 backdrop-blur sm:px-6">
@@ -54,6 +56,16 @@ export default function TopBar({ onMenu, onSearch }: { onMenu: () => void; onSea
       )}
 
       <div className={`${onSearch ? "sm:ml-auto" : "ml-auto"} flex items-center gap-1 sm:gap-3`}>
+        <button
+          type="button"
+          onClick={() => setHelpOpen(true)}
+          aria-label="Help"
+          title="Help: ask Aruna how to do anything in ZorHire"
+          className="flex items-center gap-1.5 rounded-lg p-2 text-ink-soft hover:bg-surface-sunken sm:px-2.5"
+        >
+          <HelpCircle size={20} aria-hidden="true" />
+          <span className="hidden text-sm font-medium md:inline">Help</span>
+        </button>
         <NotificationBell />
         <Link
           to="/profile"

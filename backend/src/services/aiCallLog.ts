@@ -31,6 +31,8 @@ const RATE_CARD_USD_PER_M_TOKENS: Record<
   "claude-opus-5": { input: 5, output: 25 },
   "claude-opus-4-8": { input: 5, output: 25 },
   "claude-sonnet-5-5": { input: 2, output: 10 },
+  // Prompts up to 100K tokens (help assistant prompts are ~13K).
+  "claude-haiku-5-5": { input: 0.1, output: 0.5 },
 };
 
 /** Returns undefined (not 0) when the model has no rate-card entry or either token count is missing — an unknown cost should never be reported as free. */
@@ -66,7 +68,8 @@ export type AiCallEntityType =
   | "job_application"
   | "screening_session"
   | "interview_booking"
-  | "linkedin_campaign";
+  | "linkedin_campaign"
+  | "help_question";
 
 export interface LogAiCallParams {
   tenantId: string;

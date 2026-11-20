@@ -22,6 +22,8 @@ import Layout from "./components/layout/Layout";
 import LoginPage from "./pages/LoginPage";
 import { FullPageLoader, ServerUnreachableScreen } from "./components/layout/AppStatusScreens";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import { PageSkeleton } from "./components/ui/Skeleton";
+import { HelpProvider } from "./components/help/HelpContext";
 
 // Route-level code splitting: each screen downloads when first opened.
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -56,6 +58,9 @@ const LinkedInCampaignPage = lazy(() => import("./pages/LinkedInCampaignPage"));
 const SubmissionPackPage = lazy(() => import("./pages/SubmissionPackPage"));
 const WhatsAppSettingsPage = lazy(() => import("./pages/WhatsAppSettingsPage"));
 const AiUsagePage = lazy(() => import("./pages/AiUsagePage"));
+const HelpPage = lazy(() => import("./pages/HelpPage"));
+const VendorPortalLayout = lazy(() => import("./components/vendor-portal/VendorPortalLayout"));
+const ClientPortalLayout = lazy(() => import("./components/client-portal/ClientPortalLayout"));
 const InterviewsPage = lazy(() => import("./pages/InterviewsPage"));
 const OffersPage = lazy(() => import("./pages/OffersPage"));
 const ReportsPage = lazy(() => import("./pages/ReportsPage"));
@@ -71,13 +76,13 @@ const ClientPortalJobsPage = lazy(() => import("./pages/client-portal/ClientPort
 const ClientCandidatesPage = lazy(() => import("./pages/client-portal/ClientCandidatesPage"));
 
 // vendor_user may access /jobs, /jobs/:id, /pipeline/:jobId, and /vendor-portal/*
-const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline", "/vendor-portal"];
+const VENDOR_ALLOWED_PREFIXES = ["/jobs", "/pipeline", "/vendor-portal", "/help"];
 
 // client_user may only access /client-portal/*
-const CLIENT_ALLOWED_PREFIXES = ["/client-portal"];
+const CLIENT_ALLOWED_PREFIXES = ["/client-portal", "/help"];
 
 // These paths are accessible even when subscription is blocked/expired
-const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription", "/onboarding"];
+const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription", "/onboarding", "/help"];
 
 // Portal paths bypass the subscription gate — portal users don't control the subscription
 const PORTAL_PREFIXES = ["/vendor-portal", "/client-portal"];
@@ -220,6 +225,19 @@ function ProtectedRoute({
 
   if (noLayout) return <>{children}</>;
   return <Layout>{children}</Layout>;
+}
+
+/** Help opens inside the portal's own layout for vendor and client users, and the main layout for everyone else. */
+function HelpRoute() {
+  const user = useAppSelector(selectCurrentUser);
+  const page = (
+    <Suspense fallback={<PageSkeleton />}>
+      <HelpPage />
+    </Suspense>
+  );
+  if (user?.role === "vendor_user") return <Suspense fallback={<FullPageLoader />}><VendorPortalLayout>{page}</VendorPortalLayout></Suspense>;
+  if (user?.role === "client_user") return <Suspense fallback={<FullPageLoader />}><ClientPortalLayout>{page}</ClientPortalLayout></Suspense>;
+  return <Layout>{page}</Layout>;
 }
 
 /** Login page; once signed in, go back to the page the user originally wanted. */
@@ -457,6 +475,22 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/help"
+        element={
+          <ProtectedRoute path="/help" noLayout>
+            <HelpRoute />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/help/:slug"
+        element={
+          <ProtectedRoute path="/help" noLayout>
+            <HelpRoute />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/settings/ai-usage"
         element={
           <ProtectedRoute path="/settings/ai-usage">
@@ -579,9 +613,11 @@ export default function App() {
         <ConfirmProvider>
           <SessionRestorer />
           {/* Pages load on demand; in-app pages show a skeleton inside the shell (see Layout). */}
-          <Suspense fallback={<FullPageLoader />}>
-            <AppRoutes />
-          </Suspense>
+          <HelpProvider>
+            <Suspense fallback={<FullPageLoader />}>
+              <AppRoutes />
+            </Suspense>
+          </HelpProvider>
         </ConfirmProvider>
       </BrowserRouter>
     </ErrorBoundary>
