@@ -1,0 +1,49 @@
+{
+  "name": "zorhire-desktop",
+  "productName": "ZorHire",
+  "version": "1.0.0",
+  "description": "ZorHire desktop app: the ATS plus built-in LinkedIn and Naukri tools.",
+  "author": "Zortech Solutions",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:local": "cross-env ZORHIRE_APP_URL=http://localhost:5173 ZORHIRE_API_URL=http://localhost:5000/v1 electron .",
+    "check": "node --check src/main.js && node --check src/agent.js && node --check src/tabs.js && node --check src/store.js && node --check src/alerts.js && node --check src/preload-app.js && node --check src/preload-tools.js && node --check src/preload-shell.js && node --check src/shell.js",
+    "dist": "electron-builder --win --publish never",
+    "dist:dir": "electron-builder --win --dir --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "devDependencies": {
+    "cross-env": "7.0.3",
+    "electron": "45.4.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "in.zortechs.zorhire",
+    "productName": "ZorHire",
+    "copyright": "Zortech Solutions",
+    "directories": { "output": "release", "buildResources": "build" },
+    "files": ["src/**/*", "!src/selftest.js", "package.json"],
+    "extraResources": [
+      { "from": "../extension", "to": "extension", "filter": ["inpage.js", "linkedin-import.js", "capture.js", "autofill.js"] }
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "build/icon.ico",
+      "artifactName": "ZorHire-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ZorHire"
+    },
+    "publish": [
+      { "provider": "generic", "url": "https://zorhire.zortechs.in/desktop/" }
+    ]
+  }
+}

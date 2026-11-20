@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>ZorHire</title>
+<style>
+  :root { --navy:#1A4277; --navy-2:#153760; --orange:#F7911E; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb; }
+  * { box-sizing:border-box; font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+  html, body { margin:0; height:100%; background:#fff; color:var(--ink); font-size:13px; overflow:hidden; }
+  button { font:inherit; cursor:pointer; }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--orange); outline-offset:1px; }
+
+  #bar { height:44px; background:var(--navy); display:flex; align-items:center; gap:6px; padding:0 8px; -webkit-app-region:drag; user-select:none; }
+  #bar > * { -webkit-app-region:no-drag; }
+  .logo { width:26px; height:26px; margin-right:4px; -webkit-app-region:drag; }
+  #tabs { display:flex; gap:4px; flex:1; min-width:0; overflow:hidden; }
+  .tab { display:flex; align-items:center; gap:6px; max-width:210px; min-width:44px; height:32px; padding:0 8px 0 10px; border:0; border-radius:8px; background:transparent; color:#cfdcf0; flex:0 1 auto; }
+  .tab:hover { background:var(--navy-2); color:#fff; }
+  .tab.active { background:#fff; color:var(--navy); font-weight:600; }
+  .tab .t { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  .tab .x { border:0; background:transparent; color:inherit; width:18px; height:18px; border-radius:4px; line-height:16px; padding:0; opacity:.7; flex:none; }
+  .tab .x:hover { opacity:1; background:rgba(0,0,0,.12); }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; background:#9fb4d3; }
+  .k-app .dot { background:var(--orange); } .k-agent .dot { background:#34d399; }
+  .tab.loading .dot { animation: pulse 1s infinite alternate; }
+  @keyframes pulse { to { opacity:.25; } }
+
+  .icon-btn { width:32px; height:32px; border:0; border-radius:8px; background:transparent; color:#fff; display:grid; place-items:center; position:relative; }
+  .icon-btn:hover { background:var(--navy-2); }
+  .icon-btn:disabled { opacity:.35; cursor:default; background:transparent; }
+  .icon-btn svg { width:18px; height:18px; }
+  .badge { position:absolute; top:2px; right:1px; min-width:16px; height:16px; border-radius:8px; background:var(--orange); color:#fff; font-size:10px; font-weight:700; display:grid; place-items:center; padding:0 4px; }
+  .pill-btn { height:30px; border:0; border-radius:8px; padding:0 12px; font-weight:600; background:var(--orange); color:#fff; white-space:nowrap; }
+  .pill-btn.ghost { background:rgba(255,255,255,.12); }
+  .pill-btn.ghost[aria-pressed="true"] { background:#fff; color:var(--navy); }
+  .hidden { display:none !important; }
+
+
+  #panel { position:absolute; top:44px; right:0; bottom:0; width:340px; border-left:1px solid var(--line); background:#fff; overflow:auto; padding:16px; }
+  #panel h2 { font-size:15px; margin:0 0 4px; color:var(--navy); }
+  #panel p { margin:0 0 10px; color:#4b5563; line-height:1.45; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  .status { background:#f9fafb; border-radius:8px; padding:10px; margin-bottom:12px; line-height:1.4; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .switch { display:flex; justify-content:space-between; align-items:center; }
+  label { font-weight:600; }
+  input[type=time] { padding:6px; border:1px solid #d1d5db; border-radius:8px; font:inherit; }
+  .btn { border:0; border-radius:8px; padding:9px 12px; font-weight:600; }
+  .btn.primary { background:var(--orange); color:#fff; width:100%; }
+  .btn.ghost { background:#f3f4f6; color:var(--ink); }
+  .muted { color:var(--muted); font-size:12px; }
+  .err { color:#b91c1c; min-height:16px; margin-top:6px; }
+  .tag { display:inline-block; border-radius:999px; padding:2px 8px; font-size:11px; font-weight:600; background:#e8eef7; color:var(--navy); margin:2px 4px 2px 0; }
+  .tag.ok { background:#d1fae5; color:#065f46; } .tag.warn { background:#fef3c7; color:#92400e; }
+</style>
+</head>
+<body>
+  <div id="bar">
+    <img class="logo" src="icon128.png" alt="ZorHire">
+    <div id="tabs" role="tablist" aria-label="Open tabs"></div>
+    <button class="icon-btn" id="add" title="Open LinkedIn or Naukri" aria-label="Open LinkedIn or Naukri" aria-haspopup="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <span style="flex:none;width:8px"></span>
+    <button class="icon-btn" id="back" title="Back (Alt+Left)" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="icon-btn" id="fwd" title="Forward (Alt+Right)" aria-label="Forward"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button class="icon-btn" id="reload" title="Reload (Ctrl+R)" aria-label="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    <button class="icon-btn" id="bell" title="Unread alerts" aria-label="Unread alerts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="badge hidden" id="unread"></span></button>
+    <button class="pill-btn hidden" id="update">Restart to update</button>
+    <button class="pill-btn ghost" id="assist" aria-pressed="false">Assistant</button>
+  </div>
+
+
+  <aside id="panel" class="hidden" aria-label="Assistant">
+    <h2>ZorHire Assistant</h2>
+    <p class="muted">The LinkedIn agent, Save to ZorHire and job-board form filling, built into this app. Your LinkedIn and job-board passwords stay with LinkedIn and the boards; ZorHire never sees them.</p>
+    <div class="status" id="status" role="status" aria-live="polite">…</div>
+
+    <div id="notConnected" class="card hidden">
+      <p>Sign in to ZorHire in the ZorHire tab. The assistant connects to your account automatically.</p>
+      <button class="btn primary" id="connect">Connect now</button>
+    </div>
+
+    <div id="connected" class="hidden">
+      <div class="card" id="acct"></div>
+      <div class="card">
+        <div class="switch"><label for="running">LinkedIn agent running</label><input type="checkbox" id="running"></div>
+        <div class="row" style="margin-top:10px">
+          <span>Working hours</span>
+          <input id="ws" type="time" aria-label="Start time"> – <input id="we" type="time" aria-label="End time">
+        </div>
+        <p class="muted" style="margin:8px 0 0">Invitations go out Mon–Sat in these hours, 2–5 minutes apart, within the limits set in ZorHire. Keep ZorHire open or in the tray.</p>
+      </div>
+      <button class="btn primary" id="capture">Save this page to ZorHire</button>
+      <div class="err" id="cerr" role="alert"></div>
+      <div class="row" style="margin-top:6px">
+        <button class="btn ghost" id="run">Run now</button>
+        <button class="btn ghost" id="disc" style="margin-left:auto">Disconnect</button>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:16px" id="ver"></p>
+  </aside>
+
+<script src="shell.js"></script>
+</body>
+</html>

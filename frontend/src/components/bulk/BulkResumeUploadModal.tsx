@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   X, Upload, FileText, CheckCircle2, XCircle, Loader2,
   ArrowLeft, Eye,
@@ -24,6 +24,8 @@ interface UploadFile {
 interface Props {
   onClose: () => void;
   onSuccess?: () => void;
+  /** Files dropped elsewhere in ZorHire, read as soon as the modal opens. */
+  initialFiles?: File[];
 }
 
 const sourceLabels: Record<string, string> = {
@@ -31,7 +33,7 @@ const sourceLabels: Record<string, string> = {
   vendor: "Vendor", referral: "Referral", direct: "Direct", other: "Other",
 };
 
-export default function BulkResumeUploadModal({ onClose, onSuccess }: Props) {
+export default function BulkResumeUploadModal({ onClose, onSuccess, initialFiles }: Props) {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [view, setView] = useState<"upload" | "preview">("upload");
   const [selectedJobId, setSelectedJobId] = useState("");
@@ -89,6 +91,14 @@ export default function BulkResumeUploadModal({ onClose, onSuccess }: Props) {
     },
     [parseResume],
   );
+
+  // Each new batch dropped elsewhere in ZorHire is read once (also while the modal is open).
+  const lastInitial = useRef<File[] | undefined>(undefined);
+  useEffect(() => {
+    if (!initialFiles?.length || initialFiles === lastInitial.current) return;
+    lastInitial.current = initialFiles;
+    processFiles(initialFiles);
+  }, [initialFiles, processFiles]);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();

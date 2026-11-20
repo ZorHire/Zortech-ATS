@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, Chrome, Copy, Download, KeyRound, Linkedin, PauseCircle, PlayCircle, Trash2 } from "lucide-react";
+import { CheckCircle2, Chrome, Copy, Download, ExternalLink, KeyRound, Linkedin, Monitor, PauseCircle, PlayCircle, Trash2 } from "lucide-react";
 import { Badge, Button, ErrorState, Skeleton, useConfirm } from "../ui";
 import {
   useCreateConnectionCodeMutation,
@@ -9,6 +9,7 @@ import {
 } from "../../store/api/linkedinApi";
 import { useNotify } from "../../hooks/useNotify";
 import { getErrorMessage } from "../../lib/format";
+import { DESKTOP_DOWNLOAD, clientVersionLabel, desktop, isDesktopApp } from "../../lib/desktop";
 
 export const EXTENSION_ZIP = "/downloads/zorhire-assistant.zip";
 
@@ -75,13 +76,17 @@ export default function ConnectExtensionCard() {
           <div>
             <h2 id="li-connect-title" className="text-base font-semibold text-ink">Your LinkedIn connection</h2>
             <p className="mt-0.5 max-w-2xl text-sm text-muted">
-              The agent works through the ZorHire Assistant extension in your own Chrome, signed in to your own LinkedIn.
-              ZorHire never asks for or stores your LinkedIn password.
+              {isDesktopApp
+                ? "The agent is built into this ZorHire app and works in its LinkedIn tabs, signed in to your own LinkedIn."
+                : "The agent works through the ZorHire Assistant extension in your own Chrome, signed in to your own LinkedIn."}
+              {" "}ZorHire never asks for or stores your LinkedIn password.
             </p>
           </div>
         </div>
         <Badge tone={ready && data.extension_online ? "success" : ready ? "warning" : "neutral"}>
-          {ready ? (data.extension_online ? "Extension online" : "Extension offline") : "Not set up"}
+          {ready
+            ? data.extension_online ? (isDesktopApp ? "App online" : "Extension online") : (isDesktopApp ? "App offline" : "Extension offline")
+            : isDesktopApp ? "Connecting" : "Not set up"}
         </Badge>
       </div>
 
@@ -105,7 +110,7 @@ export default function ConnectExtensionCard() {
               <Badge tone={li.has_premium ? "success" : "neutral"}>{li.has_premium ? "Premium" : "Free account"}</Badge>
               <Badge tone={li.recruiter_lite ? "success" : "neutral"}>{li.recruiter_lite ? "Recruiter Lite" : "No Recruiter Lite"}</Badge>
             </div>
-            <p className="mt-2 text-xs text-muted">Last seen {ago(li.last_seen_at)}{li.ext_version ? ` · extension v${li.ext_version}` : ""}</p>
+            <p className="mt-2 text-xs text-muted">Last seen {ago(li.last_seen_at)}{li.ext_version ? ` · ${clientVersionLabel(li.ext_version)}` : ""}</p>
           </div>
           <div>
             <label htmlFor="li-recruiter" className="text-xs font-medium uppercase tracking-wide text-muted">Recruiter Lite</label>
@@ -128,8 +133,26 @@ export default function ConnectExtensionCard() {
             <p className="mt-1 text-xs text-muted">Kept under LinkedIn's own weekly limit so your account stays in good standing.</p>
           </div>
         </div>
+      ) : isDesktopApp ? (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
+          <p className="max-w-2xl text-sm text-muted">
+            This app connects to your ZorHire account on its own. Sign in to LinkedIn in the app's &quot;LinkedIn agent&quot; tab;
+            within a minute this card shows your account and Recruiter Lite. You can also click <b>Assistant</b> in the top bar, then <b>Run now</b>.
+          </p>
+          <Button size="sm" variant="secondary" icon={<ExternalLink size={14} />} onClick={() => desktop?.openTool("https://www.linkedin.com/login")}>
+            Open LinkedIn
+          </Button>
+        </div>
       ) : (
-        <ol className="mt-5 grid gap-4 border-t border-line pt-5 md:grid-cols-3">
+        <>
+        <p className="mt-5 flex flex-wrap items-center gap-2 rounded-lg bg-navy-50 px-3 py-2 text-sm text-navy-700">
+          <Monitor size={16} aria-hidden="true" />
+          On Windows? The ZorHire app has the agent built in, with no extension to install.
+          <a href={DESKTOP_DOWNLOAD} className="inline-flex items-center gap-1 font-medium underline">
+            <Download size={14} aria-hidden="true" /> Download ZorHire for Windows
+          </a>
+        </p>
+        <ol className="mt-4 grid gap-4 md:grid-cols-3">
           <li className="rounded-lg border border-line p-4">
             <p className="flex items-center gap-2 font-medium text-ink"><Chrome size={16} aria-hidden="true" /> 1. Install the extension</p>
             <p className="mt-1 text-sm text-muted">Download and unzip it. In Chrome, open <code className="rounded bg-surface-sunken px-1">chrome://extensions</code>, turn on Developer mode, click <b>Load unpacked</b> and pick the unzipped folder.</p>
@@ -157,11 +180,12 @@ export default function ConnectExtensionCard() {
             <p className="mt-1 text-sm text-muted">Log in to <a className="text-navy-600 hover:underline" href="https://www.linkedin.com/login" target="_blank" rel="noreferrer">linkedin.com</a> in the same Chrome. The extension detects your account and Recruiter Lite, and this card turns green.</p>
           </li>
         </ol>
+        </>
       )}
 
       {data.tokens.length > 0 && (
         <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-muted hover:text-ink">Connected browsers ({data.tokens.length})</summary>
+          <summary className="cursor-pointer text-muted hover:text-ink">Connected browsers and apps ({data.tokens.length})</summary>
           <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
             {data.tokens.map((t) => (
               <li key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">

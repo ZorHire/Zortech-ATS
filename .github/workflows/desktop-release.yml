@@ -1,0 +1,92 @@
+# Build the ZorHire Windows desktop app and publish it on the ZorHire server.
+#
+# Release: bump "version" in desktop/package.json, commit, then push a tag like
+#   git tag desktop-v1.0.1 && git push origin desktop-v1.0.1
+# (or run this workflow by hand). Installed apps pick up the new version from
+# https://zorhire.zortechs.in/desktop/latest.yml within a few hours and install it on restart.
+# The stable download link is https://zorhire.zortechs.in/desktop/ZorHire-Setup.exe
+name: Desktop app release
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  pull_request:
+    paths: ["desktop/**", "extension/**", ".github/workflows/desktop-release.yml"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload to the ZorHire server (otherwise build only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install
+        working-directory: desktop
+        run: npm ci
+      - name: Check sources
+        working-directory: desktop
+        run: npm run check
+      - name: Tag matches package version
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: bash
+        working-directory: desktop
+        run: |
+          want="${GITHUB_REF_NAME#desktop-v}"
+          have="$(node -p "require('./package.json').version")"
+          if [ "$want" != "$have" ]; then echo "Tag $GITHUB_REF_NAME but desktop/package.json is $have"; exit 1; fi
+      - name: Build installer
+        working-directory: desktop
+        run: npx electron-builder --win --publish never
+      - name: Stable download name
+        shell: bash
+        working-directory: desktop/release
+        run: cp ZorHire-Setup-*.exe ZorHire-Setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zorhire-desktop
+          path: |
+            desktop/release/ZorHire-Setup*.exe
+            desktop/release/*.blockmap
+            desktop/release/latest.yml
+          retention-days: 30
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/desktop-v') || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zorhire-desktop
+          path: desktop-releases
+      - name: Upload to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "desktop-releases/*"
+          target: /opt/zortech
+      - name: Keep the last 3 versions
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /opt/zortech/desktop-releases
+            ls -1t ZorHire-Setup-*.exe 2>/dev/null | tail -n +4 | while read f; do rm -f "$f" "$f.blockmap"; done
+            ls -la
