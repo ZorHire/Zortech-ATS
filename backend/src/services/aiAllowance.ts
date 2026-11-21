@@ -14,6 +14,7 @@
 import pool from "../db";
 import redis from "../lib/redis";
 import type { AgentId } from "./modelRouter";
+import { computeAccess } from "../modules/billing/subscriptionAccess";
 
 export type Meter = "shortlists" | "screenings" | "client_profiles" | "linkedin_prospects";
 export type PlanType = "starter" | "growth" | "enterprise";
@@ -113,12 +114,14 @@ interface TenantPlan {
 
 async function loadPlan(tenantId: string): Promise<TenantPlan> {
   const r = await pool.query(
-    `SELECT t.is_platform_owner, s.plan_type, s.status,
+    `SELECT t.is_platform_owner, s.plan_type, s.status, s.end_date, s.seats,
             (SELECT count(*)::int FROM tenant_memberships m
               WHERE m.tenant_id = t.id AND m.is_active AND m.role = ANY($2)) AS users
        FROM tenants t
        LEFT JOIN subscriptions s ON s.tenant_id = t.id
-      WHERE t.id = $1`,
+      WHERE t.id = $1
+      ORDER BY s.created_at DESC NULLS LAST
+      LIMIT 1`,
     [tenantId, STAFF_ROLES],
   );
   const row = r.rows[0];
@@ -131,11 +134,16 @@ async function loadPlan(tenantId: string): Promise<TenantPlan> {
   }
   const plan = (row.plan_type ?? null) as PlanType | null;
   const status = row.status ?? null;
-  if (!plan || (status !== "active" && status !== "trial")) {
+  // Same rule as sign-in: a plan works until its end date (a cancelled plan until the
+  // end of the paid period), even before the nightly job marks it expired.
+  const access = computeAccess(row);
+  if (!plan || !access.active) {
     return { unlimited: false, plan, status, users, billableUsers: 0, perMeter: none };
   }
   if (status === "trial") return { unlimited: false, plan, status, users, billableUsers: users, perMeter: { ...TRIAL_ALLOWANCE } };
-  const billableUsers = Math.max(users, PLAN_MIN_USERS[plan] ?? 1);
+  // Paid seats, fixed at payment, so users added mid-period don't raise the allowance
+  // before they're paid for. Plans bought before seat billing have no seats yet.
+  const billableUsers = row.seats != null ? Number(row.seats) : Math.max(users, PLAN_MIN_USERS[plan] ?? 1);
   const per = PLAN_ALLOWANCES[plan];
   const perMeter = Object.fromEntries(METERS.map((m) => [m.key, per[m.key] * billableUsers])) as Record<Meter, number>;
   return { unlimited: false, plan, status, users, billableUsers, perMeter };
@@ -269,7 +277,8 @@ export async function tenantsWithoutRoom(meter: Meter): Promise<string[]> {
   // Companies whose plan includes none of this meter, even with no usage yet.
   const zero = await pool.query(
     `SELECT t.id FROM tenants t JOIN subscriptions s ON s.tenant_id = t.id
-      WHERE NOT t.is_platform_owner AND (s.status NOT IN ('active','trial') OR (s.status = 'active' AND s.plan_type = ANY($1)))`,
+      WHERE NOT t.is_platform_owner
+        AND (s.status NOT IN ('active','trial') OR s.end_date <= now() OR (s.status = 'active' AND s.plan_type = ANY($1)))`,
     [Object.entries(PLAN_ALLOWANCES).filter(([, a]) => a[meter] === 0).map(([k]) => k)],
   );
   for (const row of zero.rows) {

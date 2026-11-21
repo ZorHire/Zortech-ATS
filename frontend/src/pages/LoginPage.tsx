@@ -29,7 +29,7 @@ import { setCredentials, setSessionStatus, selectSessionStatus } from "../store/
 
 import type { AuthUser } from "../store/slices/authSlice";
 
-import { setSubscription } from "../store/slices/subscriptionSlice";
+import { setSubscription, toSubscriptionInfo } from "../store/slices/subscriptionSlice";
 
 type View = "login" | "reset";
 
@@ -108,15 +108,7 @@ export default function LoginPage() {
 
       // Preserve existing subscription handling.
       dispatch(
-        setSubscription(
-          data.subscription
-            ? {
-                active: data.subscription.active,
-                isPlatformOwner: data.subscription.isPlatformOwner ?? false,
-                reason: data.subscription.reason ?? null,
-              }
-            : null,
-        ),
+        setSubscription(toSubscriptionInfo(data.subscription)),
       );
 
       // Preserve existing session state.

@@ -1,4 +1,5 @@
 import { baseApi } from "./baseApi";
+import type { ApiSubscription } from "../slices/subscriptionSlice";
 
 export interface LoginPayload {
   email: string;
@@ -18,11 +19,7 @@ export interface LoginResponse {
     vendor_id?: string;
     avatar_url?: string;
   };
-  subscription: {
-    active: boolean;
-    isPlatformOwner: boolean;
-    reason: string | null;
-  } | null;
+  subscription: ApiSubscription | null;
 }
 
 // /auth/me returns flat: { id, email, ..., subscription }
@@ -35,11 +32,7 @@ export interface MeResponse {
   must_change_password?: boolean;
   vendor_id?: string;
   avatar_url?: string;
-  subscription: {
-    active: boolean;
-    isPlatformOwner: boolean;
-    reason: string | null;
-  } | null;
+  subscription: ApiSubscription | null;
 }
 
 export const authApi = baseApi.injectEndpoints({

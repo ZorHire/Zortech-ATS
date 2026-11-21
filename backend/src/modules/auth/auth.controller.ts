@@ -9,6 +9,7 @@ import redis from "../../lib/redis";
 import { AuthRequest } from "../../middleware/auth";
 import { getTenantTransporter } from "../email/email.controller";
 import { isDbUnavailable } from "../../lib/db-errors";
+import { computeAccess, getSubscriptionAccess } from "../billing/subscriptionAccess";
 
 const JWT_SECRET = env.JWT_SECRET;
 
@@ -66,27 +67,9 @@ export const login = async (req: Request, res: Response) => {
     const primaryMembership = membershipResult.rows[0];
 
     // Fetch tenant platform-owner flag and active subscription
-    const tenantRow = primaryMembership
-      ? (
-          await pool.query(
-            `SELECT t.is_platform_owner,
-                  (SELECT status FROM subscriptions
-                   WHERE tenant_id = t.id AND status IN ('active','trial')
-                   ORDER BY created_at DESC LIMIT 1) AS sub_status
-           FROM tenants t WHERE t.id = $1`,
-            [primaryMembership.tenant_id],
-          )
-        ).rows[0]
-      : null;
-
-    const isPlatformOwner = !!tenantRow?.is_platform_owner;
-    const subStatus = tenantRow?.sub_status ?? null;
-    const subscription = {
-      active:
-        isPlatformOwner || subStatus === "active" || subStatus === "trial",
-      isPlatformOwner,
-      reason: subStatus ?? (isPlatformOwner ? "platform_owner" : "none"),
-    };
+    const subscription = primaryMembership
+      ? await getSubscriptionAccess(primaryMembership.tenant_id)
+      : computeAccess(undefined);
 
     // Generate token
     const token = jwt.sign(
@@ -378,22 +361,6 @@ export const getMe = async (req: any, res: Response) => {
       const profile = profileResult.rows[0];
       const primaryMembership = membershipResult.rows[0];
 
-      const tenantRow = primaryMembership
-        ? (
-            await pool.query(
-              `SELECT t.is_platform_owner,
-                    (SELECT status FROM subscriptions
-                     WHERE tenant_id = t.id AND status IN ('active','trial')
-                     ORDER BY created_at DESC LIMIT 1) AS sub_status
-             FROM tenants t WHERE t.id = $1`,
-              [primaryMembership.tenant_id],
-            )
-          ).rows[0]
-        : null;
-
-      const isPlatformOwner = !!tenantRow?.is_platform_owner;
-      const subStatus = tenantRow?.sub_status ?? null;
-
       return {
         id: userId,
         email: user.email,
@@ -403,16 +370,15 @@ export const getMe = async (req: any, res: Response) => {
         tenant_name: primaryMembership?.tenant_name,
         must_change_password: user.must_change_password,
         avatar_url: profile?.avatar_url,
-        subscription: {
-          active:
-            isPlatformOwner || subStatus === "active" || subStatus === "trial",
-          isPlatformOwner,
-          reason: subStatus ?? (isPlatformOwner ? "platform_owner" : "none"),
-        },
       };
     });
 
-    res.json(data);
+    // Plan status is read fresh (not from the 5-minute cache) so a renewal or
+    // expiry shows up on the next page load.
+    const subscription = data.tenant_id
+      ? await getSubscriptionAccess(data.tenant_id)
+      : computeAccess(undefined);
+    res.json({ ...data, subscription });
   } catch (error) {
     console.error("Get me error:", error);
     res.status(500).json({ message: "Internal server error" });

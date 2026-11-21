@@ -46,7 +46,7 @@ export default function AiUsagePage() {
             {!data.unlimited && (
               <div className="zh-card flex flex-wrap items-center gap-x-6 gap-y-2 p-5 text-sm">
                 <span>Plan: <strong>{data.plan ? PLAN_NAMES[data.plan] ?? data.plan : "None"}</strong>{data.subscription_status === "trial" && <Badge tone="info" className="ml-2">Free trial</Badge>}</span>
-                {data.subscription_status !== "trial" && <span>Users counted: <strong>{fmt(data.billable_users)}</strong>{data.billable_users > data.users && <span className="text-muted"> (plan minimum; {fmt(data.users)} active)</span>}</span>}
+                {data.subscription_status !== "trial" && <span>Users counted: <strong>{fmt(data.billable_users)}</strong>{data.billable_users > data.users && <span className="text-muted"> (plan minimum; {fmt(data.users)} active)</span>}{data.billable_users < data.users && <span className="text-muted"> (seats paid for; {fmt(data.users)} active. New users count from the next renewal)</span>}</span>}
                 {data.subscription_status === "trial" && <span className="text-muted">A trial includes a fixed number of AI actions for the whole company.</span>}
                 {isAdmin && <Link to="/subscription" className="font-medium text-navy-700 underline underline-offset-2 hover:text-navy-800">Change plan</Link>}
               </div>

@@ -28,8 +28,13 @@ Set in `backend/src/services/aiAllowance.ts` (`PLAN_ALLOWANCES`, `TRIAL_ALLOWANC
 | AI client profiles | 10 | 20 | 30 |
 | LinkedIn agent | 100 | 300 | 400 |
 
-- **Company total:** the per-user number × users. Users are active staff accounts
+- **Company total:** the per-user number × the **seats the company paid for**
+  (`subscriptions.seats`, see [billing.md](billing.md)). Users added during the period
+  don't raise the allowance until they're paid for at the next renewal. Plans bought
+  before seat billing have no seat count yet; for those, users = active staff accounts
   (not vendor or client portal users), but at least the plan's minimum (5 / 26 / 150).
+- **Plan ended:** no AI actions once the plan's end date passes (the same moment staff
+  are blocked). A cancelled plan keeps its allowance until the paid period ends.
 - **Free trial:** a fixed pool for the company: 50 / 10 / 10 / 100.
 - **Unlimited:** ZorTech's own company (`tenants.is_platform_owner`).
 - **Reset:** the 1st of each month, India time.

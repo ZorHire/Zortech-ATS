@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Check, X, Zap } from "lucide-react";
-import { Button } from "../ui";
+import { Button, useConfirm } from "../ui";
+import { ApiError } from "../../lib/api";
 import { useNotify } from "../../hooks/useNotify";
+import { useAppDispatch } from "../../hooks/useAppDispatch";
+import { baseApi } from "../../store/api/baseApi";
 import {
   PLANS,
   Plan,
@@ -11,7 +14,11 @@ import {
   Subscription,
   billingService,
   RazorpayOrderResponse,
+  QuoteResponse,
+  SeatQuote,
 } from "../../services/billing.service";
+
+const rupees = (paisa: number) => `₹${(paisa / 100).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 function loadRazorpayScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -31,11 +38,20 @@ interface PricingCardsProps {
 
 export default function PricingCards({ onSubscribed, publicMode = false }: PricingCardsProps) {
   const notify = useNotify();
+  const confirm = useConfirm();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   const [billing, setBilling] = useState<BillingCycle>("monthly");
   const [currentSub, setCurrentSub] = useState<Subscription | null>(null);
   const [loadingSub, setLoadingSub] = useState(!publicMode);
   const [subscribing, setSubscribing] = useState<PlanType | null>(null);
+  const [quote, setQuote] = useState<QuoteResponse | null>(null);
+
+  const loadQuote = () =>
+    billingService
+      .getQuote()
+      .then(setQuote)
+      .catch(() => setQuote(null));
 
   useEffect(() => {
     if (publicMode) return;
@@ -43,7 +59,11 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
       .getCurrentSubscription()
       .then((sub) => setCurrentSub(sub))
       .finally(() => setLoadingSub(false));
+    loadQuote();
   }, [publicMode]);
+
+  const quoteFor = (planId: PlanType): SeatQuote | undefined =>
+    quote?.quotes.find((q) => q.plan_type === planId && q.billing_cycle === billing);
 
   const handleSubscribe = async (plan: Plan) => {
     if (publicMode) {
@@ -55,9 +75,49 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
       window.open("mailto:tech@zortechs.in?subject=Enterprise Plan Inquiry", "_blank");
       return;
     }
+    const q = quoteFor(plan.id);
+    if (!q) {
+      notify.error("Couldn't work out your price. Please refresh and try again.");
+      return;
+    }
+    if (!q.eligible) {
+      notify.error(q.reason || "This plan doesn't fit your number of users.");
+      return;
+    }
+    const ok = await confirm({
+      title: `Pay ${rupees(q.amount_paisa)} for ${plan.name}?`,
+      message: (
+        <div className="space-y-1 text-sm">
+          <p>
+            {q.seats} users × ₹{q.unit_price.toLocaleString("en-IN")}/user/mo
+            {q.months > 1 ? ` × ${q.months} months` : ""} = <strong>{rupees(q.amount_paisa)}</strong>
+          </p>
+          <p className="text-muted">
+            {q.seats > q.staff_users
+              ? `You have ${q.staff_users} users; ${plan.name} bills at least ${plan.user_min}.`
+              : `Counted from your ${q.staff_users} active team members (vendor and client portal users are free).`}
+          </p>
+          <p className="text-muted">Users added later are billed from your next renewal.</p>
+        </div>
+      ),
+      confirmText: `Pay ${rupees(q.amount_paisa)}`,
+      cancelText: "Not now",
+    });
+    if (!ok) return;
     setSubscribing(plan.id);
     try {
-      const order: RazorpayOrderResponse = await billingService.subscribe(plan.id, billing);
+      let order: RazorpayOrderResponse;
+      try {
+        order = await billingService.subscribe(plan.id, billing, q.amount_paisa);
+      } catch (err) {
+        if (err instanceof ApiError && err.data?.code === "QUOTE_CHANGED") {
+          await loadQuote();
+          notify.error("Your number of users changed. Please check the new total and try again.");
+          setSubscribing(null);
+          return;
+        }
+        throw err;
+      }
 
       const loaded = await loadRazorpayScript();
       if (!loaded) {
@@ -72,7 +132,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
         currency: order.currency,
         order_id: order.order_id,
         name: "ZorHire",
-        description: `${plan.name} – ${billing} billing`,
+        description: `${plan.name} – ${order.seats} users – ${billing} billing`,
         theme: { color: "#1A4277" }, // ZorTech navy (Razorpay needs a hex value)
         handler: async (response: {
           razorpay_order_id: string;
@@ -88,6 +148,8 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
               billing_cycle: order.billing_cycle,
             });
             setCurrentSub(subscription);
+            // Refresh the plan status held for the whole app (lifts the "plan ended" block).
+            dispatch(baseApi.util.invalidateTags(["Auth"]));
             onSubscribed?.(subscription);
           } catch (err: any) {
             notify.error(err?.message || "Payment verification failed. Please contact support.");
@@ -192,6 +254,7 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
           const price =
             billing === "monthly" ? plan.price_monthly : plan.price_yearly;
           const isCurrent = isCurrentPlan(plan.id);
+          const q = publicMode ? undefined : quoteFor(plan.id);
           const isDowngrading = isDowngrade(plan.id);
           const isRecommended = plan.recommended;
           const saving =
@@ -238,11 +301,39 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
                 </div>
 
                 {/* User range */}
-                <p className="mb-6 mt-1 text-xs font-medium text-muted">
+                <p className={`${q ? "mb-3" : "mb-6"} mt-1 text-xs font-medium text-muted`}>
                   {plan.user_max
                     ? `${plan.user_min}–${plan.user_max} users`
                     : `${plan.user_min}+ users`}
                 </p>
+
+                {/* What this company would pay */}
+                {q && plan.id !== "enterprise" && (
+                  <div
+                    className={`mb-5 rounded-lg px-3 py-2.5 text-xs ${
+                      q.eligible ? "bg-surface-sunken text-ink-soft" : "bg-danger-50 text-danger-700"
+                    }`}
+                  >
+                    {q.eligible ? (
+                      <>
+                        <p>
+                          {q.seats} users × ₹{q.unit_price.toLocaleString("en-IN")}
+                          {q.months > 1 ? ` × ${q.months} mo` : ""}
+                        </p>
+                        <p className="mt-0.5 text-sm font-semibold text-ink">
+                          {rupees(q.amount_paisa)} {q.months > 1 ? "billed yearly" : "per month"}
+                        </p>
+                        {q.seats > q.staff_users && (
+                          <p className="mt-0.5 text-muted">
+                            You have {q.staff_users}; minimum is {plan.user_min}.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p>{q.reason}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* CTA button */}
                 <Button
@@ -250,7 +341,12 @@ export default function PricingCards({ onSubscribed, publicMode = false }: Prici
                   size="lg"
                   fullWidth
                   onClick={() => handleSubscribe(plan)}
-                  disabled={isCurrent || isDowngrading || subscribing !== null}
+                  disabled={
+                    isCurrent ||
+                    isDowngrading ||
+                    subscribing !== null ||
+                    (!publicMode && plan.id !== "enterprise" && (!q || !q.eligible))
+                  }
                   loading={subscribing === plan.id}
                   loadingText="Processing…"
                 >

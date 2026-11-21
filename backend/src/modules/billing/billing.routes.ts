@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getPlans,
+  getQuote,
   getCurrentSubscription,
   getTransactions,
   subscribe,
@@ -18,6 +19,7 @@ const billingReadRoles = ["super_admin", "accounts_manager", "recruiter", "vendo
 
 // Any authenticated tenant member can view plans and current subscription
 router.get("/plans",        authMiddleware, tenantIsolation, authorize(billingReadRoles), getPlans);
+router.get("/quote",        authMiddleware, tenantIsolation, authorize(billingReadRoles), getQuote);
 router.get("/current",      authMiddleware, tenantIsolation, authorize(billingReadRoles), getCurrentSubscription);
 router.get("/transactions",  authMiddleware, tenantIsolation, authorize(billingReadRoles), getTransactions);
 

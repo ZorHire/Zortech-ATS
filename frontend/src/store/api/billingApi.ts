@@ -24,7 +24,7 @@ export const billingApi = baseApi.injectEndpoints({
 
     subscribe: builder.mutation<
       RazorpayOrderResponse,
-      { plan_type: PlanType; billing_cycle: BillingCycle }
+      { plan_type: PlanType; billing_cycle: BillingCycle; expected_amount?: number }
     >({
       query: (body) => ({ url: "/billing/subscribe", method: "POST", body }),
     }),
