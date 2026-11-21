@@ -93,6 +93,13 @@ tenantId>` to run it. It is not included in the installer.
 The first release needs the nginx and docker-compose changes from this branch to be
 deployed (they add the `/desktop/` route and mount).
 
+## Licence agreement (EULA)
+
+The installer shows the End User License Agreement, and the user must click **I Agree**
+before it installs. The text is `desktop/build/license.txt` (plain text, version and date at
+the top). To change it, edit that file, bump the version line, and release a new installer.
+Silent auto-updates don't show it again, so for a material change, also tell users in the app.
+
 ## Code signing
 
 The installer is not signed yet, so Windows SmartScreen shows "Windows protected your

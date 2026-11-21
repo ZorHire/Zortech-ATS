@@ -36,8 +36,11 @@
       "artifactName": "ZorHire-Setup-${version}.${ext}"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "license": "build/license.txt",
+      "allowToChangeInstallationDirectory": false,
       "perMachine": false,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "ZorHire"
