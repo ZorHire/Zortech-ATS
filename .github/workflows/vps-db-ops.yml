@@ -1,0 +1,64 @@
+# One-click database operations on the production VPS, run from GitHub:
+# Actions → "VPS database ops" → Run workflow → pick an action.
+#   preflight  - checks RAM/disk and that Neon is reachable. Changes nothing.
+#   migrate    - copies Neon into the Postgres container on the VPS, verifies every table's
+#                row count, then switches the app over (auto-reverts to Neon on any failure).
+#   backup-now - takes a database backup immediately (VPS + Cloudflare R2).
+#   status     - shows containers, memory, disk and the latest backups.
+#   rollback   - points the app back at Neon (see ops/rollback-to-neon.sh).
+name: VPS database ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to run on the VPS"
+        required: true
+        default: preflight
+        type: choice
+        options: [preflight, migrate, backup-now, status, rollback]
+
+concurrency:
+  group: vps-db-ops
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload compose file and ops scripts
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,ops"
+          target: /opt/zortech
+
+      - name: Run ${{ inputs.action }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          command_timeout: 30m
+          script: |
+            set -e
+            cd /opt/zortech
+            chmod +x ops/*.sh ops/db-backup/backup.sh
+            case "${{ inputs.action }}" in
+              preflight)  bash ops/migrate-neon-to-local.sh --check ;;
+              migrate)    bash ops/migrate-neon-to-local.sh ;;
+              backup-now)
+                grep -q '^COMPOSE_PROFILES=.*localdb' .env || { echo "The local database is not set up yet; run 'migrate' first."; exit 1; }
+                docker compose run --rm db-backup /usr/local/bin/backup.sh ;;
+              rollback)   bash ops/rollback-to-neon.sh ;;
+              status)
+                free -h; echo; df -h /opt/zortech; echo
+                docker compose ps
+                echo; echo "Latest backups on the VPS:"; ls -lt backups/*.dump 2>/dev/null | head -10 || echo "  none yet"
+                if [ -f backups/.last-run ]; then echo "Last backup run: $(cat backups/.last-run) (exit status $(cat backups/.last-status))"; fi
+                ;;
+            esac
