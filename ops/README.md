@@ -18,7 +18,8 @@ All of these can be run from GitHub without SSH: **Actions → VPS database ops 
 
 ## Migration day (1 December 2026, when Neon's quota resets)
 
-1. Merge this PR to `main`.
+1. Merge this PR to `main`. Then run **VPS settings (.env)** with **apply** (see below), so the R2
+   keys are in place for the first backup.
 2. Run the workflow with **preflight**. It prints the VPS's CPU, RAM and disk, and checks that Neon
    is reachable. It changes nothing. It stops with an error if there is less than 600 MB of free RAM
    or 5 GB of disk; in that case, use Neon's paid Launch plan instead.
@@ -45,6 +46,26 @@ Neon is never modified. Keep the Neon project for a couple of weeks as a fallbac
   `bash /opt/zortech/ops/db-restore.sh r2:db-backups/zorhire/zorhire-YYYYMMDD-HHMM.dump` restores one.
   The current database is saved first, so a restore can itself be undone.
 - **Back to Neon:** workflow action **rollback**. Data written after the migration is not copied back.
+
+## Putting API keys into `.env` without SSH
+
+**Actions → VPS settings (.env) → Run workflow** (`.github/workflows/vps-settings.yml`, works once on `main`).
+
+1. Add the keys as GitHub repository secrets (Settings → Secrets and variables → Actions), with
+   exactly these names: `ANTHROPIC_API_KEY`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+   `R2_SECRET_ACCESS_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`.
+   Leave one out to keep the value the VPS already has.
+2. Run **check**. It lists which secrets are set and which keys the VPS `.env` has (names only,
+   never values). It changes nothing.
+3. Run **apply**. It backs up `.env` (keeps the last 5 as `.env.bak-*`), writes each key that has a
+   secret, sets `R2_BUCKET=zorhire-files` and `HELP_SUPPORT_EMAIL=tech@zortechs.in`, restarts
+   the backend and waits for `/v1/health`. If the backend doesn't come back, it restores the old
+   `.env` and restarts again.
+
+It never touches other lines (database, JWT, Redis, `SCREENING_CHAT_ENABLED`). It refuses values with
+a line break, space, `$`, quote or `#`, because docker compose would change them.
+
+Run it **before migrate** on migration day, so the first backup can go to R2.
 
 ## Settings (`/opt/zortech/.env`)
 

@@ -1,0 +1,179 @@
+# Puts app settings (API keys) into /opt/zortech/.env on the production VPS, from
+# GitHub repository secrets, so nobody needs to SSH in to edit .env by hand.
+#
+# Actions → "VPS settings (.env)" → Run workflow → pick an action:
+#   check  - lists which keys are set as GitHub secrets and which are in the VPS .env.
+#            Names only, never values. Changes nothing.
+#   apply  - writes every key that has a GitHub secret into .env (adds it, or replaces the
+#            old value), backs up the old .env first, restarts the backend and checks health.
+#            If the backend doesn't come back healthy, it restores the old .env by itself.
+#
+# Keys this workflow manages (add them under Settings → Secrets and variables → Actions,
+# with exactly these names; leave a secret out to keep whatever the VPS .env already has):
+#   ANTHROPIC_API_KEY, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+#   RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+# Also always set (not secret): R2_BUCKET and HELP_SUPPORT_EMAIL, below.
+#
+# It never touches any other .env line (database, JWT, Redis, SCREENING_CHAT_ENABLED, ...).
+name: VPS settings (.env)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "check = list keys (no changes); apply = write keys and restart backend"
+        required: true
+        default: check
+        type: choice
+        options: [check, apply]
+
+# Same group as "VPS database ops", so this never runs during a database migration.
+concurrency:
+  group: vps-db-ops
+  cancel-in-progress: false
+
+env:
+  SECRET_KEYS: >-
+    ANTHROPIC_API_KEY R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
+    RAZORPAY_KEY_ID RAZORPAY_KEY_SECRET RAZORPAY_WEBHOOK_SECRET
+  R2_BUCKET: zorhire-files
+  HELP_SUPPORT_EMAIL: tech@zortechs.in
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build the settings file from secrets
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_KEY_SECRET }}
+          RAZORPAY_WEBHOOK_SECRET: ${{ secrets.RAZORPAY_WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p _settings
+          out=_settings/zorhire-settings.env
+          : > "$out"
+          echo "GitHub secrets:"
+          for key in $SECRET_KEYS; do
+            value="${!key:-}"
+            # Strip a trailing newline or CR that sometimes comes along when pasting.
+            value="${value%$'\n'}"; value="${value%$'\r'}"
+            if [ -z "$value" ]; then
+              echo "  $key: not set (the VPS .env keeps its current value)"
+              continue
+            fi
+            case "$value" in
+              *$'\n'*|*$'\r'*) echo "::error::$key has a line break in it. Paste it again as one line."; exit 1 ;;
+              # docker compose reads .env with $-expansion, quotes and # comments, so these
+              # characters would change the value. Real API keys don't contain them.
+              *'$'*|*'"'*|*"'"*|*'#'*|*' '*) echo "::error::$key contains a space, \$, quote or #. Check it was copied correctly."; exit 1 ;;
+            esac
+            printf '%s=%s\n' "$key" "$value" >> "$out"
+            echo "  $key: set"
+          done
+          printf 'R2_BUCKET=%s\nHELP_SUPPORT_EMAIL=%s\n' "$R2_BUCKET" "$HELP_SUPPORT_EMAIL" >> "$out"
+          echo "  R2_BUCKET=$R2_BUCKET, HELP_SUPPORT_EMAIL=$HELP_SUPPORT_EMAIL (fixed)"
+
+      - name: Upload the settings file
+        if: inputs.action == 'apply'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          source: "_settings/zorhire-settings.env"
+          target: /opt/zortech/.incoming
+          strip_components: 1
+
+      - name: Remove the settings file from the runner
+        if: always()
+        run: rm -rf _settings
+
+      - name: ${{ inputs.action == 'apply' && 'Write .env, restart backend, check health' || 'Show which keys the VPS .env has' }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /opt/zortech
+            incoming=/opt/zortech/.incoming/zorhire-settings.env
+            trap 'rm -rf /opt/zortech/.incoming' EXIT
+
+            show_keys() {
+              echo "Keys in /opt/zortech/.env (names only):"
+              for key in ${{ env.SECRET_KEYS }} R2_BUCKET HELP_SUPPORT_EMAIL; do
+                if grep -q "^${key}=." .env; then echo "  $key: present"; else echo "  $key: MISSING"; fi
+              done
+              screening=$(grep '^SCREENING_CHAT_ENABLED=' .env | tail -1 | cut -d= -f2- || true)
+              echo "  SCREENING_CHAT_ENABLED: ${screening:-not set (off)}"
+            }
+
+            [ -f .env ] || { echo "/opt/zortech/.env not found. Stop and check the VPS."; exit 1; }
+
+            if [ "${{ inputs.action }}" != "apply" ]; then
+              show_keys
+              exit 0
+            fi
+
+            [ -s "$incoming" ] || { echo "Settings file did not arrive."; exit 1; }
+
+            backup=".env.bak-$(date +%Y%m%d-%H%M%S)"
+            cp -p .env "$backup"
+            chmod 600 "$backup"
+            echo "Backed up the old .env to /opt/zortech/$backup"
+
+            # Replace or add each key. Keys are fixed names, so they are safe in a regex.
+            # 'cat >' keeps the file's owner and permissions.
+            while IFS= read -r line; do
+              key="${line%%=*}"
+              grep -v "^${key}=" .env > .env.tmp || true
+              printf '%s\n' "$line" >> .env.tmp
+              cat .env.tmp > .env
+              rm -f .env.tmp
+              echo "  wrote $key"
+            done < "$incoming"
+
+            show_keys
+
+            healthy() {
+              timeout 10 docker compose exec -T backend node -e \
+                "const r=require('http').get('http://localhost:8080/v1/health',res=>{process.exit(res.statusCode===200?0:1)});r.setTimeout(5000,()=>{r.destroy();process.exit(1)});r.on('error',()=>process.exit(1))" \
+                > /dev/null 2>&1
+            }
+
+            wait_healthy() {
+              for i in $(seq 1 36); do
+                if healthy; then echo "Backend healthy after $(( i * 5 ))s"; return 0; fi
+                echo "  [${i}/36] not ready yet"
+                sleep 5
+              done
+              return 1
+            }
+
+            echo "Restarting the backend with the new settings..."
+            docker compose up -d --force-recreate --no-deps backend
+            if wait_healthy; then
+              # Keep only the 5 newest .env backups.
+              ls -1t .env.bak-* 2>/dev/null | tail -n +6 | xargs -r rm -f
+              echo "Done."
+              exit 0
+            fi
+
+            echo "Backend did not come back healthy. Restoring the old .env..."
+            docker compose logs backend --tail=50 2>&1 | grep -viE 'key|secret|token|password' || true
+            cat "$backup" > .env
+            docker compose up -d --force-recreate --no-deps backend
+            if wait_healthy; then
+              echo "Restored the old .env; the backend is healthy again. Check the new keys and run apply again."
+            else
+              echo "The backend is still unhealthy after restoring the old .env. Tell Joy."
+            fi
+            exit 1
