@@ -8,6 +8,7 @@ import ToastContainer from "../ui/ToastContainer";
 import ErrorBoundary from "../ErrorBoundary";
 import { PageSkeleton } from "../ui/Skeleton";
 import { ServerUnreachableBanner } from "./AppStatusScreens";
+import RenewalReminder from "../subscription/RenewalReminder";
 import { useAppDispatch } from "../../hooks/useAppDispatch";
 import { useAppSelector } from "../../hooks/useAppSelector";
 import { selectSidebarCollapsed, setSidebarCollapsed } from "../../store/slices/uiSlice";
@@ -53,6 +54,7 @@ export default function Layout({ children }: LayoutProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenu={() => setMobileOpen(true)} onSearch={() => setPaletteOpen(true)} />
         <ServerUnreachableBanner />
+        <RenewalReminder />
         {/* The page area scrolls; pages without their own scroll wrapper used to be clipped. */}
         <main id="main-content" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
           {/* A crash or slow chunk on one screen no longer takes the sidebar with it. */}

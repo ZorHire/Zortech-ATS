@@ -31,6 +31,26 @@ export interface Subscription {
   start_date: string;
   end_date: string | null;
   razorpay_subscription_id: string | null;
+  /** Seats paid for in this period (null for subscriptions made before per-user billing). */
+  seats?: number | null;
+}
+
+/** What checkout charges right now: per-user price × seats. */
+export interface SeatQuote {
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+  staff_users: number;
+  seats: number;
+  unit_price: number; // ₹ per user per month
+  months: number;
+  amount_paisa: number;
+  eligible: boolean;
+  reason: string | null;
+}
+
+export interface QuoteResponse {
+  staff_users: number;
+  quotes: SeatQuote[];
 }
 
 export interface RazorpayOrderResponse {
@@ -40,6 +60,9 @@ export interface RazorpayOrderResponse {
   currency: string;
   plan_type: PlanType;
   billing_cycle: BillingCycle;
+  seats: number;
+  unit_price: number;
+  months: number;
 }
 
 export interface VerifyPaymentRequest {
@@ -61,6 +84,8 @@ export interface PaymentTransaction {
   plan_type: PlanType;
   billing_cycle: BillingCycle;
   amount: number;
+  seats?: number | null;
+  unit_price_paisa?: number | null;
   currency: string;
   status: "pending" | "captured" | "failed" | "refunded";
   failure_reason: string | null;
@@ -145,11 +170,17 @@ export const billingService = {
     return api.get("/billing/current").catch(() => null);
   },
 
+  getQuote(): Promise<QuoteResponse> {
+    return api.get("/billing/quote");
+  },
+
+  /** `expected_amount` is the total (paisa) the admin saw; the server refuses if it no longer matches. */
   subscribe(
     plan_type: PlanType,
     billing_cycle: BillingCycle,
+    expected_amount?: number,
   ): Promise<RazorpayOrderResponse> {
-    return api.post("/billing/subscribe", { plan_type, billing_cycle });
+    return api.post("/billing/subscribe", { plan_type, billing_cycle, expected_amount });
   },
 
   verifyPayment(payload: VerifyPaymentRequest): Promise<VerifyPaymentResponse> {

@@ -2,6 +2,7 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { clearCredentials, setSessionStatus } from "../slices/authSlice";
 import { markServerReachable, markServerUnreachable } from "../slices/connectionSlice";
+import { markSubscriptionLapsed } from "../slices/subscriptionSlice";
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: import.meta.env.VITE_API_URL || "http://localhost:5000/v1",
@@ -60,6 +61,12 @@ const baseQueryWith401: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryE
     api.dispatch(markServerUnreachable());
   } else {
     api.dispatch(markServerReachable());
+  }
+
+  // The company's plan has ended: the app swaps to the "plan ended" screen.
+  const errData = (result.error as { data?: { code?: string } } | undefined)?.data;
+  if (result.error?.status === 402 && errData?.code === "SUBSCRIPTION_EXPIRED") {
+    api.dispatch(markSubscriptionLapsed());
   }
 
   // A 401 on the login request itself is just "wrong password", not an expired session.

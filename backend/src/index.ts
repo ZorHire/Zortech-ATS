@@ -43,6 +43,7 @@ import integrationsRoutes from "./modules/integrations/integrations.routes";
 import ledgerRoutes from "./modules/ledger/ledger.routes";
 import { initLedgerDb } from "./modules/ledger/ledger.db";
 import { startScheduler } from "./scheduler";
+import { requireActiveSubscription } from "./middleware/subscription";
 
 const app = express();
 const port = env.PORT;
@@ -145,7 +146,7 @@ const parseLimiter = rateLimit({
 // This allows Multer to handle the multipart/form-data request first
 const parseRouter = express.Router();
 parseRouter.use("/", parseRoutes);
-app.use("/v1/parse", parseLimiter, parseRouter);
+app.use("/v1/parse", parseLimiter, requireActiveSubscription, parseRouter);
 
 // A5 screening chat is the first unauthenticated, LLM-cost-exposed public endpoint
 // in this backend — no rate limiting existed here at all before this.
@@ -162,7 +163,14 @@ app.use("/v1/screening", screeningLimiter);
 const whatsappWebhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 600, standardHeaders: true, legacyHeaders: false });
 app.use("/v1/whatsapp/webhook", whatsappWebhookLimiter, whatsappWebhookRouter);
 
-app.use(express.json());
+// Keep the raw bytes for the Razorpay webhook: its signature is over the exact body sent.
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      if (req.url?.startsWith("/v1/billing/razorpay-webhook")) (req as any).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(morgan("dev"));
 
 // Uploaded files are NOT served statically. The old route here only checked that
@@ -214,6 +222,9 @@ app.get("/v1/health/ready", async (_req, res) => {
 
 // Routes
 const v1Router = express.Router();
+
+// Staff of a company whose plan has ended can only reach sign-in, billing and profile.
+v1Router.use(requireActiveSubscription);
 
 // Tighter rate limit on forgot-password specifically (applies before the broader authLimiter)
 v1Router.post("/auth/forgot-password", forgotPasswordLimiter);

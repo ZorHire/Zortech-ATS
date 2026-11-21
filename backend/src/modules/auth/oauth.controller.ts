@@ -4,6 +4,7 @@ import crypto from "crypto";
 import pool from "../../db";
 import env from "../../config/env";
 import redis from "../../lib/redis";
+import { getSubscriptionAccess } from "../billing/subscriptionAccess";
 import {
   createOAuthState,
   getGoogleAuthorizationUrl,
@@ -171,35 +172,7 @@ async function completeOAuthLogin(
     );
   }
 
-  const tenantResult = await pool.query(
-    `SELECT
-       t.is_platform_owner,
-       (
-         SELECT status
-         FROM subscriptions
-         WHERE tenant_id = t.id
-           AND status IN ('active', 'trial')
-         ORDER BY created_at DESC
-         LIMIT 1
-       ) AS sub_status
-     FROM tenants t
-     WHERE t.id = $1`,
-    [membership.tenant_id],
-  );
-
-  const tenant = tenantResult.rows[0];
-
-  const isPlatformOwner = !!tenant?.is_platform_owner;
-
-  const subStatus = tenant?.sub_status ?? null;
-
-  const subscription = {
-    active: isPlatformOwner || subStatus === "active" || subStatus === "trial",
-
-    isPlatformOwner,
-
-    reason: subStatus ?? (isPlatformOwner ? "platform_owner" : "none"),
-  };
+  const subscription = await getSubscriptionAccess(membership.tenant_id);
 
   const token = jwt.sign(
     {
@@ -288,27 +261,7 @@ export const exchangeOAuthCode = async (req: Request, res: Response) => {
 
     const membership = membershipResult.rows[0];
 
-    const tenantResult = await pool.query(
-      `SELECT
-           t.is_platform_owner,
-           (
-             SELECT status
-             FROM subscriptions
-             WHERE tenant_id = t.id
-               AND status IN ('active', 'trial')
-             ORDER BY created_at DESC
-             LIMIT 1
-           ) AS sub_status
-         FROM tenants t
-         WHERE t.id = $1`,
-      [membership.tenant_id],
-    );
-
-    const tenant = tenantResult.rows[0];
-
-    const isPlatformOwner = !!tenant?.is_platform_owner;
-
-    const subStatus = tenant?.sub_status ?? null;
+    const subscription = await getSubscriptionAccess(membership.tenant_id);
 
     return res.json({
       token,
@@ -324,14 +277,7 @@ export const exchangeOAuthCode = async (req: Request, res: Response) => {
         avatar_url: profile?.avatar_url,
       },
 
-      subscription: {
-        active:
-          isPlatformOwner || subStatus === "active" || subStatus === "trial",
-
-        isPlatformOwner,
-
-        reason: subStatus ?? (isPlatformOwner ? "platform_owner" : "none"),
-      },
+      subscription,
     });
   } catch (error) {
     console.error("OAuth exchange error:", error);

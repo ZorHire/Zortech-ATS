@@ -58,6 +58,11 @@ export const api = {
         );
       }
 
+      if (response.status === 402) {
+        // The company's plan has ended; App swaps to the "plan ended" screen.
+        window.dispatchEvent(new CustomEvent("subscription:lapsed"));
+      }
+
       if (!response.ok) {
         if (retry && [500, 502, 503, 504].includes(response.status)) {
           return this.request(endpoint, options, false);

@@ -13,8 +13,10 @@ import type { AuthUser } from "./store/slices/authSlice";
 import {
   selectSubscription,
   setSubscription,
+  toSubscriptionInfo,
+  isLapsed,
+  markSubscriptionLapsed,
 } from "./store/slices/subscriptionSlice";
-import type { SubscriptionInfo } from "./store/slices/subscriptionSlice";
 import { useMeQuery } from "./store/api/authApi";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ConfirmProvider } from "./components/ui/ConfirmDialog";
@@ -24,6 +26,7 @@ import { FullPageLoader, ServerUnreachableScreen } from "./components/layout/App
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import { PageSkeleton } from "./components/ui/Skeleton";
 import { HelpProvider } from "./components/help/HelpContext";
+import PlanEndedScreen from "./components/subscription/PlanEndedScreen";
 
 // Route-level code splitting: each screen downloads when first opened.
 const LandingPage = lazy(() => import("./pages/LandingPage"));
@@ -87,6 +90,11 @@ const SUBSCRIPTION_EXEMPT_PATHS = ["/pricing", "/subscription", "/onboarding", "
 // Portal paths bypass the subscription gate — portal users don't control the subscription
 const PORTAL_PREFIXES = ["/vendor-portal", "/client-portal"];
 
+// When a plan has lapsed, staff are blocked; billing admins may still renew here.
+const STAFF_ROLES = ["super_admin", "accounts_manager", "recruiter", "vendor_manager"];
+const BILLING_ADMIN_ROLES = ["super_admin", "accounts_manager"];
+const RENEWAL_PATHS = ["/subscription", "/pricing"];
+
 // Replaces the old AuthSyncer+AuthProvider bridge.
 // Calls /auth/me on load (if JWT exists) and populates Redux auth state.
 // Also listens for mid-session 401 events from legacy api.ts calls.
@@ -114,15 +122,7 @@ function SessionRestorer() {
       }),
     );
     dispatch(
-      setSubscription(
-        subscription
-          ? ({
-              active: subscription.active,
-              isPlatformOwner: subscription.isPlatformOwner ?? false,
-              reason: subscription.reason ?? null,
-            } satisfies SubscriptionInfo)
-          : null,
-      ),
+      setSubscription(toSubscriptionInfo(subscription)),
     );
     dispatch(setSessionStatus("active"));
   }, [isSuccess, data, dispatch]);
@@ -140,6 +140,13 @@ function SessionRestorer() {
       dispatch(setSessionStatus("unreachable"));
     }
   }, [isError, error, dispatch]);
+
+  // Legacy api.ts calls report a lapsed plan (HTTP 402) with this event.
+  useEffect(() => {
+    const onLapsed = () => dispatch(markSubscriptionLapsed());
+    window.addEventListener("subscription:lapsed", onLapsed);
+    return () => window.removeEventListener("subscription:lapsed", onLapsed);
+  }, [dispatch]);
 
   // Handle mid-session 401s fired by legacy api.ts calls
   useEffect(() => {
@@ -213,6 +220,16 @@ function ProtectedRoute({
           (p) => path === p || path.startsWith(p + "/"),
         )
       : false);
+
+  // Gate 3a: the company's plan ran out and wasn't renewed. Staff are blocked;
+  // billing admins can still open the renewal page. Portal users are not blocked.
+  if (isLapsed(subscription) && STAFF_ROLES.includes(user.role) && !isPortalPath) {
+    const canRenewHere =
+      BILLING_ADMIN_ROLES.includes(user.role) &&
+      !!path &&
+      RENEWAL_PATHS.some((p) => path === p || path.startsWith(p + "/"));
+    if (!canRenewHere) return <PlanEndedScreen />;
+  }
 
   if (
     !isSubscriptionExempt &&

@@ -35,6 +35,8 @@ function fmt(dateStr: string) {
   });
 }
 
+const rupees = (r: number) => `₹${r.toLocaleString("en-IN")}`;
+
 function daysLeft(dateStr: string) {
   return Math.ceil(
     (new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
@@ -43,7 +45,7 @@ function daysLeft(dateStr: string) {
 
 function statusTone(status: string): BadgeTone {
   if (status === "active" || status === "captured") return "success";
-  if (status === "cancelled" || status === "failed") return "danger";
+  if (status === "cancelled" || status === "failed" || status === "expired") return "danger";
   if (status === "pending") return "warning";
   return "neutral";
 }
@@ -58,14 +60,17 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
+  const [staffUsers, setStaffUsers] = useState<number | null>(null);
 
   useEffect(() => {
     Promise.all([
       billingService.getCurrentSubscription().catch(() => null),
       billingService.getTransactions(),
-    ]).then(([s, txns]) => {
+      billingService.getQuote().catch(() => null),
+    ]).then(([s, txns, q]) => {
       setSub(s);
       setTransactions(txns);
+      setStaffUsers(q?.staff_users ?? null);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -99,6 +104,11 @@ export default function SubscriptionPage() {
         : planMeta.price_monthly
       : null;
   const renewDays = sub?.end_date ? daysLeft(sub.end_date) : null;
+  // A plan past its end date has ended even if the nightly job hasn't marked it yet.
+  const ended =
+    !!sub &&
+    (sub.status === "expired" || (!!sub.end_date && new Date(sub.end_date).getTime() <= Date.now()));
+  const status = ended ? "expired" : sub?.status ?? "";
   // Savings come from the plan's own prices rather than a fixed claim.
   const yearlySaving =
     planMeta && planMeta.price_monthly > 0
@@ -113,8 +123,8 @@ export default function SubscriptionPage() {
         actions={
           <>
             {sub && (
-              <Badge tone={statusTone(sub.status)} className="capitalize">
-                {sub.status}
+              <Badge tone={statusTone(status)} className="capitalize">
+                {status}
               </Badge>
             )}
             <Button onClick={() => navigate("/pricing")} icon={<ArrowRight size={14} aria-hidden="true" />}>
@@ -132,7 +142,7 @@ export default function SubscriptionPage() {
             <Skeleton className="h-3.5 w-64" />
             <Skeleton className="h-3.5 w-56" />
           </div>
-        ) : sub && sub.status === "active" ? (
+        ) : sub && status === "active" ? (
 
           /* ── Active Plan Card ── */
           <div className="zh-card overflow-hidden">
@@ -166,7 +176,13 @@ export default function SubscriptionPage() {
                             : "Annual billing"}
                         </p>
                       )}
-                      {planMeta && (
+                      {sub.seats ? (
+                        <p className="mt-1 text-xs text-muted">
+                          {sub.seats} users paid ·{" "}
+                          {rupees(price * sub.seats * (sub.billing_cycle === "yearly" ? 12 : 1))}
+                          {sub.billing_cycle === "yearly" ? " per year" : " per month"}
+                        </p>
+                      ) : planMeta && (
                         <p className="mt-1 text-xs text-muted">
                           {planMeta.user_max
                             ? `${planMeta.user_min}–${planMeta.user_max} users`
@@ -209,6 +225,14 @@ export default function SubscriptionPage() {
                 </dl>
               </div>
 
+              {sub.seats != null && staffUsers != null && staffUsers > sub.seats && (
+                <p className="mt-5 rounded-lg bg-warning-50 px-4 py-3 text-sm text-warning-700">
+                  You now have {staffUsers} team members and have paid for {sub.seats}. The extra{" "}
+                  {staffUsers - sub.seats === 1 ? "user is" : `${staffUsers - sub.seats} users are`} billed from
+                  your next renewal{sub.end_date ? ` on ${fmt(sub.end_date)}` : ""}.
+                </p>
+              )}
+
               {/* Action row */}
               <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-dashed border-line pt-5">
                 <Button onClick={() => navigate("/pricing")} icon={<ArrowRight size={14} aria-hidden="true" />}>
@@ -227,6 +251,18 @@ export default function SubscriptionPage() {
             </div>
           </div>
 
+        ) : sub && status === "expired" ? (
+          /* ── Plan ended: the team is blocked until it is renewed ── */
+          <div className="zh-card">
+            <EmptyState
+              icon={<AlertTriangle size={22} aria-hidden="true" className="text-danger-600" />}
+              title="Your plan has ended"
+              description={`Your ${PLAN_LABELS[sub.plan_type]} plan ended${
+                sub.end_date ? ` on ${fmt(sub.end_date)}` : ""
+              } and wasn't renewed, so your team is blocked from ZorHire. Renew to unlock everyone straight away.`}
+              action={<Button onClick={() => navigate("/pricing")}>Renew plan</Button>}
+            />
+          </div>
         ) : sub && sub.status === "cancelled" ? (
           /* ── Cancelled state ── */
           <div className="zh-card">
@@ -252,10 +288,17 @@ export default function SubscriptionPage() {
         )}
 
         {/* ── Plan Features ── */}
-        {sub && sub.status === "active" && planMeta && (
+        {sub && status === "active" && planMeta && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {[
-              { icon: Users, label: "User Seats", value: planMeta.user_max ? `Up to ${planMeta.user_max}` : `${planMeta.user_min}+`, cls: "bg-navy-50 text-navy-600" },
+              {
+                icon: Users,
+                label: "User Seats",
+                value: sub.seats
+                  ? `${sub.seats} paid${staffUsers != null ? ` · ${staffUsers} in use` : ""}`
+                  : planMeta.user_max ? `Up to ${planMeta.user_max}` : `${planMeta.user_min}+`,
+                cls: "bg-navy-50 text-navy-600",
+              },
               { icon: Zap, label: "Plan Tier", value: PLAN_LABELS[sub.plan_type], cls: "bg-brand-50 text-brand-700" },
               {
                 icon: CheckCircle2,
@@ -309,7 +352,7 @@ export default function SubscriptionPage() {
                       {sub.end_date && <span className="text-muted"> → {fmt(sub.end_date)}</span>}
                     </td>
                     <td className="px-5 py-4">
-                      <Badge tone={statusTone(sub.status)} className="capitalize">{sub.status}</Badge>
+                      <Badge tone={statusTone(status)} className="capitalize">{status}</Badge>
                     </td>
                   </tr>
                 </tbody>
@@ -348,6 +391,7 @@ export default function SubscriptionPage() {
                       <td className="px-5 py-3.5 capitalize text-ink-soft">{txn.billing_cycle}</td>
                       <td className="whitespace-nowrap px-5 py-3.5 font-semibold text-ink">
                         ₹{(txn.amount / 100).toLocaleString("en-IN")}
+                        {txn.seats ? <span className="ml-1.5 text-xs font-normal text-muted">{txn.seats} users</span> : null}
                       </td>
                       <td className="px-5 py-3.5 font-mono text-xs text-muted">
                         {txn.razorpay_payment_id

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { setCredentials, setSessionStatus } from "../store/slices/authSlice";
 import type { AuthUser } from "../store/slices/authSlice";
-import { setSubscription } from "../store/slices/subscriptionSlice";
+import { setSubscription, toSubscriptionInfo } from "../store/slices/subscriptionSlice";
 import { AlertTriangle } from "lucide-react";
 import { Button, Spinner } from "../components/ui";
 
@@ -67,15 +67,7 @@ export default function OAuthCallbackPage() {
         );
 
         dispatch(
-          setSubscription(
-            data.subscription
-              ? {
-                  active: data.subscription.active,
-                  isPlatformOwner: data.subscription.isPlatformOwner ?? false,
-                  reason: data.subscription.reason ?? null,
-                }
-              : null,
-          ),
+          setSubscription(toSubscriptionInfo(data.subscription)),
         );
 
         dispatch(setSessionStatus("active"));

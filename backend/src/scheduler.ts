@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import pool from "./db";
+import { expireLapsedSubscriptions } from "./modules/billing/subscriptionAccess";
 import { dispatchScheduledCampaign } from "./modules/email/campaigns.controller";
 import { agentTick } from "./modules/agents/orchestrator";
 import { processNewProspects } from "./modules/linkedin-agent/linkedinAi";
@@ -32,6 +33,13 @@ export function startScheduler(): void {
         console.log(
           `[Cron] Expired ${contractResult.rowCount} vendor contract(s)`,
         );
+      }
+
+      // 3. Mark company plans as expired once their end date has passed.
+      // (Access is already cut off at end_date; this keeps the status accurate.)
+      const subCount = await expireLapsedSubscriptions();
+      if (subCount > 0) {
+        console.log(`[Cron] Expired ${subCount} subscription(s) past end date`);
       }
     } catch (error) {
       console.error("[Cron] Nightly expiry task failed:", error);
