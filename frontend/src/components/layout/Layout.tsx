@@ -2,6 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
+import ResumeDropZone from "./ResumeDropZone";
 import CommandPalette, { useCommandPaletteShortcut } from "./CommandPalette";
 import ToastContainer from "../ui/ToastContainer";
 import ErrorBoundary from "../ErrorBoundary";
@@ -60,6 +61,7 @@ export default function Layout({ children }: LayoutProps) {
         </main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <ResumeDropZone />
       <ToastContainer />
     </div>
   );

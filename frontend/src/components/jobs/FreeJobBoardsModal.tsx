@@ -6,6 +6,7 @@ import { useGetFreeJobBoardsQuery, useGetLinkedInAccountQuery, useRequestFreeJob
 import { useNotify } from "../../hooks/useNotify";
 import { getErrorMessage } from "../../lib/format";
 import { EXTENSION_ZIP } from "../linkedin/ConnectExtensionCard";
+import { isDesktopApp } from "../../lib/desktop";
 import type { FreeBoard } from "../../types/linkedin";
 
 const POST_STATUS: Record<NonNullable<FreeBoard["post"]>["status"], { label: string; tone: BadgeTone }> = {
@@ -40,9 +41,12 @@ export default function FreeJobBoardsModal({ jobId, open, onClose }: { jobId: st
   const submit = async () => {
     try {
       const r = await request({ jobId, boards: [...picked] }).unwrap();
-      notify.success(online
-        ? `${r.queued} board${r.queued > 1 ? "s" : ""} will open in Chrome in a moment. Sign in on each and click "Fill form".`
-        : `${r.queued} board${r.queued > 1 ? "s" : ""} queued. They open as soon as the ZorHire Assistant extension is running in Chrome.`);
+      const n = `${r.queued} board${r.queued > 1 ? "s" : ""}`;
+      notify.success(isDesktopApp
+        ? `${n} will open as tabs in this app within a minute. Sign in on each and click "Fill form".`
+        : online
+          ? `${n} will open in Chrome in a moment. Sign in on each and click "Fill form".`
+          : `${n} queued. They open as soon as the ZorHire Assistant extension is running in Chrome.`);
     } catch (err) {
       notify.error(getErrorMessage(err, "Could not queue the job boards."));
     }
@@ -50,19 +54,24 @@ export default function FreeJobBoardsModal({ jobId, open, onClose }: { jobId: st
 
   return (
     <Modal open={open} onClose={onClose} size="lg" title="Post to free job boards"
-      description="ZorHire opens each board's post-a-job page in your Chrome and fills in the job. You sign in or create a free account on the board, check the form and press its Post button."
+      description={`ZorHire opens each board's post-a-job page ${isDesktopApp ? "as a tab in this app" : "in your Chrome"} and fills in the job. You sign in or create a free account on the board, check the form and press its Post button.`}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Close</Button>
         <Button icon={<Send size={16} />} loading={sending} disabled={!picked.size || !connected} onClick={submit}>
-          Open {picked.size || ""} board{picked.size === 1 ? "" : "s"} in Chrome
+          Open {picked.size || ""} board{picked.size === 1 ? "" : "s"}{isDesktopApp ? "" : " in Chrome"}
         </Button>
       </>}>
-      {!connected && account.data && (
+      {!connected && account.data && isDesktopApp && (
+        <div role="status" className="mb-4 rounded-lg border border-line bg-surface-sunken p-3 text-sm text-muted">
+          The app is still connecting to your account. Try again in a minute.
+        </div>
+      )}
+      {!connected && account.data && !isDesktopApp && (
         <div role="status" className="mb-4 rounded-lg border border-line bg-warning-50 p-3 text-sm text-warning-700">
           This needs the ZorHire Assistant Chrome extension. <a className="font-medium underline" href={EXTENSION_ZIP} download>Download it</a>, then connect it from <a className="font-medium underline" href="/linkedin-agent">LinkedIn agent</a>.
         </div>
       )}
-      {connected && !online && (
+      {connected && !online && !isDesktopApp && (
         <p className="mb-4 text-sm text-muted">Your extension is offline right now. Queued boards open the next time Chrome is running with the extension.</p>
       )}
       {isLoading ? <div className="space-y-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}</div>

@@ -1,0 +1,142 @@
+ZORHIRE DESKTOP APP
+END USER LICENSE AGREEMENT
+
+Version 1.0, effective 1 December 2026
+
+Please read this agreement before installing ZorHire. By clicking "I Agree", installing or using the app, you accept this agreement. If you do not agree, click "Cancel" and do not install the app.
+
+
+1. WHO THIS AGREEMENT IS BETWEEN
+
+1.1 This agreement is between Zortech Solutions Private Limited, a company incorporated in India with its office in Hyderabad, Telangana ("ZorTech", "we", "us"), and you, the person installing or using the ZorHire desktop app (the "App").
+
+1.2 If you use the App for your employer or another organisation (your "Organisation"), you accept this agreement on its behalf as well, and you confirm that you are allowed to do so.
+
+1.3 Your Organisation's use of the ZorHire service is governed by its subscription agreement or the ZorHire Terms of Service (the "Subscription Terms"). This agreement covers the App only. If this agreement and the Subscription Terms conflict, the Subscription Terms apply.
+
+
+2. WHAT YOU MAY DO
+
+2.1 We grant you a limited, non-exclusive, non-transferable, revocable licence to install and use the App on Windows computers that you use, only to access the ZorHire service under your Organisation's active ZorHire subscription.
+
+2.2 The App is licensed to you, not sold. We and our licensors keep all rights not expressly granted in this agreement.
+
+
+3. WHAT YOU MAY NOT DO
+
+You may not, and may not allow anyone else to:
+(a) copy, modify, translate or create derivative works of the App, except as allowed by law;
+(b) reverse engineer, decompile or disassemble the App, except to the extent the law allows this despite this restriction;
+(c) sell, rent, lend, sublicense or distribute the App, or make it available to people outside your Organisation;
+(d) remove or change any proprietary notices in the App;
+(e) use the App to get around usage limits, security features or the limits of your Organisation's subscription;
+(f) use the App to send spam, to harass anyone, or for any unlawful purpose, including unlawful discrimination in hiring;
+(g) use the App to access ZorHire with someone else's account.
+
+
+4. YOUR ZORHIRE ACCOUNT
+
+4.1 The App needs a ZorHire account given to you by your Organisation. You are responsible for keeping your sign-in details safe and for activity under your account.
+
+4.2 The App stops working if your account is deactivated or your Organisation's subscription ends or is suspended.
+
+
+5. LINKEDIN, NAUKRI AND OTHER WEBSITES
+
+5.1 The App can open third-party websites in tabs, such as LinkedIn, LinkedIn Recruiter, Naukri and job boards ("Third-Party Sites"). You sign in to them yourself. The App does not read or store your passwords for Third-Party Sites.
+
+5.2 The App includes tools that act on Third-Party Sites at your direction, including:
+(a) the LinkedIn agent, which can search for people, send connection invitations with notes, and check for accepted invitations from your signed-in LinkedIn account, within daily and weekly limits;
+(b) "Save to ZorHire", which copies profile or resume details from a page you are viewing into ZorHire;
+(c) job-board form filling, which fills in job posting forms for you to review and submit.
+
+5.3 Third-Party Sites have their own terms, and some of them restrict automated activity. You are responsible for deciding whether to use these tools and for complying with the terms of each Third-Party Site. A Third-Party Site may warn, restrict or suspend your account there. The App pauses the LinkedIn agent when it detects a LinkedIn warning, but we cannot guarantee that this prevents action by LinkedIn. You can pause or disconnect the agent at any time.
+
+5.4 ZorTech is not affiliated with, endorsed by or sponsored by LinkedIn, Naukri or any other Third-Party Site. Their names belong to their owners. We are not responsible for Third-Party Sites, their content or availability, or any action they take on your account.
+
+
+6. AI FEATURES
+
+6.1 Some features use artificial intelligence, for example to search for and score candidates, write invitation notes, and summarise profiles.
+
+6.2 AI output can be wrong, incomplete or biased. Review it before you rely on it or send it to anyone. Do not make a hiring decision based only on AI output. You and your Organisation remain responsible for hiring decisions and for complying with employment, equal-opportunity and data protection laws.
+
+
+7. DATA AND PRIVACY
+
+7.1 On your computer, the App keeps:
+(a) a connection code linking the App to your ZorHire account, encrypted with your Windows account's key;
+(b) sign-in cookies and data for ZorHire and the Third-Party Sites you sign in to, in the App's own profile, as a web browser would;
+(c) your App settings, such as working hours, agent limits and alert preferences.
+
+7.2 The App sends data to the ZorHire service, including: candidate and job information you save or upload; LinkedIn agent activity and results; requests for your notifications; your computer's name, so that you can see and disconnect the App in ZorHire; and the App version, to check for updates.
+
+7.3 Candidate information may include personal data. Your Organisation decides what personal data is collected and why, and is responsible for having a lawful basis for it, including under India's Digital Personal Data Protection Act, 2023. ZorTech processes that data on your Organisation's behalf as described in the Subscription Terms and the ZorHire privacy policy. Only save information about people that you and your Organisation are allowed to collect.
+
+
+8. UPDATES
+
+8.1 The App checks the ZorHire server for updates about every 6 hours, downloads new versions in the background, and offers to restart to install them. Updates may add, change or remove features.
+
+8.2 This agreement applies to each update unless the update comes with a different agreement.
+
+
+9. RUNNING IN THE BACKGROUND
+
+When you close its window, the App keeps running in the Windows notification area (system tray) so that alerts and the LinkedIn agent keep working. You can choose whether it starts with Windows, and you can quit it from the tray icon menu.
+
+
+10. OWNERSHIP AND FEEDBACK
+
+10.1 The App, including its design, code and content, belongs to ZorTech and its licensors and is protected by intellectual property laws.
+
+10.2 If you send us suggestions or feedback, we may use them without any obligation to you.
+
+
+11. OPEN-SOURCE COMPONENTS
+
+The App includes open-source software, including Electron and Chromium, which is licensed under its own terms. Those licences and notices are in the App's installation folder. Nothing in this agreement limits your rights under those licences.
+
+
+12. NO WARRANTY
+
+To the fullest extent permitted by law, the App is provided "as is" and "as available", without warranties of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose and non-infringement. We do not promise that the App will be error-free, uninterrupted or compatible with every computer, or that Third-Party Sites will keep working with it. Any commitments about the ZorHire service are in the Subscription Terms.
+
+
+13. LIMITATION OF LIABILITY
+
+13.1 To the fullest extent permitted by law, ZorTech is not liable for any indirect, incidental, special, consequential or punitive damages, or for loss of profits, revenue, data, goodwill or business opportunities, or for any restriction or suspension of your accounts on Third-Party Sites, arising from the App, even if we were told such damage was possible.
+
+13.2 To the fullest extent permitted by law, ZorTech's total liability for all claims relating to the App is limited to the amount your Organisation paid for ZorHire in the 12 months before the event giving rise to the claim.
+
+13.3 Nothing in this agreement limits liability that cannot be limited by law.
+
+
+14. ENDING THIS AGREEMENT
+
+14.1 This agreement continues until it ends. It ends automatically if your ZorHire account is deactivated, your Organisation's subscription ends, or you break this agreement. You can end it at any time by uninstalling the App.
+
+14.2 When it ends, you must stop using the App and uninstall it. Sections 5.3, 5.4, 6.2, 7.3 and 10 to 16 continue to apply.
+
+
+15. LAW AND DISPUTES
+
+This agreement is governed by the laws of India. The courts at Hyderabad, Telangana have exclusive jurisdiction over any dispute arising from it, subject to any dispute resolution terms in the Subscription Terms.
+
+
+16. GENERAL
+
+16.1 We may update this agreement. We will show the new version in the App or the installer, and continuing to use the App after that means you accept it.
+
+16.2 If any part of this agreement is found unenforceable, the rest stays in effect. If we do not enforce a right, we have not given it up.
+
+16.3 You may not transfer this agreement. We may transfer it as part of a merger, acquisition or sale of our business.
+
+16.4 This agreement, together with the Subscription Terms, is the entire agreement between you and ZorTech about the App.
+
+
+17. CONTACT
+
+Zortech Solutions Private Limited, Hyderabad, Telangana, India
+Email: tech@zortechs.in
+Website: https://www.zortechs.in

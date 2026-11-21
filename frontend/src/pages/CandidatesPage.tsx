@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { takeDroppedResumes } from "../lib/droppedResumes";
 import {
   Search,
   Mail,
@@ -178,6 +179,17 @@ export default function CandidatesPage() {
   const [selectedJobId, setSelectedJobId] = useState("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  // Resumes dropped anywhere in ZorHire arrive here (see ResumeDropZone).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [droppedFiles, setDroppedFiles] = useState<File[] | undefined>();
+  useEffect(() => {
+    if (searchParams.get("upload") !== "dropped") return;
+    const files = takeDroppedResumes();
+    if (files.length) { setDroppedFiles(files); setIsBulkUploadOpen(true); }
+    const next = new URLSearchParams(searchParams);
+    next.delete("upload");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [formData, setFormData] = useState({
     first_name: "", last_name: "", email: "", phone: "",
     current_title: "", current_company: "", experience_years: 0,
@@ -723,7 +735,8 @@ export default function CandidatesPage() {
 
       {isBulkUploadOpen && (
         <BulkResumeUploadModal
-          onClose={() => setIsBulkUploadOpen(false)}
+          initialFiles={droppedFiles}
+          onClose={() => { setIsBulkUploadOpen(false); setDroppedFiles(undefined); }}
           onSuccess={() => refetch()}
         />
       )}
